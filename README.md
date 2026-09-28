@@ -14,6 +14,7 @@ Sistem Informasi & Manajemen Revira Gym BJM adalah aplikasi monorepo untuk penge
 
 - **Node**: 24 LTS (lihat `.nvmrc`)
 - **PHP**: 8.5.6
+- **Laravel**: 13.33.0
 - **Composer**: 2.9.5
 - **Expo SDK**: ditentukan saat setup member-app (SCRUM-42)
 
@@ -35,7 +36,14 @@ Sistem Informasi & Manajemen Revira Gym BJM adalah aplikasi monorepo untuk penge
 
 ## Cara Menjalankan
 
-- **`api/`**: belum tersedia, diisi di SCRUM-34 (api)
+- **`api/`**:
+  1. Masuk ke direktori: `cd api`
+  2. Install dependensi: `composer install`
+  3. Salin environment file: `cp .env.example .env`
+  4. Generate application key: `php artisan key:generate`
+  5. Pastikan database `revira_gym` sudah dibuat pada server MariaDB/MySQL lokal
+  6. Jalankan migrasi: `php artisan migrate`
+  7. Jalankan development server: `php artisan serve`
 - **`admin-web/`**: belum tersedia, diisi di SCRUM-45 (admin-web)
 - **`member-app/`**: belum tersedia, diisi di SCRUM-42 (member-app)
 
