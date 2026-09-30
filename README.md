@@ -108,6 +108,12 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
   curl -i https://revira-gym-project-production.up.railway.app/api/v1/health
   ```
 
+## Autentikasi API (Bearer Token)
+
+Aplikasi mobile member dan Admin Web sama-sama memakai **Bearer token Laravel Sanctum** (bukan cookie/session).
+Kirim header `Authorization: Bearer <token>` di setiap request ke route yang dilindungi `auth:sanctum`; tanpa token valid, API membalas `401 {"message":"Unauthenticated."}`.
+Aturan lengkap (nilai `device_name`, penyimpanan token, logout, uji cepat) ada di [`docs/auth-bearer-token.md`](docs/auth-bearer-token.md).
+
 ## Continuous Integration (CI)
 
 Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo:
