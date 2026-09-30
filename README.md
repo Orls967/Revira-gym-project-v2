@@ -51,7 +51,7 @@ Sistem Informasi & Manajemen Revira Gym BJM adalah aplikasi monorepo untuk penge
 
 Deployment staging untuk backend API berjalan di platform **Railway** dengan konfigurasi:
 - **Root Directory**: `api` (konfigurasi di Service Settings dashboard Railway)
-- **Builder**: Nixpacks (menggunakan `api/railway.json` & `api/nixpacks.toml`, PHP 8.5.x)
+- **Builder**: Nixpacks (menggunakan `api/railway.json`, melayani traffic dengan Nginx + PHP-FPM bawaan Nixpacks)
 - **Healthcheck Endpoint**: `/api/v1/health`
 
 ### Environment Variables di Railway
@@ -74,7 +74,6 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
 | `DB_USERNAME` | `${{MySQL.MYSQLUSER}}` | Username database MySQL |
 | `DB_PASSWORD` | `${{MySQL.MYSQLPASSWORD}}` | Password database MySQL |
 | `CORS_ALLOWED_ORIGINS` | `https://admin-staging.domain.com,https://member-staging.domain.com` | Origin frontend yang diizinkan (dipisahkan koma) |
-| `NIXPACKS_PHP_VERSION` | `8.5` | (Opsional) Memastikan builder Nixpacks menggunakan PHP 8.5 |
 
 ### Menjalankan Migrasi Database
 
