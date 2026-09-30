@@ -50,7 +50,9 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Keputusan tim (SCRUM-39): default null (token tidak kedaluwarsa) untuk
+    // tahap awal. Tinjau ulang sebelum rilis; bisa diatur lewat SANCTUM_EXPIRATION (menit).
+    'expiration' => env('SANCTUM_EXPIRATION') ? (int) env('SANCTUM_EXPIRATION') : null,
 
     /*
     |--------------------------------------------------------------------------

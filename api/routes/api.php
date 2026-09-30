@@ -11,6 +11,7 @@ Route::get('/health', function () {
     ]);
 });
 
+// Route contoh yang dilindungi Bearer token Sanctum; tanpa token valid mengembalikan 401 JSON
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
