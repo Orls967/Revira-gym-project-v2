@@ -54,6 +54,8 @@ Deployment staging untuk backend API berjalan di platform **Railway** dengan kon
 - **Builder**: Nixpacks (menggunakan `api/railway.json`, melayani traffic dengan Nginx + PHP-FPM bawaan Nixpacks)
 - **Healthcheck Endpoint**: `/api/v1/health`
 
+> **Penting (Node Version)**: Environment variable `NIXPACKS_NODE_VERSION=22` **WAJIB** diisi di Railway. Nixpacks secara default mendeteksi `package.json` di `api/` lalu menjalankan `npm run build` menggunakan Node 18, sedangkan Vite membutuhkan Node 20+ sehingga build akan gagal tanpa variabel ini.
+
 ### Environment Variables di Railway
 
 Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Railway:
@@ -64,7 +66,7 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
 | `APP_ENV` | `staging` | Environment aplikasi |
 | `APP_KEY` | `base64:...` | Generate via `php artisan key:generate --show` |
 | `APP_DEBUG` | `false` | Wajib `false` pada staging/production |
-| `APP_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` | URL domain publik Railway (HTTPS) |
+| `APP_URL` | `https://revira-gym-project-production.up.railway.app` | URL domain publik Railway (HTTPS) |
 | `APP_TIMEZONE` | `Asia/Makassar` | Timezone aplikasi (WITA) |
 | `APP_LOCALE` | `id` | Bahasa default aplikasi |
 | `DB_CONNECTION` | `mysql` | Driver database |
@@ -74,6 +76,7 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
 | `DB_USERNAME` | `${{MySQL.MYSQLUSER}}` | Username database MySQL |
 | `DB_PASSWORD` | `${{MySQL.MYSQLPASSWORD}}` | Password database MySQL |
 | `CORS_ALLOWED_ORIGINS` | `https://admin-staging.domain.com,https://member-staging.domain.com` | Origin frontend yang diizinkan (dipisahkan koma) |
+| `NIXPACKS_NODE_VERSION` | `22` | **Wajib**: Mengunci Node 22 agar build asset Vite berhasil |
 
 ### Menjalankan Migrasi Database
 
@@ -94,13 +97,16 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
      railway run php artisan migrate --force
      ```
 
-### URL Staging API
+### URL Staging API & Verifikasi
 
-Setelah domain publik dibuat/aktif di dashboard Railway (Networking > Generate Domain), isi baris di bawah ini:
-
-```text
-STAGING_API_URL=
-```
+- **Staging API URL**:
+  ```text
+  STAGING_API_URL=https://revira-gym-project-production.up.railway.app
+  ```
+- **Endpoint Verifikasi**: `GET /api/v1/health`
+  ```bash
+  curl -i https://revira-gym-project-production.up.railway.app/api/v1/health
+  ```
 
 ## Aturan Kerja
 
