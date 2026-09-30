@@ -18,7 +18,7 @@ Dokumen ini menjelaskan cara klien (aplikasi mobile member dan Admin Web) memaka
 
    Nilai ini disimpan sebagai nama token, supaya token tiap perangkat bisa dibedakan dan dicabut.
 3. Simpan token yang diterima (format `<id>|<string acak>`) di tempat aman:
-   - Mobile: secure storage (Keychain / Keystore, mis. `flutter_secure_storage` atau `expo-secure-store`).
+   - Mobile: secure storage (Keychain / Keystore) lewat `expo-secure-store`.
    - Admin Web: simpan di memori/state aplikasi; hindari menaruhnya di tempat yang mudah dibaca skrip pihak ketiga.
 4. Kirim token di **setiap** request ke route yang dilindungi:
 
@@ -35,8 +35,66 @@ Dokumen ini menjelaskan cara klien (aplikasi mobile member dan Admin Web) memaka
 
 6. Saat logout, panggil endpoint logout supaya token dicabut di server, lalu hapus token lokal.
 
-> Endpoint login/logout dibuat di tiket autentikasi berikutnya. Endpoint tersebut memakai helper
-> `App\Services\Auth\ApiTokenService` (lihat di bawah).
+## Endpoint login dan logout
+
+Kontrak ini dipakai aplikasi mobile dan Admin Web. **Jangan diubah tanpa kabar ke tim frontend (Amel dan Akbar).**
+Postman collection siap pakai: [`docs/postman/revira-gym-auth.postman_collection.json`](postman/revira-gym-auth.postman_collection.json).
+
+### `POST /api/v1/login`
+
+Berlaku untuk admin dan member. Klien menentukan layar tujuan dari field `data.user.role` (`admin` atau `member`).
+Dibatasi **5 percobaan per menit** per IP.
+
+Body:
+
+```json
+{ "email": "member@example.com", "password": "password", "device_name": "mobile" }
+```
+
+`device_name` wajib `mobile` atau `admin-web`.
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 200 | Login berhasil | lihat contoh di bawah |
+| 401 | Email tidak terdaftar **atau** password salah (sengaja tidak dibedakan) | `{ "message": "Email atau password salah." }` |
+| 422 | Validasi gagal (field kosong, format email salah, `device_name` tidak dikenal) | `{ "message": "...", "errors": { "field": ["..."] } }` |
+| 429 | Lebih dari 5 percobaan dalam 1 menit | `{ "message": "Too Many Attempts." }` |
+
+Contoh respons 200:
+
+```json
+{
+  "message": "Login berhasil",
+  "data": {
+    "token": "1|AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd",
+    "token_type": "Bearer",
+    "user": { "id": 1, "name": "Member Contoh", "email": "member@example.com", "role": "member" }
+  }
+}
+```
+
+> Di halaman login, 401 berarti kredensial salah: tampilkan `message` ke user. Aturan "401 = hapus token lokal" di atas
+> berlaku untuk route lain yang dilindungi.
+
+### `POST /api/v1/logout`
+
+Butuh header `Authorization: Bearer <token>`. Hanya mencabut token yang dipakai pada request ini; token di perangkat lain tetap aktif.
+
+| Status | Body |
+|--------|------|
+| 200 | `{ "message": "Logout berhasil" }` |
+| 401 | `{ "message": "Unauthenticated." }` |
+
+### Membuat user untuk uji coba (sebelum seeder siap)
+
+Kolom `role` sengaja tidak mass-assignable, jadi pakai `forceCreate` di tinker (folder `api/`):
+
+```bash
+php artisan tinker --execute='App\Models\User::forceCreate(["name" => "Admin Contoh", "email" => "admin@example.com", "password" => "password", "role" => "admin"]);'
+php artisan tinker --execute='App\Models\User::forceCreate(["name" => "Member Contoh", "email" => "member@example.com", "password" => "password", "role" => "member"]);'
+```
+
+Password otomatis di-hash oleh cast model `User`.
 
 ## Route contoh yang dilindungi
 
