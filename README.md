@@ -13,8 +13,8 @@ Sistem Informasi & Manajemen Revira Gym BJM adalah aplikasi monorepo untuk penge
 ## Versi Terkunci
 
 - **Node**: 24 LTS (lihat `.nvmrc`)
-- **PHP**: 8.5.6
-- **Laravel**: 13.33.0
+- **PHP**: 8.4.x (standardisasi tim & Railway; pasang lokal via `brew install php@8.4`)
+- **Laravel**: 13.34.0
 - **Composer**: 2.9.5
 - **Expo SDK**: ditentukan saat setup member-app (SCRUM-42)
 
