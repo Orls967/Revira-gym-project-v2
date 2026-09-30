@@ -1,0 +1,42 @@
+# Kerangka CI untuk admin-web (React + Vite + Tailwind)
+# Aktifkan workflow ini pada SCRUM-45 dengan menghapus ekstensi .example menjadi ci-admin-web.yml
+name: Admin Web CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - 'admin-web/**'
+      - '.github/workflows/ci-admin-web.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint & Test (Admin Web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: admin-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Run tests
+        run: npm test --if-present

@@ -108,6 +108,38 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
   curl -i https://revira-gym-project-production.up.railway.app/api/v1/health
   ```
 
+## Continuous Integration (CI)
+
+Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo:
+
+### 1. Lane `api/` (`.github/workflows/ci-api.yml`)
+- **Pemicu (Trigger)**: Otomatis berjalan saat ada `pull_request` dengan target branch `dev` yang mengubah file di `api/**` atau file workflow itu sendiri. Dilengkapi `concurrency` (run lama otomatis dibatalkan jika ada push baru ke PR yang sama).
+- **Pemeriksaan yang Dijalankan**:
+  1. Setup environment PHP 8.4 dengan ekstensi yang dibutuhkan (`pdo_mysql`, `pdo_sqlite`, dll.) serta cache Composer.
+  2. `composer install` dependensi dari `composer.lock`.
+  3. Linter kode menggunakan **Laravel Pint** dalam mode verifikasi (`./vendor/bin/pint --test`).
+  4. Pengujian fitur/unit test menggunakan **PHPUnit** (`php artisan test`) dengan in-memory SQLite (`DB_CONNECTION=sqlite`, `DB_DATABASE=:memory:`).
+
+### 2. Cara Menjalankan Lint & Test di Lokal Sebelum Push
+Untuk memastikan pipeline CI selalu hijau, jalankan perintah berikut di direktori `api/` sebelum push:
+
+```bash
+cd api
+
+# Cek style kode (Pint mode test)
+./vendor/bin/pint --test
+
+# Jalankan test suite
+php artisan test
+```
+
+### 3. Lane Lain (`admin-web/` dan `member-app/`)
+Kerangka CI untuk frontend admin dan mobile app telah disiapkan dalam bentuk template:
+- `.github/workflows/ci-admin-web.yml.example`
+- `.github/workflows/ci-member-app.yml.example`
+
+Workflow ini sengaja belum diaktifkan (ekstensi `.example`) karena foldernya masih kosong. Aktifkan dengan me-rename file (menghapus `.example`) saat SCRUM-45 (admin-web) dan SCRUM-42 (member-app) dikerjakan.
+
 ## Aturan Kerja
 
 - **Branch**: Buat branch dari `dev`, dengan penamaan `feature/SCRUM-xx-deskripsi`.
