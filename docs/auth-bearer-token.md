@@ -110,6 +110,39 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 ```
 
+## Pembatasan akses per peran (SCRUM-40)
+
+Route yang hanya boleh diakses peran tertentu memakai middleware `role` (`App\Http\Middleware\EnsureRole`), **selalu setelah `auth:sanctum`**:
+
+```php
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
+    // route khusus admin
+});
+
+Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {
+    // route khusus member
+});
+
+// Lebih dari satu peran: pisahkan dengan koma
+Route::middleware(['auth:sanctum', 'role:admin,member'])->get('/contoh', ...);
+```
+
+Nama peran yang valid hanya `admin` dan `member`. Salah ketik (mis. `role:admn`) tidak menimbulkan error, tetapi semua user akan mendapat 403.
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 401 | Token tidak ada, salah, atau sudah dicabut | `{ "message": "Unauthenticated." }` |
+| 403 | Token valid, tetapi peran user tidak termasuk daftar | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
+
+Aturan untuk klien: **403 berbeda dengan 401**. Token tetap valid, jadi **jangan** hapus token lokal atau arahkan ke login; tampilkan `message` atau arahkan user ke halaman yang sesuai perannya.
+
+Route uji untuk membuktikan middleware (ada di Postman collection):
+
+| Method | Endpoint               | Peran yang diizinkan | Respons 200 |
+|--------|------------------------|----------------------|-------------|
+| GET    | `/api/v1/admin/ping`   | `admin`              | `{ "message": "pong", "role": "admin" }` |
+| GET    | `/api/v1/member/ping`  | `member`             | `{ "message": "pong", "role": "member" }` |
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:

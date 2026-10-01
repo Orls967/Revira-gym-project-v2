@@ -21,3 +21,12 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+// Route ping untuk membuktikan middleware role; route admin/member berikutnya mengikuti pola grup ini
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
+    Route::get('/ping', fn () => response()->json(['message' => 'pong', 'role' => 'admin']));
+});
+
+Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {
+    Route::get('/ping', fn () => response()->json(['message' => 'pong', 'role' => 'member']));
+});

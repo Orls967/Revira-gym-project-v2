@@ -120,6 +120,32 @@ Aplikasi mobile member dan Admin Web sama-sama memakai **Bearer token Laravel Sa
 Kirim header `Authorization: Bearer <token>` di setiap request ke route yang dilindungi `auth:sanctum`; tanpa token valid, API membalas `401 {"message":"Unauthenticated."}`.
 Aturan lengkap (nilai `device_name`, penyimpanan token, logout, uji cepat) ada di [`docs/auth-bearer-token.md`](docs/auth-bearer-token.md).
 
+### Pembatasan Akses per Peran (Middleware `role`)
+
+Route yang hanya boleh diakses peran tertentu memakai middleware `role` (`api/app/Http/Middleware/EnsureRole.php`), **selalu dipasang setelah `auth:sanctum`**. Gunakan pola berikut supaya konsisten satu tim:
+
+```php
+// Route khusus admin
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
+    // ...
+});
+
+// Route khusus member
+Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {
+    // ...
+});
+
+// Route yang boleh diakses lebih dari satu peran: pisahkan dengan koma
+Route::middleware(['auth:sanctum', 'role:admin,member'])->get('/contoh', ...);
+```
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 401 | Token tidak ada, salah, atau sudah dicabut | `{ "message": "Unauthenticated." }` |
+| 403 | Token valid, tetapi peran user tidak termasuk daftar | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
+
+Route uji `GET /api/v1/admin/ping` dan `GET /api/v1/member/ping` tersedia untuk membuktikan middleware ini (lihat `api/tests/Feature/RoleMiddlewareTest.php`).
+
 ## Continuous Integration (CI)
 
 Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo:
