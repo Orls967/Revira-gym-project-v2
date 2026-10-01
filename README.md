@@ -16,7 +16,7 @@ Sistem Informasi & Manajemen Revira Gym BJM adalah aplikasi monorepo untuk penge
 - **PHP**: 8.4.x (standardisasi tim & Railway; pasang lokal via `brew install php@8.4`)
 - **Laravel**: 13.34.0
 - **Composer**: 2.9.5
-- **Expo SDK**: ditentukan saat setup member-app (SCRUM-42)
+- **Expo SDK**: 57 (React Native)
 
 ## Struktur Folder
 
@@ -45,7 +45,13 @@ Sistem Informasi & Manajemen Revira Gym BJM adalah aplikasi monorepo untuk penge
   6. Jalankan migrasi: `php artisan migrate`
   7. Jalankan development server: `php artisan serve`
 - **`admin-web/`**: belum tersedia, diisi di SCRUM-45 (admin-web)
-- **`member-app/`**: belum tersedia, diisi di SCRUM-42 (member-app)
+- **`member-app/`**:
+  1. Masuk ke direktori: `cd member-app`
+  2. Install dependensi: `npm install`
+  3. Siapkan environment: salin `.env.example` menjadi `.env`
+  4. Atur nilai `EXPO_PUBLIC_API_URL` di file `.env` (gunakan URL staging Railway atau IP lokal Laravel backend)
+  5. Jalankan server: `npx expo start -c`
+  6. Buka aplikasi lewat **Expo Go** di HP Android nyata dengan memindai QR code
 
 ## Deploy Staging (Railway)
 
@@ -107,6 +113,12 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
   ```bash
   curl -i https://revira-gym-project-production.up.railway.app/api/v1/health
   ```
+
+## Autentikasi API (Bearer Token)
+
+Aplikasi mobile member dan Admin Web sama-sama memakai **Bearer token Laravel Sanctum** (bukan cookie/session).
+Kirim header `Authorization: Bearer <token>` di setiap request ke route yang dilindungi `auth:sanctum`; tanpa token valid, API membalas `401 {"message":"Unauthenticated."}`.
+Aturan lengkap (nilai `device_name`, penyimpanan token, logout, uji cepat) ada di [`docs/auth-bearer-token.md`](docs/auth-bearer-token.md).
 
 ## Continuous Integration (CI)
 
