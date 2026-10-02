@@ -20,8 +20,8 @@ class DatabaseSeeder extends Seeder
         }
 
         if (! app()->environment(['local', 'testing'])) {
-            $rawSeedPassword = env('SEED_PASSWORD');
-            if (empty($rawSeedPassword) || $rawSeedPassword === 'password') {
+            $seedPassword = config('seeding.password');
+            if (empty($seedPassword) || $seedPassword === 'password') {
                 throw new RuntimeException('SEED_PASSWORD must be set to a secure non-default value in staging environment.');
             }
         }

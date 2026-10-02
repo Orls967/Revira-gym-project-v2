@@ -123,9 +123,7 @@ class SeederTest extends TestCase
 
     public function test_seeder_defaults_to_password_when_seed_password_empty_in_testing(): void
     {
-        putenv('SEED_PASSWORD=');
-        $_ENV['SEED_PASSWORD'] = '';
-        config(['seeding.password' => env('SEED_PASSWORD') ?: 'password']);
+        config(['seeding.password' => '']);
 
         $this->seed();
 
@@ -137,14 +135,42 @@ class SeederTest extends TestCase
     public function test_seeder_throws_exception_when_seed_password_empty_in_staging(): void
     {
         $this->app['env'] = 'staging';
-        putenv('SEED_PASSWORD=');
-        $_ENV['SEED_PASSWORD'] = '';
+        config(['seeding.password' => '']);
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('SEED_PASSWORD must be set to a secure non-default value in staging environment.');
 
         $seeder = new DatabaseSeeder;
         $seeder->run();
+    }
+
+    public function test_seeder_throws_exception_when_seed_password_is_default_in_staging(): void
+    {
+        $this->app['env'] = 'staging';
+        config(['seeding.password' => 'password']);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('SEED_PASSWORD must be set to a secure non-default value in staging environment.');
+
+        $seeder = new DatabaseSeeder;
+        $seeder->run();
+    }
+
+    public function test_seeder_succeeds_in_staging_with_strong_password_when_env_is_unavailable(): void
+    {
+        $this->app['env'] = 'staging';
+        config(['seeding.password' => 'Str0ng-Staging-Seed-Pass!']);
+
+        // Saat config di-cache, env() di luar config/ mengembalikan null.
+        // Seeder harus tetap berhasil karena hanya membaca config('seeding.password').
+        putenv('SEED_PASSWORD');
+        unset($_ENV['SEED_PASSWORD'], $_SERVER['SEED_PASSWORD']);
+
+        $this->seed();
+
+        $admin = User::where('email', 'admin@revira.test')->first();
+        $this->assertNotNull($admin);
+        $this->assertTrue(Hash::check('Str0ng-Staging-Seed-Pass!', $admin->password));
     }
 
     public function test_seeder_throws_exception_in_production_environment(): void
