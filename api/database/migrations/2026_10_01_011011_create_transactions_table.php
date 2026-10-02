@@ -35,7 +35,7 @@ return new class extends Migration
                 'pending',
                 'verified',
                 'rejected',
-            ])->default('pending');
+            ]);
 
             $table->foreignId('verified_by')
                 ->nullable()

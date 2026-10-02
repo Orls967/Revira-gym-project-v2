@@ -135,8 +135,9 @@ erDiagram
 | user_id | BIGINT UNSIGNED | FK → users.id | |
 | membership_plan_id | BIGINT UNSIGNED | FK → membership_plans.id | |
 | record_type | ENUM('registration','extension') | | Jenis catatan: pendaftaran baru atau perpanjangan |
-| start_date / end_date | DATE | | |
-| status | ENUM('pending','active','expired','rejected') | | |
+| start_date | DATE | NULLABLE | NULL sebelum diverifikasi admin |
+| end_date | DATE | NULLABLE | Dihitung saat membership aktif |
+| status | ENUM('pending','active','expired','rejected') | | DEFAULT 'pending' |
 | created_at | TIMESTAMP | | |
 
 **Justifikasi:** Mewakili "periode keanggotaan", bukan sekadar status boolean — setiap pendaftaran/perpanjangan jadi baris baru, bukan update baris lama. Ini penting untuk tiga hal: (1) US-13 butuh riwayat member lengkap, bukan cuma status terkini; (2) cron reminder H-3 (US-06) tinggal `WHERE status='active' AND end_date` mendekati, tanpa perlu tahu riwayat lama; (3) jika ditolak lalu member mendaftar ulang, itu baris baru yang bersih, bukan menimpa data penolakan sebelumnya (jejak audit tetap ada).
@@ -201,7 +202,7 @@ erDiagram
 | amount | DECIMAL(10,2) | | |
 | payment_method | ENUM('transfer','on_the_spot') | | |
 | receipt_image | VARCHAR(255) | NULLABLE | Wajib diisi jika `transfer` |
-| verification_status | ENUM('pending','verified','rejected') | | |
+| verification_status | ENUM('pending','verified','rejected') | | DEFAULT 'pending' |
 | verified_by | BIGINT UNSIGNED | FK → users.id, NULLABLE | Admin yang approve/reject |
 | verified_at | TIMESTAMP | NULLABLE | |
 | reject_reason | VARCHAR(255) | NULLABLE | **Usulan, menunggu keputusan tim.** Dibutuhkan AC SCRUM-24 ("Reject → status `rejected` beserta catatan alasan"). Draf lama belum memuatnya. |
@@ -274,6 +275,8 @@ Berikut poin yang **belum eksplisit** di draft awal tapi penting ditambahkan seb
 | 4 | UNIQUE `(class_schedule_id, user_id)` | class_participants |
 | 5 | UNIQUE `day_of_week` | operational_hours |
 | 6 | Index `(user_id, status)` dan `(schedule_date, status)` | memberships, class_schedules |
+| 7 | `memberships.start_date` NULLABLE dan `memberships.status` DEFAULT 'pending' | memberships |
+| 8 | `transactions.verification_status` DEFAULT 'pending' | transactions |
 
 ## 7. Keputusan yang Menunggu Jawaban Tim
 
