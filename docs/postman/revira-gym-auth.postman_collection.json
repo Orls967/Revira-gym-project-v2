@@ -1,0 +1,239 @@
+{
+  "info": {
+    "name": "Revira Gym API - Auth",
+    "description": "Login dan logout Bearer token. Ganti variabel `baseUrl` ke URL lokal atau staging. Setelah Login dijalankan, token otomatis tersimpan di variabel `token` dan dipakai request lain. Request Admin ping / Member ping membuktikan middleware role (SCRUM-40): login sebagai admin atau member lewat variabel `email`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000/api/v1" },
+    { "key": "email", "value": "member@example.com" },
+    { "key": "password", "value": "password" },
+    { "key": "token", "value": "" }
+  ],  
+  "item": [
+    {
+      "name": "Login (mobile)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "if (body.data && body.data.token) {",
+              "  pm.collectionVariables.set('token', body.data.token);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_name\": \"mobile\"\n}"
+        },
+        "url": "{{baseUrl}}/login"
+      },
+      "response": [
+        {
+          "name": "200 Login berhasil",
+          "status": "OK",
+          "code": 200,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Login berhasil\",\n  \"data\": {\n    \"token\": \"1|AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd\",\n    \"token_type\": \"Bearer\",\n    \"user\": {\n      \"id\": 1,\n      \"name\": \"Member Contoh\",\n      \"email\": \"member@example.com\",\n      \"role\": \"member\"\n    }\n  }\n}"
+        },
+        {
+          "name": "401 Email atau password salah",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Email atau password salah.\"\n}"
+        },
+        {
+          "name": "422 Validasi gagal",
+          "status": "Unprocessable Content",
+          "code": 422,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"The email field is required. (and 2 more errors)\",\n  \"errors\": {\n    \"email\": [\"The email field is required.\"],\n    \"password\": [\"The password field is required.\"],\n    \"device_name\": [\"The device name field is required.\"]\n  }\n}"
+        },
+        {
+          "name": "429 Terlalu banyak percobaan",
+          "status": "Too Many Requests",
+          "code": 429,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Too Many Attempts.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Login (admin-web)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "if (body.data && body.data.token) {",
+              "  pm.collectionVariables.set('token', body.data.token);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_name\": \"admin-web\"\n}"
+        },
+        "url": "{{baseUrl}}/login"
+      }
+    },
+    {
+      "name": "User (cek token)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "url": "{{baseUrl}}/user"
+      }
+    },
+    {
+      "name": "Admin ping (role:admin)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "url": "{{baseUrl}}/admin/ping"
+      },
+      "response": [
+        {
+          "name": "200 Admin",
+          "status": "OK",
+          "code": 200,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"pong\",\n  \"role\": \"admin\"\n}"
+        },
+        {
+          "name": "401 Tanpa token",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+        },
+        {
+          "name": "403 Login sebagai member",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Member ping (role:member)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "url": "{{baseUrl}}/member/ping"
+      },
+      "response": [
+        {
+          "name": "200 Member",
+          "status": "OK",
+          "code": 200,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"pong\",\n  \"role\": \"member\"\n}"
+        },
+        {
+          "name": "401 Tanpa token",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+        },
+        {
+          "name": "403 Login sebagai admin",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Logout",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('token', '');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "url": "{{baseUrl}}/logout"
+      },
+      "response": [
+        {
+          "name": "200 Logout berhasil",
+          "status": "OK",
+          "code": 200,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Logout berhasil\"\n}"
+        },
+        {
+          "name": "401 Token tidak valid",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+        }
+      ]
+    }
+  ]
+}
