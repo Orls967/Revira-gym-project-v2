@@ -205,7 +205,7 @@ erDiagram
 | verification_status | ENUM('pending','verified','rejected') | | DEFAULT 'pending' |
 | verified_by | BIGINT UNSIGNED | FK → users.id, NULLABLE | Admin yang approve/reject |
 | verified_at | TIMESTAMP | NULLABLE | |
-| reject_reason | VARCHAR(255) | NULLABLE | **Usulan, menunggu keputusan tim.** Dibutuhkan AC SCRUM-24 ("Reject → status `rejected` beserta catatan alasan"). Draf lama belum memuatnya. |
+| reject_reason | VARCHAR(255) | NULLABLE | Catatan alasan penolakan jika verifikasi ditolak (AC SCRUM-24). |
 
 **Justifikasi:** Dipisah dari `memberships` supaya proses verifikasi manual (pengganti payment gateway, sesuai konteks proyek) punya jejak audit sendiri: siapa bayar, berapa, lewat metode apa, dan siapa admin yang memverifikasi (`verified_by`) — ini dua FK berbeda ke `users` dalam satu tabel (pembayar vs admin verifikator), pola yang wajar untuk kasus "dua peran berbeda merujuk tabel yang sama". `amount` disimpan di sini (bukan diambil ulang dari `membership_plans.price`) supaya nominal transaksi historis tidak berubah kalau harga paket di-update admin di kemudian hari. `user_id` di tabel ini sebenarnya bisa diturunkan dari `memberships.user_id` (redundan secara teori), tapi dipertahankan agar query "daftar transaksi pending" (US-12 AC1) tidak perlu join ke `memberships` — trade-off kecil aplikasi kecil ini masih wajar, asalkan konsistensinya dijaga di level aplikasi saat insert.
 
@@ -287,7 +287,7 @@ Jawab lewat komentar di PR atau di SCRUM-35. Migration jangan dimulai sebelum in
 | 1 | `notification_logs.user_id` nullable (NULL = notifikasi ke nomor admin)? | Ya | |
 | 2 | Tambah kolom `recipient_phone` di `notification_logs` (snapshot nomor saat pesan dikirim)? | Ya | |
 | 3 | Larang hard delete untuk `instructors`, `membership_plans`, `classes` (pakai `is_active`)? | Ya | |
-| 4 | Tambah kolom `reject_reason` di `transactions` (dibutuhkan AC SCRUM-24)? | Ya | |
+| 4 | Tambah kolom `reject_reason` di `transactions` (dibutuhkan AC SCRUM-24)? | Ya | Ya |
 
 ## 8. Persetujuan
 

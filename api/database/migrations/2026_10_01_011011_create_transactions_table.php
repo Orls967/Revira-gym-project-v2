@@ -35,7 +35,7 @@ return new class extends Migration
                 'pending',
                 'verified',
                 'rejected',
-            ]);
+            ])->default('pending');
 
             $table->foreignId('verified_by')
                 ->nullable()
@@ -44,7 +44,7 @@ return new class extends Migration
 
             $table->timestamp('verified_at')->nullable();
 
-            $table->text('reject_reason')->nullable();
+            $table->string('reject_reason', 255)->nullable();
 
             $table->timestamps();
         });

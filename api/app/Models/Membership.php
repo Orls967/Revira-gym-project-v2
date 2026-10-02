@@ -9,6 +9,10 @@ class Membership extends Model
 {
     use HasFactory;
 
+    protected $attributes = [
+        'status' => 'pending',
+    ];
+
     protected $fillable = [
         'user_id',
         'membership_plan_id',

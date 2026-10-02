@@ -124,4 +124,78 @@ class CoreSchemaTest extends TestCase
         }
         $this->assertTrue($membershipDeleteFailed, 'Membership deletion should fail due to restrictOnDelete constraint.');
     }
+
+    public function test_database_level_defaults_for_status_fields(): void
+    {
+        $user = User::factory()->create();
+        $plan = MembershipPlan::create([
+            'name' => 'Plan Test',
+            'duration_days' => 30,
+            'price' => 100000,
+            'is_active' => true,
+        ]);
+
+        // Insert directly via DB facade without providing status
+        $membershipId = DB::table('memberships')->insertGetId([
+            'user_id' => $user->id,
+            'membership_plan_id' => $plan->id,
+            'record_type' => 'registration',
+            'start_date' => null,
+            'end_date' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $membership = DB::table('memberships')->where('id', $membershipId)->first();
+        $this->assertNotNull($membership);
+        $this->assertSame('pending', $membership->status);
+
+        // Insert directly via DB facade without providing verification_status
+        $transactionId = DB::table('transactions')->insertGetId([
+            'membership_id' => $membershipId,
+            'user_id' => $user->id,
+            'amount' => 100000,
+            'payment_method' => 'transfer',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $transaction = DB::table('transactions')->where('id', $transactionId)->first();
+        $this->assertNotNull($transaction);
+        $this->assertSame('pending', $transaction->verification_status);
+    }
+
+    public function test_model_level_defaults_for_status_fields(): void
+    {
+        $user = User::factory()->create();
+        $plan = MembershipPlan::create([
+            'name' => 'Plan Test Model',
+            'duration_days' => 30,
+            'price' => 100000,
+            'is_active' => true,
+        ]);
+
+        // Create model without status and without calling refresh()
+        $membership = Membership::create([
+            'user_id' => $user->id,
+            'membership_plan_id' => $plan->id,
+            'record_type' => 'registration',
+        ]);
+
+        $this->assertSame('pending', $membership->status);
+        $this->assertArrayHasKey('status', $membership->toArray());
+        $this->assertSame('pending', $membership->toArray()['status']);
+
+        // Create transaction model without verification_status and without calling refresh()
+        $transaction = Transaction::create([
+            'membership_id' => $membership->id,
+            'user_id' => $user->id,
+            'amount' => 100000,
+            'payment_method' => 'transfer',
+        ]);
+
+        $this->assertSame('pending', $transaction->verification_status);
+        $this->assertArrayHasKey('verification_status', $transaction->toArray());
+        $this->assertSame('pending', $transaction->toArray()['verification_status']);
+    }
 }
