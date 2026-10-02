@@ -20,6 +20,7 @@ class GymClassFactory extends Factory
             'description' => fake()->sentence(),
             'min_participants' => fake()->numberBetween(3, 8),
             'default_instructor_id' => Instructor::factory(),
+            'is_active' => true,
         ];
     }
 }

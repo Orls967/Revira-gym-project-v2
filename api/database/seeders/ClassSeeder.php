@@ -20,18 +20,21 @@ class ClassSeeder extends Seeder
                 'description' => 'Sesi peregangan dan meditasi pagi untuk kelenturan dan ketenangan mental.',
                 'min_participants' => 3,
                 'default_instructor_id' => $agus->id,
+                'is_active' => true,
             ],
             [
                 'name' => 'Body Pump & Strength',
                 'description' => 'Latihan beban dinamis dengan barbel untuk melatih kekuatan seluruh kelompok otot.',
                 'min_participants' => 4,
                 'default_instructor_id' => $budi->id,
+                'is_active' => true,
             ],
             [
                 'name' => 'Zumba Cardio Party',
                 'description' => 'Kardio menyenangkan berbasis ritme musik latin untuk pembakaran kalori intensif.',
                 'min_participants' => 5,
                 'default_instructor_id' => $siti->id,
+                'is_active' => true,
             ],
         ];
 

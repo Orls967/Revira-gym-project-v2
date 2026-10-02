@@ -164,26 +164,36 @@ Untuk mempermudah pengujian otentikasi, otorisasi, transaksi, dan jadwal kelas d
 ### Aturan Password Seeder
 - Password seluruh akun uji dibaca dari file konfigurasi `api/config/seeding.php` yang merujuk pada environment variable `SEED_PASSWORD` (dengan fallback default `'password'` di lingkungan lokal/testing).
 - **Wajib di Staging**: Di lingkungan staging (misalnya Railway), `SEED_PASSWORD` **wajib diisi dengan nilai yang kuat dan aman**. Jika `SEED_PASSWORD` dibiarkan kosong atau tetap bernilai default `'password'`, seeder akan menolak dieksekusi dan melempar `RuntimeException`.
+- **Kerahasiaan Password Staging**: Password akun seed di staging berbeda dari lokal dan tidak ditulis di repo; minta ke Orlando (PIC backend) lewat chat pribadi. Jangan menulis nilainya di mana pun.
 
 ### Menjalankan Seeder
 ```bash
 cd api
 
-# Reset database dan jalankan seeder dari awal
+# Lingkungan LOKAL: Reset database dan jalankan seeder dari awal
 php artisan migrate:fresh --seed
 
-# Atau jalankan seeder saja (bersifat idempoten jika dijalankan pada hari yang sama)
+# Lingkungan STAGING: Cukup jalankan seeder (DILARANG migrate:fresh di staging!)
 php artisan db:seed
+
+# Membuat symlink storage agar bukti transfer dapat diakses lewat web
+php artisan storage:link
 ```
 
 ### Catatan Penting Eksekusi Seeder:
-1. **Keamanan Environment**:
+1. **Keamanan Environment & Aturan Staging**:
    - `DatabaseSeeder` memiliki guard keamanan lingkungan yang ketat: seeding **hanya diizinkan** pada lingkungan `local`, `testing`, dan `staging`.
    - Di Railway, pastikan `APP_ENV=staging` agar seeder dapat dijalankan.
    - Pada lingkungan `production`, proses seeding akan dibatalkan seketika dengan exception `RuntimeException`.
-2. **Karakteristik Idempotensi Tanggal Relatif**:
-   - `ClassScheduleSeeder` membuat jadwal kelas untuk 7 hari ke depan secara relatif terhadap tanggal hari ini (`now('Asia/Makassar')`).
-   - Eksekusi `php artisan db:seed` berulang kali **pada hari yang sama** bersifat 100% idempoten (tidak menduplikasi data). Namun, jika dijalankan pada tanggal/hari yang berbeda, seeder akan menambahkan rentang jadwal 7 hari berikutnya.
+   - **Perbedaan Lokal vs Staging**: Di lokal, gunakan `php artisan migrate:fresh --seed` untuk reset bersih. Di staging, **`migrate:fresh` DILARANG KERAS** karena staging dipakai bersama dan perintah tersebut akan menghapus seluruh data buatan tester. Di staging cukup jalankan `php artisan db:seed` (aman diulang, hanya memperbarui data seed tanpa menyentuh data tester).
+2. **Karakteristik Idempotensi & Jadwal Relatif**:
+   - `ClassScheduleSeeder` membuat jadwal kelas untuk jendela 7 hari ke depan secara relatif terhadap tanggal hari ini (`now('Asia/Makassar')`). Jadwal hari sebelumnya dibiarkan sebagai riwayat.
+   - `ClassParticipantSeeder` hanya menempelkan peserta ke sesi dengan `schedule_date >= hari ini`.
+   - Eksekusi `php artisan db:seed` berulang kali aman dijalankan kapan saja dan tidak merusak data tester.
+3. **Storage Bukti Transfer Dummy**:
+   - Seeder otomatis menyalin gambar dummy bukti transfer (`dummy_transfer_pending.jpg`) ke storage disk `public` (`receipts/dummy_transfer_pending.jpg`).
+   - Jalankan `php artisan storage:link` agar file bukti transfer dapat diakses melalui URL `/storage/...`.
+   - Di Railway, filesystem bersifat non-permanen (ephemeral), sehingga file di storage akan hilang setiap redeploy aplikasi sampai konfigurasi object storage di SCRUM-18 selesai; cukup jalankan `php artisan db:seed` ulang untuk memulihkan file bukti transfer tersebut.
 
 ## Continuous Integration (CI)
 

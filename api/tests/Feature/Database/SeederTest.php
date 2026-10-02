@@ -15,6 +15,7 @@ use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -182,5 +183,99 @@ class SeederTest extends TestCase
 
         $seeder = new DatabaseSeeder;
         $seeder->run();
+    }
+
+    public function test_seeder_does_not_overwrite_tester_membership_or_transaction(): void
+    {
+        $this->seed();
+
+        $plan = MembershipPlan::first();
+        $tester = User::forceCreate([
+            'name' => 'Tester Non-Seed',
+            'email' => 'tester@example.com',
+            'password' => Hash::make('password'),
+            'role' => UserRole::Member,
+        ]);
+
+        $membership = Membership::create([
+            'user_id' => $tester->id,
+            'membership_plan_id' => $plan->id,
+            'record_type' => 'registration',
+            'start_date' => null,
+            'end_date' => null,
+            'status' => 'pending',
+        ]);
+
+        $transaction = Transaction::create([
+            'user_id' => $tester->id,
+            'membership_id' => $membership->id,
+            'amount' => $plan->price,
+            'payment_method' => 'on_the_spot',
+            'receipt_image' => null,
+            'verification_status' => 'pending',
+            'verified_by' => null,
+            'verified_at' => null,
+            'reject_reason' => null,
+        ]);
+
+        $totalTransactionsBefore = Transaction::count();
+
+        $this->seed();
+
+        $transaction->refresh();
+        $membership->refresh();
+
+        $this->assertSame('pending', $membership->status);
+        $this->assertSame('pending', $transaction->verification_status);
+        $this->assertSame('on_the_spot', $transaction->payment_method);
+        $this->assertNull($transaction->receipt_image);
+        $this->assertNull($transaction->verified_by);
+        $this->assertSame($totalTransactionsBefore, Transaction::count());
+    }
+
+    public function test_reseeding_after_days_does_not_attach_participants_to_past_sessions(): void
+    {
+        $this->seed();
+
+        $this->travel(2)->days();
+        $newToday = now('Asia/Makassar')->startOfDay()->toDateString();
+
+        $pastScheduleIds = ClassSchedule::whereDate('schedule_date', '<', $newToday)->pluck('id');
+        $pastParticipantsCountBefore = ClassParticipant::whereIn('class_schedule_id', $pastScheduleIds)->count();
+
+        $yoga = GymClass::where('name', 'Yoga Morning Flow')->first();
+        $instructor = Instructor::first();
+        $pastUnbookedSchedule = ClassSchedule::create([
+            'class_id' => $yoga->id,
+            'instructor_id' => $instructor->id,
+            'schedule_date' => now('Asia/Makassar')->subDay()->toDateString(),
+            'start_time' => '06:00:00',
+            'end_time' => '07:00:00',
+            'status' => 'scheduled',
+        ]);
+
+        $this->seed();
+
+        $pastParticipantsCountAfter = ClassParticipant::whereIn('class_schedule_id', $pastScheduleIds)->count();
+        $this->assertSame($pastParticipantsCountBefore, $pastParticipantsCountAfter);
+        $this->assertSame(0, ClassParticipant::where('class_schedule_id', $pastUnbookedSchedule->id)->count());
+
+        $this->assertTrue(
+            ClassParticipant::whereHas('classSchedule', function ($query) use ($newToday) {
+                $query->whereDate('schedule_date', '>=', $newToday);
+            })->exists()
+        );
+    }
+
+    public function test_seeder_copies_dummy_receipt_image_to_public_storage(): void
+    {
+        Storage::fake('public');
+
+        $this->seed();
+
+        $pendingTx = Transaction::where('verification_status', 'pending')->first();
+        $this->assertNotNull($pendingTx);
+        $this->assertNotNull($pendingTx->receipt_image);
+        Storage::disk('public')->assertExists($pendingTx->receipt_image);
     }
 }

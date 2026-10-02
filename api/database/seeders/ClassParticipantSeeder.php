@@ -19,15 +19,19 @@ class ClassParticipantSeeder extends Seeder
         $member4 = User::where('email', 'member4@revira.test')->first();
         $member5 = User::where('email', 'member5@revira.test')->first();
 
-        // Cari sesi Yoga pertama (jadwal besok)
+        $today = now('Asia/Makassar')->startOfDay()->toDateString();
+
+        // Cari sesi Yoga pertama (jadwal >= hari ini)
         $yogaSchedule = ClassSchedule::where('class_id', $yoga?->id)
             ->where('status', 'scheduled')
+            ->whereDate('schedule_date', '>=', $today)
             ->orderBy('schedule_date')
             ->first();
 
-        // Cari sesi Zumba pertama (jadwal lusa)
+        // Cari sesi Zumba pertama (jadwal >= hari ini)
         $zumbaSchedule = ClassSchedule::where('class_id', $zumba?->id)
             ->where('status', 'scheduled')
+            ->whereDate('schedule_date', '>=', $today)
             ->orderBy('schedule_date')
             ->first();
 
