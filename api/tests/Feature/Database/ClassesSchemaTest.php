@@ -65,7 +65,7 @@ class ClassesSchemaTest extends TestCase
         ]));
 
         $this->assertTrue(Schema::hasColumns('notification_logs', [
-            'id', 'user_id', 'type', 'message', 'sent_at', 'status',
+            'id', 'user_id', 'recipient_phone', 'type', 'message', 'sent_at', 'status',
         ]));
     }
 

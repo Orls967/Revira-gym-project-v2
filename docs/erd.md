@@ -224,6 +224,7 @@ erDiagram
 |---|---|---|---|
 | id | BIGINT UNSIGNED | PK | |
 | user_id | BIGINT UNSIGNED | FK → users.id, NULLABLE | NULL = ditujukan ke nomor admin |
+| recipient_phone | VARCHAR(20) | NULLABLE | Snapshot nomor WA saat pesan dikirim |
 | type | ENUM('new_registration','expiry_reminder','class_cancelled') | | |
 | message | TEXT | | |
 | sent_at | TIMESTAMP | | |
@@ -285,7 +286,7 @@ Jawab lewat komentar di PR atau di SCRUM-35. Migration jangan dimulai sebelum in
 | # | Pertanyaan | Usulan | Jawaban |
 |---|---|---|---|
 | 1 | `notification_logs.user_id` nullable (NULL = notifikasi ke nomor admin)? | Ya | |
-| 2 | Tambah kolom `recipient_phone` di `notification_logs` (snapshot nomor saat pesan dikirim)? | Ya | |
+| 2 | Tambah kolom `recipient_phone` di `notification_logs` (snapshot nomor saat pesan dikirim)? | Ya | Ya |
 | 3 | Larang hard delete untuk `instructors`, `membership_plans`, `classes` (pakai `is_active`)? | Ya | |
 | 4 | Tambah kolom `reject_reason` di `transactions` (dibutuhkan AC SCRUM-24)? | Ya | Ya |
 

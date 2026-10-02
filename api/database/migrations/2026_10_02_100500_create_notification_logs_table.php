@@ -17,6 +17,7 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('users')
                 ->restrictOnDelete();
+            $table->string('recipient_phone', 20)->nullable();
             $table->enum('type', [
                 'new_registration', 'expiry_reminder', 'class_cancelled',
             ]);

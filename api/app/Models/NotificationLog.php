@@ -14,6 +14,7 @@ class NotificationLog extends Model
 
     protected $fillable = [
         'user_id',
+        'recipient_phone',
         'type',
         'message',
         'sent_at',
