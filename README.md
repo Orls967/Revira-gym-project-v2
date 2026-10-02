@@ -146,6 +146,38 @@ Route::middleware(['auth:sanctum', 'role:admin,member'])->get('/contoh', ...);
 
 Route uji `GET /api/v1/admin/ping` dan `GET /api/v1/member/ping` tersedia untuk membuktikan middleware ini (lihat `api/tests/Feature/RoleMiddlewareTest.php`).
 
+## Akun Uji (Seeder)
+
+Untuk mempermudah pengujian otentikasi, otorisasi, transaksi, dan jadwal kelas di lingkungan pengembangan lokal maupun staging, seeder database telah menyediakan kumpulan akun dan data awal yang mencakup seluruh skenario status.
+
+### Tabel Akun Uji
+
+| Email | Role | Status Membership | Keterangan Pengujian |
+|---|---|---|---|
+| `admin@revira.test` | `admin` | - | Akun pengelola / admin sistem (verifikasi pembayaran, manajemen kelas) |
+| `member1@revira.test` | `member` | Active (H-3 kedaluwarsa) | Uji notifikasi pengingat H-3 kedaluwarsa & booking kelas |
+| `member2@revira.test` | `member` | Pending | Uji membership baru menunggu verifikasi transaksi |
+| `member3@revira.test` | `member` | Expired + Rejected Extension | Uji membership kedaluwarsa dan perpanjangan yang ditolak |
+| `member4@revira.test` | `member` | Active | Anggota aktif, peserta kelas Yoga |
+| `member5@revira.test` | `member` | Active | Anggota aktif, peserta kelas Yoga |
+
+### Aturan Password Seeder
+- Password seluruh akun uji dibaca dari file konfigurasi `api/config/seeding.php` yang merujuk pada environment variable `SEED_PASSWORD`.
+- Jika `SEED_PASSWORD` tidak ditentukan di `.env`, password default adalah **`password`**.
+
+### Menjalankan Seeder
+```bash
+cd api
+
+# Reset database dan jalankan seeder dari awal
+php artisan migrate:fresh --seed
+
+# Atau jalankan seeder saja (bersifat idempoten, aman dijalankan berulang)
+php artisan db:seed
+```
+
+> **Perhatian**: `DatabaseSeeder` dilengkapi guard keamanan lingkungan (`local`, `testing`, `staging`). Perintah seeding akan ditolak secara otomatis (HTTP 403) jika dijalankan pada lingkungan `production`.
+
 ## Continuous Integration (CI)
 
 Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo:

@@ -85,10 +85,17 @@ Butuh header `Authorization: Bearer <token>`. Hanya mencabut token yang dipakai 
 | 200 | `{ "message": "Logout berhasil" }` |
 | 401 | `{ "message": "Unauthenticated." }` |
 
-### Membuat user untuk uji coba (sebelum seeder siap)
-
-Kolom `role` sengaja tidak mass-assignable, jadi pakai `forceCreate` di tinker (folder `api/`):
-
+### Akun Uji Coba (Seeder & Manual)
+ 
+Database seeder (`php artisan db:seed`) telah menyediakan akun uji coba bawaan yang mencakup seluruh variasi status:
+- **Admin**: `admin@revira.test`
+- **Member**: `member1@revira.test` s/d `member5@revira.test`
+- **Password**: `password` (atau disesuaikan melalui environment variable `SEED_PASSWORD`)
+ 
+Lihat detail variasi status membership dan akun pada [`README.md`](../README.md) di bagian **Akun Uji (Seeder)**.
+ 
+Bila ingin membuat akun secara manual lewat tinker (folder `api/`), gunakan `forceCreate` karena kolom `role` diproteksi dari mass-assignment:
+ 
 ```bash
 php artisan tinker --execute='App\Models\User::forceCreate(["name" => "Admin Contoh", "email" => "admin@example.com", "password" => "password", "role" => "admin"]);'
 php artisan tinker --execute='App\Models\User::forceCreate(["name" => "Member Contoh", "email" => "member@example.com", "password" => "password", "role" => "member"]);'
