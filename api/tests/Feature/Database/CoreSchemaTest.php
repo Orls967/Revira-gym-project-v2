@@ -198,4 +198,87 @@ class CoreSchemaTest extends TestCase
         $this->assertArrayHasKey('verification_status', $transaction->toArray());
         $this->assertSame('pending', $transaction->toArray()['verification_status']);
     }
+
+    public function test_additive_migration_down_fills_null_start_date_and_restores_not_null(): void
+    {
+        $user = User::factory()->create();
+        $plan = MembershipPlan::create([
+            'name' => 'Plan Test Down',
+            'duration_days' => 30,
+            'price' => 100000,
+            'is_active' => true,
+        ]);
+
+        $membershipId = DB::table('memberships')->insertGetId([
+            'user_id' => $user->id,
+            'membership_plan_id' => $plan->id,
+            'record_type' => 'registration',
+            'start_date' => null,
+            'end_date' => null,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $migration = require database_path('migrations/2026_10_01_020000_update_memberships_and_transactions_defaults.php');
+        $migration->down();
+
+        $updatedMembership = DB::table('memberships')->where('id', $membershipId)->first();
+        $this->assertNotNull($updatedMembership->start_date);
+        $this->assertSame(now()->toDateString(), $updatedMembership->start_date);
+
+        // Kembalikan up() agar status skema konsisten
+        $migration->up();
+    }
+
+    public function test_additive_migration_up_throws_exception_when_reject_reason_exceeds_255_chars(): void
+    {
+        $user = User::factory()->create();
+        $plan = MembershipPlan::create([
+            'name' => 'Plan Test Long Reject Reason',
+            'duration_days' => 30,
+            'price' => 100000,
+            'is_active' => true,
+        ]);
+
+        $membershipId = DB::table('memberships')->insertGetId([
+            'user_id' => $user->id,
+            'membership_plan_id' => $plan->id,
+            'record_type' => 'registration',
+            'start_date' => now()->toDateString(),
+            'end_date' => null,
+            'status' => 'rejected',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $migration = require database_path('migrations/2026_10_01_020000_update_memberships_and_transactions_defaults.php');
+        $migration->down();
+
+        $transactionId = DB::table('transactions')->insertGetId([
+            'membership_id' => $membershipId,
+            'user_id' => $user->id,
+            'amount' => 100000,
+            'payment_method' => 'transfer',
+            'verification_status' => 'rejected',
+            'reject_reason' => str_repeat('A', 300),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $exceptionThrown = false;
+        try {
+            $migration->up();
+        } catch (\RuntimeException $e) {
+            $exceptionThrown = true;
+            $this->assertStringContainsString('reject_reason', $e->getMessage());
+            $this->assertStringContainsString('transactions', $e->getMessage());
+        }
+
+        $this->assertTrue($exceptionThrown, 'Expected RuntimeException when reject_reason > 255 chars.');
+
+        // Bersihkan data panjang dan jalankan up() kembali
+        DB::table('transactions')->where('id', $transactionId)->delete();
+        $migration->up();
+    }
 }

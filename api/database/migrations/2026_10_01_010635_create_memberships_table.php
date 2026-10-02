@@ -23,14 +23,14 @@ return new class extends Migration
                 ->restrictOnDelete();
 
             $table->enum('record_type', ['registration', 'extension']);
-            $table->date('start_date')->nullable();
+            $table->date('start_date');
             $table->date('end_date')->nullable();
             $table->enum('status', [
                 'pending',
                 'active',
                 'expired',
                 'rejected',
-            ])->default('pending');
+            ]);
 
             $table->index(['user_id', 'status']);
 
