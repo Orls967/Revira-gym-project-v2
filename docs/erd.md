@@ -62,6 +62,7 @@ erDiagram
         varchar name
         int min_participants
         bigint default_instructor_id FK
+        boolean is_active
     }
     CLASS_SCHEDULES {
         bigint id PK
@@ -152,6 +153,7 @@ erDiagram
 | specialization | VARCHAR(100) | NULLABLE | |
 | phone_number | VARCHAR(20) | NULLABLE | |
 | is_active | BOOLEAN | DEFAULT true | |
+| created_at / updated_at | TIMESTAMP | | |
 
 **Justifikasi:** Master data terpisah karena satu instruktur dipakai lintas banyak `classes` dan `class_schedules` — tanpa tabel ini, nama instruktur akan terduplikasi di tiap baris jadwal (rawan inkonsisten penulisan nama). `is_active` (bukan delete) menjaga riwayat sesi lama tetap menampilkan nama instruktur yang benar walau ia sudah berhenti mengajar.
 
@@ -163,6 +165,8 @@ erDiagram
 | description | TEXT | NULLABLE | |
 | min_participants | INT | | Syarat minimum agar kelas jalan |
 | default_instructor_id | BIGINT UNSIGNED | FK → instructors.id, NULLABLE | |
+| is_active | BOOLEAN | | DEFAULT true |
+| created_at / updated_at | TIMESTAMP | | |
 
 **Justifikasi:** `min_participants` adalah satu-satunya batas kapasitas — **tidak ada kolom `max_participants` sama sekali** (bukan nullable, dihapus total dari skema) sesuai keputusan bisnis eksplisit di blueprint; ini mencegah developer lain di kemudian hari menambahkan validasi "kelas penuh" yang justru bertentangan dengan requirement. `default_instructor_id` hanya prefill form saat admin membuat jadwal baru (REV-08/REV-10) — instruktur aktual per sesi tetap dicatat di `class_schedules.instructor_id`, supaya jika instruktur diganti, sesi yang sudah lewat tidak ikut berubah datanya.
 
@@ -176,6 +180,7 @@ erDiagram
 | start_time / end_time | TIME | | |
 | status | ENUM('scheduled','ongoing','completed','cancelled') | | |
 | cancel_reason | VARCHAR(255) | NULLABLE | |
+| created_at / updated_at | TIMESTAMP | | |
 
 **Index:** `(schedule_date, status)`.
 
@@ -189,6 +194,7 @@ erDiagram
 | user_id | BIGINT UNSIGNED | FK → users.id | |
 | status | ENUM('booked','attended','cancelled') | | |
 | booked_at | TIMESTAMP | | |
+| created_at / updated_at | TIMESTAMP | | |
 
 **Justifikasi:** Tabel junction many-to-many antara member dan sesi kelas, sekaligus jadi sumber tunggal penghitungan peserta (`COUNT(*) WHERE status='booked'`) — dibandingkan real-time dengan `classes.min_participants` untuk UI "6/8 peserta" (US-02) tanpa kolom counter terpisah yang rawan tidak sinkron.
 **Tambahan wajib (lihat Bagian 5):** constraint UNIQUE pada `(class_schedule_id, user_id)` — draft awal belum mencantumkan ini, padahal tanpanya member bisa booking dobel di sesi yang sama.
@@ -216,6 +222,7 @@ erDiagram
 | day_of_week | ENUM('Senin',...,'Minggu') | UNIQUE | Satu baris per hari |
 | open_time / close_time | TIME | | |
 | is_closed | BOOLEAN | DEFAULT false | |
+| created_at / updated_at | TIMESTAMP | | |
 
 **Justifikasi:** Tabel master sederhana, berdiri sendiri (tanpa FK ke tabel lain) karena jam operasional adalah properti gym secara keseluruhan, bukan milik entitas lain. Sesuai US-10: satu baris per hari cukup untuk mengatur jam buka/tutup dan menandai hari libur.
 
@@ -224,10 +231,13 @@ erDiagram
 |---|---|---|---|
 | id | BIGINT UNSIGNED | PK | |
 | user_id | BIGINT UNSIGNED | FK → users.id, NULLABLE | NULL = ditujukan ke nomor admin |
+| recipient_phone | VARCHAR(20) | NULLABLE | Snapshot nomor WA saat pesan dikirim |
 | type | ENUM('new_registration','expiry_reminder','class_cancelled') | | |
 | message | TEXT | | |
 | sent_at | TIMESTAMP | | |
 | status | ENUM('sent','failed') | | |
+
+*Catatan: `notification_logs` sengaja tidak menggunakan `created_at` dan `updated_at` bawaan Laravel karena merupakan tabel log audit yang cukup dicatat melalui kolom `sent_at`.*
 
 **Justifikasi:** Tabel log terpisah (bukan sekadar baca dari job queue) supaya ada bukti audit "notifikasi mana yang berhasil/gagal terkirim" — dibutuhkan literal oleh AC US-06 ("tercatat di notification_logs") dan US-15. Memisahkannya dari tabel transaksional lain juga memudahkan pembersihan/arsip log tanpa menyentuh data bisnis inti.
 
@@ -285,7 +295,7 @@ Jawab lewat komentar di PR atau di SCRUM-35. Migration jangan dimulai sebelum in
 | # | Pertanyaan | Usulan | Jawaban |
 |---|---|---|---|
 | 1 | `notification_logs.user_id` nullable (NULL = notifikasi ke nomor admin)? | Ya | |
-| 2 | Tambah kolom `recipient_phone` di `notification_logs` (snapshot nomor saat pesan dikirim)? | Ya | |
+| 2 | Tambah kolom `recipient_phone` di `notification_logs` (snapshot nomor saat pesan dikirim)? | Ya | Ya |
 | 3 | Larang hard delete untuk `instructors`, `membership_plans`, `classes` (pakai `is_active`)? | Ya | |
 | 4 | Tambah kolom `reject_reason` di `transactions` (dibutuhkan AC SCRUM-24)? | Ya | Ya |
 
