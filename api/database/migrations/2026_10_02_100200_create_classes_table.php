@@ -20,6 +20,7 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('instructors')
                 ->restrictOnDelete();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }

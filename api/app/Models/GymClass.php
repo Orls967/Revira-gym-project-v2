@@ -13,15 +13,21 @@ class GymClass extends Model
 
     protected $table = 'classes';
 
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
     protected $fillable = [
         'name',
         'description',
         'min_participants',
         'default_instructor_id',
+        'is_active',
     ];
 
     protected $casts = [
         'min_participants' => 'integer',
+        'is_active' => 'boolean',
     ];
 
     /**
