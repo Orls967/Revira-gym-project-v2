@@ -187,9 +187,15 @@ php artisan storage:link
    - Pada lingkungan `production`, proses seeding akan dibatalkan seketika dengan exception `RuntimeException`.
    - **Perbedaan Lokal vs Staging**: Di lokal, gunakan `php artisan migrate:fresh --seed` untuk reset bersih. Di staging, **`migrate:fresh` DILARANG KERAS** karena staging dipakai bersama dan perintah tersebut akan menghapus seluruh data buatan tester. Di staging cukup jalankan `php artisan db:seed` (aman diulang, hanya memperbarui data seed tanpa menyentuh data tester).
 2. **Karakteristik Idempotensi & Jadwal Relatif**:
-   - `ClassScheduleSeeder` membuat jadwal kelas untuk jendela 7 hari ke depan secara relatif terhadap tanggal hari ini (`now('Asia/Makassar')`). Jadwal hari sebelumnya dibiarkan sebagai riwayat.
+   - `ClassScheduleSeeder` membuat jadwal kelas untuk jendela 7 hari ke depan secara relatif terhadap tanggal hari ini (`now('Asia/Makassar')`). Jadwal dari run sebelumnya tidak dihapus maupun diperbarui.
+   - `php artisan db:seed` **pada hari yang sama** idempoten: tidak ada baris yang bertambah.
+   - `php artisan db:seed` **pada hari berbeda** menambah jadwal untuk jendela baru tanpa menghapus jadwal run sebelumnya. Akibatnya:
+     - jumlah jadwal mendatang bertambah (contoh: 7 menjadi 14),
+     - satu tanggal bisa memiliki lebih dari satu sesi,
+     - sesi berstatus `cancelled` ikut bertambah.
+   - Ini bukan bug data tester. Jangan hapus baris jadwal secara manual untuk "merapikan" di staging, karena staging dipakai bersama.
+   - Untuk daftar jadwal yang bersih, gunakan `php artisan migrate:fresh --seed` **di lokal**. Di staging `migrate:fresh` dilarang; tester cukup mengabaikan sesi ganda atau memfilter berdasarkan tanggal dan status.
    - `ClassParticipantSeeder` hanya menempelkan peserta ke sesi dengan `schedule_date >= hari ini`.
-   - Eksekusi `php artisan db:seed` berulang kali aman dijalankan kapan saja dan tidak merusak data tester.
 3. **Storage Bukti Transfer Dummy**:
    - Seeder otomatis menyalin gambar dummy bukti transfer (`dummy_transfer_pending.jpg`) ke storage disk `public` (`receipts/dummy_transfer_pending.jpg`).
    - Jalankan `php artisan storage:link` agar file bukti transfer dapat diakses melalui URL `/storage/...`.
