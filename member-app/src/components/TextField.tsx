@@ -23,29 +23,30 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
         <Text className="text-zinc-300 text-sm font-semibold mb-1.5">
           {label}
         </Text>
-
+        
         <View
-          className={`w-full flex-row items-center bg-zinc-900 border rounded-xl px-4 py-3.5 ${
+          className={`w-full flex-row items-center bg-zinc-900 border rounded-xl px-4 min-h-[54px] ${
             error ? "border-red-500" : "border-zinc-800 focus:border-amber-400"
           }`}
         >
           <TextInput
             ref={ref}
-            className="flex-1 text-white text-base p-0"
+            className="flex-1 text-white text-base py-2.5"
             placeholderTextColor="#71717a"
             secureTextEntry={isPassword && !showPassword}
+            textAlignVertical="center"
             {...props}
           />
-
+          
           {isPassword && (
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              className="ml-2"
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              className="ml-2 py-1"
             >
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}
-                size={20}
+                size={22}
                 color="#a1a1aa"
               />
             </TouchableOpacity>

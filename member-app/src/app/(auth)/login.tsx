@@ -14,12 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  // Error Validasi Klien
+  
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-
-  // State Loading & API Banner
+  
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -48,7 +46,6 @@ export default function LoginScreen() {
     return isValid;
   };
 
-  // Fungsi submit terisolasi (akan disambungkan ke Sanctum API di SCRUM-44)
   const onSubmit = async () => {
     if (!validate() || isLoading) return;
 
@@ -56,13 +53,10 @@ export default function LoginScreen() {
     setApiError(null);
 
     try {
-      // Simulasi latency jaringan selama 1.2 detik
       await new Promise((resolve) => setTimeout(resolve, 1200));
 
-      // Simulasi respon login
       if (email.trim().toLowerCase() === "member@revira.com" && password === "password123") {
         setApiError(null);
-        // Data mock berhasil (navigasi & secure storage ditangani di SCRUM-44)
       } else {
         setApiError("Email atau password salah.");
       }
@@ -76,13 +70,22 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-zinc-950"
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      className="flex-1 bg-zinc-950 w-full"
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          paddingBottom: 140, // Memberi ruang ekstra tinggi agar tombol Masuk terangkat bebas di atas keyboard
+          paddingTop: 40,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        className="px-6 py-12"
+        showsHorizontalScrollIndicator={false}
+        horizontal={false}
+        bounces={false}
+        className="w-full px-6"
       >
         {/* Branding Revira Gym */}
         <View className="items-center mb-8">
@@ -92,7 +95,7 @@ export default function LoginScreen() {
           <Text className="text-3xl font-extrabold text-amber-400 tracking-wider">
             REVIRA GYM
           </Text>
-          <Text className="text-sm text-zinc-400 mt-1 font-medium">
+          <Text className="text-sm text-zinc-400 mt-1 font-medium text-center">
             Sistem Informasi & Manajemen Member
           </Text>
         </View>
@@ -107,7 +110,7 @@ export default function LoginScreen() {
           </View>
         )}
 
-        {/* Form Input */}
+        {/* Formulir Login */}
         <View className="w-full">
           <TextField
             label="Email Member"
@@ -151,8 +154,8 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        {/* Footer Versi */}
-        <View className="mt-12 items-center">
+        {/* Footer Info */}
+        <View className="mt-10 items-center">
           <Text className="text-zinc-500 text-xs">
             Revira Gym BJM • v1.0.0 (Expo SDK 57)
           </Text>
