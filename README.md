@@ -141,6 +141,61 @@ Route::middleware(['auth:sanctum', 'role:admin,member'])->get('/contoh', ...);
 
 Route uji `GET /api/v1/admin/ping` dan `GET /api/v1/member/ping` tersedia untuk membuktikan middleware ini (lihat `api/tests/Feature/RoleMiddlewareTest.php`).
 
+## Akun Uji (Seeder)
+
+Untuk mempermudah pengujian otentikasi, otorisasi, transaksi, dan jadwal kelas di lingkungan pengembangan lokal maupun staging, seeder database telah menyediakan kumpulan akun dan data awal yang mencakup seluruh skenario status.
+
+### Tabel Akun Uji
+
+| Email | Role | Status Membership | Keterangan Pengujian |
+|---|---|---|---|
+| `admin@revira.test` | `admin` | - | Akun pengelola / admin sistem (verifikasi pembayaran, manajemen kelas) |
+| `member1@revira.test` | `member` | Active (H-3 kedaluwarsa) | Uji notifikasi pengingat H-3 kedaluwarsa & booking kelas |
+| `member2@revira.test` | `member` | Pending | Uji membership baru menunggu verifikasi transaksi |
+| `member3@revira.test` | `member` | Expired + Rejected Extension | Uji membership kedaluwarsa dan perpanjangan yang ditolak |
+| `member4@revira.test` | `member` | Active | Anggota aktif, peserta kelas Yoga |
+| `member5@revira.test` | `member` | Active | Anggota aktif, peserta kelas Yoga |
+
+### Aturan Password Seeder
+- Password seluruh akun uji dibaca dari file konfigurasi `api/config/seeding.php` yang merujuk pada environment variable `SEED_PASSWORD` (dengan fallback default `'password'` di lingkungan lokal/testing).
+- **Wajib di Staging**: Di lingkungan staging (misalnya Railway), `SEED_PASSWORD` **wajib diisi dengan nilai yang kuat dan aman**. Jika `SEED_PASSWORD` dibiarkan kosong atau tetap bernilai default `'password'`, seeder akan menolak dieksekusi dan melempar `RuntimeException`.
+- **Kerahasiaan Password Staging**: Password akun seed di staging berbeda dari lokal dan tidak ditulis di repo; minta ke Orlando (PIC backend) lewat chat pribadi. Jangan menulis nilainya di mana pun.
+
+### Menjalankan Seeder
+```bash
+cd api
+
+# Lingkungan LOKAL: Reset database dan jalankan seeder dari awal
+php artisan migrate:fresh --seed
+
+# Lingkungan STAGING: Cukup jalankan seeder (DILARANG migrate:fresh di staging!)
+php artisan db:seed
+
+# Membuat symlink storage agar bukti transfer dapat diakses lewat web
+php artisan storage:link
+```
+
+### Catatan Penting Eksekusi Seeder:
+1. **Keamanan Environment & Aturan Staging**:
+   - `DatabaseSeeder` memiliki guard keamanan lingkungan yang ketat: seeding **hanya diizinkan** pada lingkungan `local`, `testing`, dan `staging`.
+   - Di Railway, pastikan `APP_ENV=staging` agar seeder dapat dijalankan.
+   - Pada lingkungan `production`, proses seeding akan dibatalkan seketika dengan exception `RuntimeException`.
+   - **Perbedaan Lokal vs Staging**: Di lokal, gunakan `php artisan migrate:fresh --seed` untuk reset bersih. Di staging, **`migrate:fresh` DILARANG KERAS** karena staging dipakai bersama dan perintah tersebut akan menghapus seluruh data buatan tester. Di staging cukup jalankan `php artisan db:seed` (aman diulang, hanya memperbarui data seed tanpa menyentuh data tester).
+2. **Karakteristik Idempotensi & Jadwal Relatif**:
+   - `ClassScheduleSeeder` membuat jadwal kelas untuk jendela 7 hari ke depan secara relatif terhadap tanggal hari ini (`now('Asia/Makassar')`). Jadwal dari run sebelumnya tidak dihapus maupun diperbarui.
+   - `php artisan db:seed` **pada hari yang sama** idempoten: tidak ada baris yang bertambah.
+   - `php artisan db:seed` **pada hari berbeda** menambah jadwal untuk jendela baru tanpa menghapus jadwal run sebelumnya. Akibatnya:
+     - jumlah jadwal mendatang bertambah (contoh: 7 menjadi 14),
+     - satu tanggal bisa memiliki lebih dari satu sesi,
+     - sesi berstatus `cancelled` ikut bertambah.
+   - Ini bukan bug data tester. Jangan hapus baris jadwal secara manual untuk "merapikan" di staging, karena staging dipakai bersama.
+   - Untuk daftar jadwal yang bersih, gunakan `php artisan migrate:fresh --seed` **di lokal**. Di staging `migrate:fresh` dilarang; tester cukup mengabaikan sesi ganda atau memfilter berdasarkan tanggal dan status.
+   - `ClassParticipantSeeder` hanya menempelkan peserta ke sesi dengan `schedule_date >= hari ini`.
+3. **Storage Bukti Transfer Dummy**:
+   - Seeder otomatis menyalin gambar dummy bukti transfer (`dummy_transfer_pending.jpg`) ke storage disk `public` (`receipts/dummy_transfer_pending.jpg`).
+   - Jalankan `php artisan storage:link` agar file bukti transfer dapat diakses melalui URL `/storage/...`.
+   - Di Railway, filesystem bersifat non-permanen (ephemeral), sehingga file di storage akan hilang setiap redeploy aplikasi sampai konfigurasi object storage di SCRUM-18 selesai; cukup jalankan `php artisan db:seed` ulang untuk memulihkan file bukti transfer tersebut.
+
 ## Continuous Integration (CI)
 
 Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo:
