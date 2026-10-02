@@ -153,9 +153,17 @@ Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis
   3. Linter kode menggunakan **Laravel Pint** dalam mode verifikasi (`./vendor/bin/pint --test`).
   4. Pengujian fitur/unit test menggunakan **PHPUnit** (`php artisan test`) dengan in-memory SQLite (`DB_CONNECTION=sqlite`, `DB_DATABASE=:memory:`).
 
-### 2. Cara Menjalankan Lint & Test di Lokal Sebelum Push
-Untuk memastikan pipeline CI selalu hijau, jalankan perintah berikut di direktori `api/` sebelum push:
+### 2. Lane `member-app/` (`.github/workflows/ci-member-app.yml`)
+- **Pemicu (Trigger)**: Otomatis berjalan saat ada `pull_request` dengan target branch `dev` yang mengubah file di `member-app/**` atau file workflow itu sendiri. Dilengkapi `concurrency` (run lama otomatis dibatalkan jika ada push baru ke PR yang sama).
+- **Pemeriksaan yang Dijalankan**:
+  1. Setup environment Node.js 24 sesuai `member-app/.nvmrc` dan cache dependensi npm (`member-app/package-lock.json`).
+  2. `npm ci` untuk instalasi dependensi secara bersih dan deterministik.
+  3. Validasi tipe data TypeScript menggunakan `npx tsc --noEmit`.
 
+### 3. Cara Menjalankan Pemeriksaan di Lokal Sebelum Push
+Untuk memastikan pipeline CI selalu hijau, jalankan perintah berikut di direktori masing-masing sebelum push:
+
+**Backend (`api/`)**:
 ```bash
 cd api
 
@@ -166,12 +174,22 @@ cd api
 php artisan test
 ```
 
-### 3. Lane Lain (`admin-web/` dan `member-app/`)
-Kerangka CI untuk frontend admin dan mobile app telah disiapkan dalam bentuk template:
-- `.github/workflows/ci-admin-web.yml.example`
-- `.github/workflows/ci-member-app.yml.example`
+**Mobile App (`member-app/`)**:
+```bash
+cd member-app
 
-Workflow ini sengaja belum diaktifkan (ekstensi `.example`) karena foldernya masih kosong. Aktifkan dengan me-rename file (menghapus `.example`) saat SCRUM-45 (admin-web) dan SCRUM-42 (member-app) dikerjakan.
+# Sinkronisasi dependensi
+npm ci
+
+# Validasi tipe TypeScript
+npx tsc --noEmit
+```
+
+### 4. Lane Lain (`admin-web/`)
+Kerangka CI untuk frontend admin telah disiapkan dalam bentuk template:
+- `.github/workflows/ci-admin-web.yml.example`
+
+Workflow ini sengaja belum diaktifkan (ekstensi `.example`) karena foldernya masih kosong. Aktifkan dengan me-rename file (menghapus `.example`) saat SCRUM-45 (admin-web) dikerjakan.
 
 ## Aturan Kerja
 
