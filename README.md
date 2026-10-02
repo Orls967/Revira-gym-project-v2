@@ -46,12 +46,7 @@ Sistem Informasi & Manajemen Revira Gym BJM adalah aplikasi monorepo untuk penge
   7. Jalankan development server: `php artisan serve`
 - **`admin-web/`**: belum tersedia, diisi di SCRUM-45 (admin-web)
 - **`member-app/`**:
-  1. Masuk ke direktori: `cd member-app`
-  2. Install dependensi: `npm install`
-  3. Siapkan environment: salin `.env.example` menjadi `.env`
-  4. Atur nilai `EXPO_PUBLIC_API_URL` di file `.env` (gunakan URL staging Railway atau IP lokal Laravel backend)
-  5. Jalankan server: `npx expo start -c`
-  6. Buka aplikasi lewat **Expo Go** di HP Android nyata dengan memindai QR code
+Untuk panduan instalasi dan menjalankan aplikasi mobile, silakan baca [member-app/README.md](./member-app/README.md).
 
 ## Deploy Staging (Railway)
 
