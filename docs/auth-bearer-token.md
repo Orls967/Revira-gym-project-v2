@@ -90,7 +90,9 @@ Butuh header `Authorization: Bearer <token>`. Hanya mencabut token yang dipakai 
 Database seeder (`php artisan db:seed`) telah menyediakan akun uji coba bawaan yang mencakup seluruh variasi status:
 - **Admin**: `admin@revira.test`
 - **Member**: `member1@revira.test` s/d `member5@revira.test`
-- **Password**: `password` (atau disesuaikan melalui environment variable `SEED_PASSWORD`)
+- **Password**: default `'password'` di lingkungan lokal/testing. Di lingkungan staging (Railway), `APP_ENV` harus disetel `staging` dan `SEED_PASSWORD` wajib diisi dengan password yang aman (seeder menolak berjalan jika kosong atau default).
+ 
+Catatan: `ClassScheduleSeeder` menghasilkan jadwal kelas relatif terhadap tanggal hari ini (7 hari ke depan); seeding berulang bersifat idempoten bila dieksekusi di hari yang sama.
  
 Lihat detail variasi status membership dan akun pada [`README.md`](../README.md) di bagian **Akun Uji (Seeder)**.
  

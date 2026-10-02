@@ -11,7 +11,8 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        $password = Hash::make(config('seeding.password'));
+        $seedPassword = config('seeding.password') ?: 'password';
+        $password = Hash::make($seedPassword);
 
         $users = [
             [

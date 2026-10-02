@@ -15,7 +15,7 @@ use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use RuntimeException;
 use Tests\TestCase;
 
 class SeederTest extends TestCase
@@ -121,11 +121,37 @@ class SeederTest extends TestCase
         $this->assertSame($countsBefore, $countsAfter, 'Table counts must remain identical after running seeder twice.');
     }
 
-    public function test_seeder_aborts_in_production_environment(): void
+    public function test_seeder_defaults_to_password_when_seed_password_empty_in_testing(): void
+    {
+        putenv('SEED_PASSWORD=');
+        $_ENV['SEED_PASSWORD'] = '';
+        config(['seeding.password' => env('SEED_PASSWORD') ?: 'password']);
+
+        $this->seed();
+
+        $admin = User::where('email', 'admin@revira.test')->first();
+        $this->assertNotNull($admin);
+        $this->assertTrue(Hash::check('password', $admin->password));
+    }
+
+    public function test_seeder_throws_exception_when_seed_password_empty_in_staging(): void
+    {
+        $this->app['env'] = 'staging';
+        putenv('SEED_PASSWORD=');
+        $_ENV['SEED_PASSWORD'] = '';
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('SEED_PASSWORD must be set to a secure non-default value in staging environment.');
+
+        $seeder = new DatabaseSeeder;
+        $seeder->run();
+    }
+
+    public function test_seeder_throws_exception_in_production_environment(): void
     {
         $this->app['env'] = 'production';
 
-        $this->expectException(HttpException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Seeding is only allowed in local, testing, or staging environments.');
 
         $seeder = new DatabaseSeeder;

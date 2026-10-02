@@ -17,6 +17,7 @@ class NotificationLogFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
+            'recipient_phone' => '08'.fake()->numerify('##########'),
             'type' => fake()->randomElement(['new_registration', 'expiry_reminder', 'class_cancelled']),
             'message' => fake()->sentence(),
             'sent_at' => now(),

@@ -162,8 +162,8 @@ Untuk mempermudah pengujian otentikasi, otorisasi, transaksi, dan jadwal kelas d
 | `member5@revira.test` | `member` | Active | Anggota aktif, peserta kelas Yoga |
 
 ### Aturan Password Seeder
-- Password seluruh akun uji dibaca dari file konfigurasi `api/config/seeding.php` yang merujuk pada environment variable `SEED_PASSWORD`.
-- Jika `SEED_PASSWORD` tidak ditentukan di `.env`, password default adalah **`password`**.
+- Password seluruh akun uji dibaca dari file konfigurasi `api/config/seeding.php` yang merujuk pada environment variable `SEED_PASSWORD` (dengan fallback default `'password'` di lingkungan lokal/testing).
+- **Wajib di Staging**: Di lingkungan staging (misalnya Railway), `SEED_PASSWORD` **wajib diisi dengan nilai yang kuat dan aman**. Jika `SEED_PASSWORD` dibiarkan kosong atau tetap bernilai default `'password'`, seeder akan menolak dieksekusi dan melempar `RuntimeException`.
 
 ### Menjalankan Seeder
 ```bash
@@ -172,11 +172,18 @@ cd api
 # Reset database dan jalankan seeder dari awal
 php artisan migrate:fresh --seed
 
-# Atau jalankan seeder saja (bersifat idempoten, aman dijalankan berulang)
+# Atau jalankan seeder saja (bersifat idempoten jika dijalankan pada hari yang sama)
 php artisan db:seed
 ```
 
-> **Perhatian**: `DatabaseSeeder` dilengkapi guard keamanan lingkungan (`local`, `testing`, `staging`). Perintah seeding akan ditolak secara otomatis (HTTP 403) jika dijalankan pada lingkungan `production`.
+### Catatan Penting Eksekusi Seeder:
+1. **Keamanan Environment**:
+   - `DatabaseSeeder` memiliki guard keamanan lingkungan yang ketat: seeding **hanya diizinkan** pada lingkungan `local`, `testing`, dan `staging`.
+   - Di Railway, pastikan `APP_ENV=staging` agar seeder dapat dijalankan.
+   - Pada lingkungan `production`, proses seeding akan dibatalkan seketika dengan exception `RuntimeException`.
+2. **Karakteristik Idempotensi Tanggal Relatif**:
+   - `ClassScheduleSeeder` membuat jadwal kelas untuk 7 hari ke depan secara relatif terhadap tanggal hari ini (`now('Asia/Makassar')`).
+   - Eksekusi `php artisan db:seed` berulang kali **pada hari yang sama** bersifat 100% idempoten (tidak menduplikasi data). Namun, jika dijalankan pada tanggal/hari yang berbeda, seeder akan menambahkan rentang jadwal 7 hari berikutnya.
 
 ## Continuous Integration (CI)
 

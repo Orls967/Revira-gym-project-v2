@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use RuntimeException;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,7 +16,14 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         if (! app()->environment(['local', 'testing', 'staging'])) {
-            abort(403, 'Seeding is only allowed in local, testing, or staging environments.');
+            throw new RuntimeException('Seeding is only allowed in local, testing, or staging environments.');
+        }
+
+        if (! app()->environment(['local', 'testing'])) {
+            $rawSeedPassword = env('SEED_PASSWORD');
+            if (empty($rawSeedPassword) || $rawSeedPassword === 'password') {
+                throw new RuntimeException('SEED_PASSWORD must be set to a secure non-default value in staging environment.');
+            }
         }
 
         $this->call([
