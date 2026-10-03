@@ -50,12 +50,14 @@ Untuk panduan instalasi dan menjalankan aplikasi mobile, silakan baca [member-ap
 
 ## Deploy Staging (Railway)
 
-Deployment staging untuk backend API berjalan di platform **Railway** dengan konfigurasi:
+Deployment staging untuk backend API berjalan di platform **Railway** menggunakan container Dockerfile:
 - **Root Directory**: `api` (konfigurasi di Service Settings dashboard Railway)
-- **Builder**: Nixpacks (menggunakan `api/railway.json`, melayani traffic dengan Nginx + PHP-FPM bawaan Nixpacks)
+- **Builder**: Dockerfile (`api/Dockerfile`, berbasis `serversideup/php:8.4-fpm-nginx` yang melayani HTTP di port 8080 secara non-root)
+- **Config Path**: `/api/railway.json` (Railway tidak mengikuti Root Directory untuk file config, sehingga path file config harus disetel ke `/api/railway.json`)
+- **Port Publik**: `8080` (domain publik Railway dipetakan ke target port 8080)
 - **Healthcheck Endpoint**: `/api/v1/health`
 
-> **Penting (Node Version)**: Environment variable `NIXPACKS_NODE_VERSION=22` **WAJIB** diisi di Railway. Nixpacks secara default mendeteksi `package.json` di `api/` lalu menjalankan `npm run build` menggunakan Node 18, sedangkan Vite membutuhkan Node 20+ sehingga build akan gagal tanpa variabel ini.
+> **Alasan Penggunaan Dockerfile**: PHP bawaan Nixpacks di Railway tidak memuat plugin autentikasi `caching_sha2_password` pada ekstensi `mysqlnd`, sehingga koneksi ke service MySQL 8 Railway gagal dengan error `SQLSTATE[HY000] [2054] The server requested authentication method unknown to the client`. Image Docker kustom berbasis PHP 8.4 resmi menyertakan dukungan penuh `caching_sha2_password`, memastikan aplikasi dapat terhubung ke MySQL 8 tanpa perlu mengubah konfigurasi database Railway.
 
 ### Environment Variables di Railway
 
@@ -77,26 +79,24 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
 | `DB_USERNAME` | `${{MySQL.MYSQLUSER}}` | Username database MySQL |
 | `DB_PASSWORD` | `${{MySQL.MYSQLPASSWORD}}` | Password database MySQL |
 | `CORS_ALLOWED_ORIGINS` | `https://admin-staging.domain.com,https://member-staging.domain.com` | Origin frontend yang diizinkan (dipisahkan koma) |
-| `NIXPACKS_NODE_VERSION` | `22` | **Wajib**: Mengunci Node 22 agar build asset Vite berhasil |
+| `SESSION_DRIVER` | `database` | Driver session database |
+| `CACHE_STORE` | `database` | Driver cache database |
+| `QUEUE_CONNECTION` | `database` | Driver queue database |
+| `SEED_PASSWORD` | `<password-khusus-staging>` | Password default untuk seeder akun member/admin di staging |
 
-### Menjalankan Migrasi Database
+### Migrasi Database & Seeding Staging
 
-1. **Otomatis (Pre-deploy Command)**:
-   - Telah dikonfigurasi melalui `api/railway.json`:
-     ```json
-     "preDeployCommand": "php artisan migrate --force"
-     ```
-   - Setiap deployment baru akan mengeksekusi migrasi terlebih dahulu sebelum container baru melayani request. Apabila migrasi gagal, deployment akan dibatalkan tanpa menghentikan service aktif.
+1. **Migrasi Otomatis (Saat Container Start)**:
+   - Migrasi berjalan otomatis setiap kali container baru menyala melalui mekanisme `AUTORUN_ENABLED=true` (`php artisan migrate --force`).
+   - Apabila migrasi database gagal saat startup, container akan keluar dengan status error, deploy dianggap gagal oleh Railway, dan container versi lama tetap melayani traffic publik.
 
-2. **Manual (Dashboard / CLI)**:
-   - **Dashboard**: Buka service API di Railway > buka tab **Deployments** atau **Command/Terminal** > jalankan:
+2. **Seeding Database Staging**:
+   - Pastikan variabel `SEED_PASSWORD` sudah diisi terlebih dahulu di tab **Variables** Railway dengan nilai rahasia khusus staging (berbeda dari lokal).
+   - Jalankan seeder secara manual dari **Console / Command** service Railway:
      ```bash
-     php artisan migrate --force
+     php artisan db:seed --force
      ```
-   - **Railway CLI**:
-     ```bash
-     railway run php artisan migrate --force
-     ```
+   - **PENTING**: Dilarang menjalankan `php artisan migrate:fresh` di staging agar data operasional tidak terhapus.
 
 ### URL Staging API & Verifikasi
 
@@ -141,6 +141,61 @@ Route::middleware(['auth:sanctum', 'role:admin,member'])->get('/contoh', ...);
 
 Route uji `GET /api/v1/admin/ping` dan `GET /api/v1/member/ping` tersedia untuk membuktikan middleware ini (lihat `api/tests/Feature/RoleMiddlewareTest.php`).
 
+## Akun Uji (Seeder)
+
+Untuk mempermudah pengujian otentikasi, otorisasi, transaksi, dan jadwal kelas di lingkungan pengembangan lokal maupun staging, seeder database telah menyediakan kumpulan akun dan data awal yang mencakup seluruh skenario status.
+
+### Tabel Akun Uji
+
+| Email | Role | Status Membership | Keterangan Pengujian |
+|---|---|---|---|
+| `admin@revira.test` | `admin` | - | Akun pengelola / admin sistem (verifikasi pembayaran, manajemen kelas) |
+| `member1@revira.test` | `member` | Active (H-3 kedaluwarsa) | Uji notifikasi pengingat H-3 kedaluwarsa & booking kelas |
+| `member2@revira.test` | `member` | Pending | Uji membership baru menunggu verifikasi transaksi |
+| `member3@revira.test` | `member` | Expired + Rejected Extension | Uji membership kedaluwarsa dan perpanjangan yang ditolak |
+| `member4@revira.test` | `member` | Active | Anggota aktif, peserta kelas Yoga |
+| `member5@revira.test` | `member` | Active | Anggota aktif, peserta kelas Yoga |
+
+### Aturan Password Seeder
+- Password seluruh akun uji dibaca dari file konfigurasi `api/config/seeding.php` yang merujuk pada environment variable `SEED_PASSWORD` (dengan fallback default `'password'` di lingkungan lokal/testing).
+- **Wajib di Staging**: Di lingkungan staging (misalnya Railway), `SEED_PASSWORD` **wajib diisi dengan nilai yang kuat dan aman**. Jika `SEED_PASSWORD` dibiarkan kosong atau tetap bernilai default `'password'`, seeder akan menolak dieksekusi dan melempar `RuntimeException`.
+- **Kerahasiaan Password Staging**: Password akun seed di staging berbeda dari lokal dan tidak ditulis di repo; minta ke Orlando (PIC backend) lewat chat pribadi. Jangan menulis nilainya di mana pun.
+
+### Menjalankan Seeder
+```bash
+cd api
+
+# Lingkungan LOKAL: Reset database dan jalankan seeder dari awal
+php artisan migrate:fresh --seed
+
+# Lingkungan STAGING: Cukup jalankan seeder (DILARANG migrate:fresh di staging!)
+php artisan db:seed
+
+# Membuat symlink storage agar bukti transfer dapat diakses lewat web
+php artisan storage:link
+```
+
+### Catatan Penting Eksekusi Seeder:
+1. **Keamanan Environment & Aturan Staging**:
+   - `DatabaseSeeder` memiliki guard keamanan lingkungan yang ketat: seeding **hanya diizinkan** pada lingkungan `local`, `testing`, dan `staging`.
+   - Di Railway, pastikan `APP_ENV=staging` agar seeder dapat dijalankan.
+   - Pada lingkungan `production`, proses seeding akan dibatalkan seketika dengan exception `RuntimeException`.
+   - **Perbedaan Lokal vs Staging**: Di lokal, gunakan `php artisan migrate:fresh --seed` untuk reset bersih. Di staging, **`migrate:fresh` DILARANG KERAS** karena staging dipakai bersama dan perintah tersebut akan menghapus seluruh data buatan tester. Di staging cukup jalankan `php artisan db:seed` (aman diulang, hanya memperbarui data seed tanpa menyentuh data tester).
+2. **Karakteristik Idempotensi & Jadwal Relatif**:
+   - `ClassScheduleSeeder` membuat jadwal kelas untuk jendela 7 hari ke depan secara relatif terhadap tanggal hari ini (`now('Asia/Makassar')`). Jadwal dari run sebelumnya tidak dihapus maupun diperbarui.
+   - `php artisan db:seed` **pada hari yang sama** idempoten: tidak ada baris yang bertambah.
+   - `php artisan db:seed` **pada hari berbeda** menambah jadwal untuk jendela baru tanpa menghapus jadwal run sebelumnya. Akibatnya:
+     - jumlah jadwal mendatang bertambah (contoh: 7 menjadi 14),
+     - satu tanggal bisa memiliki lebih dari satu sesi,
+     - sesi berstatus `cancelled` ikut bertambah.
+   - Ini bukan bug data tester. Jangan hapus baris jadwal secara manual untuk "merapikan" di staging, karena staging dipakai bersama.
+   - Untuk daftar jadwal yang bersih, gunakan `php artisan migrate:fresh --seed` **di lokal**. Di staging `migrate:fresh` dilarang; tester cukup mengabaikan sesi ganda atau memfilter berdasarkan tanggal dan status.
+   - `ClassParticipantSeeder` hanya menempelkan peserta ke sesi dengan `schedule_date >= hari ini`.
+3. **Storage Bukti Transfer Dummy**:
+   - Seeder otomatis menyalin gambar dummy bukti transfer (`dummy_transfer_pending.jpg`) ke storage disk `public` (`receipts/dummy_transfer_pending.jpg`).
+   - Jalankan `php artisan storage:link` agar file bukti transfer dapat diakses melalui URL `/storage/...`.
+   - Di Railway, filesystem bersifat non-permanen (ephemeral), sehingga file di storage akan hilang setiap redeploy aplikasi sampai konfigurasi object storage di SCRUM-18 selesai; cukup jalankan `php artisan db:seed` ulang untuk memulihkan file bukti transfer tersebut.
+
 ## Continuous Integration (CI)
 
 Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo:
@@ -153,9 +208,17 @@ Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis
   3. Linter kode menggunakan **Laravel Pint** dalam mode verifikasi (`./vendor/bin/pint --test`).
   4. Pengujian fitur/unit test menggunakan **PHPUnit** (`php artisan test`) dengan in-memory SQLite (`DB_CONNECTION=sqlite`, `DB_DATABASE=:memory:`).
 
-### 2. Cara Menjalankan Lint & Test di Lokal Sebelum Push
-Untuk memastikan pipeline CI selalu hijau, jalankan perintah berikut di direktori `api/` sebelum push:
+### 2. Lane `member-app/` (`.github/workflows/ci-member-app.yml`)
+- **Pemicu (Trigger)**: Otomatis berjalan saat ada `pull_request` dengan target branch `dev` yang mengubah file di `member-app/**` atau file workflow itu sendiri. Dilengkapi `concurrency` (run lama otomatis dibatalkan jika ada push baru ke PR yang sama).
+- **Pemeriksaan yang Dijalankan**:
+  1. Setup environment Node.js 24 sesuai `member-app/.nvmrc` dan cache dependensi npm (`member-app/package-lock.json`).
+  2. `npm ci` untuk instalasi dependensi secara bersih dan deterministik.
+  3. Validasi tipe data TypeScript menggunakan `npx tsc --noEmit`.
 
+### 3. Cara Menjalankan Pemeriksaan di Lokal Sebelum Push
+Untuk memastikan pipeline CI selalu hijau, jalankan perintah berikut di direktori masing-masing sebelum push:
+
+**Backend (`api/`)**:
 ```bash
 cd api
 
@@ -166,12 +229,22 @@ cd api
 php artisan test
 ```
 
-### 3. Lane Lain (`admin-web/` dan `member-app/`)
-Kerangka CI untuk frontend admin dan mobile app telah disiapkan dalam bentuk template:
-- `.github/workflows/ci-admin-web.yml.example`
-- `.github/workflows/ci-member-app.yml.example`
+**Mobile App (`member-app/`)**:
+```bash
+cd member-app
 
-Workflow ini sengaja belum diaktifkan (ekstensi `.example`) karena foldernya masih kosong. Aktifkan dengan me-rename file (menghapus `.example`) saat SCRUM-45 (admin-web) dan SCRUM-42 (member-app) dikerjakan.
+# Sinkronisasi dependensi
+npm ci
+
+# Validasi tipe TypeScript
+npx tsc --noEmit
+```
+
+### 4. Lane Lain (`admin-web/`)
+Kerangka CI untuk frontend admin telah disiapkan dalam bentuk template:
+- `.github/workflows/ci-admin-web.yml.example`
+
+Workflow ini sengaja belum diaktifkan (ekstensi `.example`) karena foldernya masih kosong. Aktifkan dengan me-rename file (menghapus `.example`) saat SCRUM-45 (admin-web) dikerjakan.
 
 ## Aturan Kerja
 

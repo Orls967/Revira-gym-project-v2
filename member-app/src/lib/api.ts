@@ -57,21 +57,30 @@ export async function apiClient<T>(
     );
   }
 
-  // Interceptor global untuk token kadaluarsa / ditolak server
-  if (response.status === 401) {
-    await clearToken();
-    await clearUserData();
-    if (onUnauthorized) {
-      onUnauthorized();
-    }
-    throw new ApiError(401, "Sesi Anda telah berakhir. Silakan masuk kembali.");
-  }
-
   let jsonResult: any = null;
   try {
     jsonResult = await response.json();
   } catch {
     jsonResult = null;
+  }
+
+ const isLoginRequest = cleanEndpoint.includes("login");
+
+  // Interceptor status 401
+  if (response.status === 401) {
+    if (!isLoginRequest) {
+      // Hanya jalankan sesi berakhir jika BUKAN di halaman login
+      await clearToken();
+      await clearUserData();
+      if (onUnauthorized) {
+        onUnauthorized();
+      }
+      throw new ApiError(401, "Sesi Anda telah berakhir. Silakan masuk kembali.");
+    } else {
+      // Jika terjadi saat LOGIN, ambil pesan ASLI yang dikirim backend Laravel:
+      const errorMsg = jsonResult?.message || "Email atau password salah.";
+      throw new ApiError(401, errorMsg, jsonResult?.errors);
+    }
   }
 
   if (!response.ok) {

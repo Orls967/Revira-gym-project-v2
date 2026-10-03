@@ -9,6 +9,10 @@ class Transaction extends Model
 {
     use HasFactory;
 
+    protected $attributes = [
+        'verification_status' => 'pending',
+    ];
+
     protected $fillable = [
         'membership_id',
         'user_id',
