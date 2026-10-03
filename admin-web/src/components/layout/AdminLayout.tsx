@@ -31,7 +31,9 @@ export default function AdminLayout() {
               to={item.href}
               className={({ isActive }) =>
                 `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  isActive 
+                    ? 'bg-amber-400 text-zinc-950 font-semibold' 
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                 }`
               }
             >

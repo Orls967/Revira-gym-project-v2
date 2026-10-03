@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    /* Brand */
+    --color-primary: #fbbf24;
+    --color-primary-hover: #f59e0b;
+    --color-primary-surface: rgba(251, 191, 36, 0.1);
+
+    /* Background & Surface */
+    --color-bg-base: #09090b;
+    --color-surface: #18181b;
+    --color-border: #27272a;
+
+    /* Text */
+    --color-text-main: #ffffff;
+    --color-text-label: #d4d4d8;
+    --color-text-muted: #a1a1aa;
+    --color-text-placeholder: #71717a;
+    --color-text-inverse: #09090b;
+
+    /* Status */
+    --color-error: #ef4444;
+    --color-error-text: #f87171;
+    --color-error-surface: rgba(239, 68, 68, 0.1);
+    --color-success: #22c55e;
+  }
+}
