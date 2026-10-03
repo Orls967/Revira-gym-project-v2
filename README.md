@@ -50,12 +50,14 @@ Untuk panduan instalasi dan menjalankan aplikasi mobile, silakan baca [member-ap
 
 ## Deploy Staging (Railway)
 
-Deployment staging untuk backend API berjalan di platform **Railway** dengan konfigurasi:
+Deployment staging untuk backend API berjalan di platform **Railway** menggunakan container Dockerfile:
 - **Root Directory**: `api` (konfigurasi di Service Settings dashboard Railway)
-- **Builder**: Nixpacks (menggunakan `api/railway.json`, melayani traffic dengan Nginx + PHP-FPM bawaan Nixpacks)
+- **Builder**: Dockerfile (`api/Dockerfile`, berbasis `serversideup/php:8.4-fpm-nginx` yang melayani HTTP di port 8080 secara non-root)
+- **Config Path**: `/api/railway.json` (Railway tidak mengikuti Root Directory untuk file config, sehingga path file config harus disetel ke `/api/railway.json`)
+- **Port Publik**: `8080` (domain publik Railway dipetakan ke target port 8080)
 - **Healthcheck Endpoint**: `/api/v1/health`
 
-> **Penting (Node Version)**: Environment variable `NIXPACKS_NODE_VERSION=22` **WAJIB** diisi di Railway. Nixpacks secara default mendeteksi `package.json` di `api/` lalu menjalankan `npm run build` menggunakan Node 18, sedangkan Vite membutuhkan Node 20+ sehingga build akan gagal tanpa variabel ini.
+> **Alasan Penggunaan Dockerfile**: PHP bawaan Nixpacks di Railway tidak memuat plugin autentikasi `caching_sha2_password` pada ekstensi `mysqlnd`, sehingga koneksi ke service MySQL 8 Railway gagal dengan error `SQLSTATE[HY000] [2054] The server requested authentication method unknown to the client`. Image Docker kustom berbasis PHP 8.4 resmi menyertakan dukungan penuh `caching_sha2_password`, memastikan aplikasi dapat terhubung ke MySQL 8 tanpa perlu mengubah konfigurasi database Railway.
 
 ### Environment Variables di Railway
 
@@ -77,26 +79,24 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
 | `DB_USERNAME` | `${{MySQL.MYSQLUSER}}` | Username database MySQL |
 | `DB_PASSWORD` | `${{MySQL.MYSQLPASSWORD}}` | Password database MySQL |
 | `CORS_ALLOWED_ORIGINS` | `https://admin-staging.domain.com,https://member-staging.domain.com` | Origin frontend yang diizinkan (dipisahkan koma) |
-| `NIXPACKS_NODE_VERSION` | `22` | **Wajib**: Mengunci Node 22 agar build asset Vite berhasil |
+| `SESSION_DRIVER` | `database` | Driver session database |
+| `CACHE_STORE` | `database` | Driver cache database |
+| `QUEUE_CONNECTION` | `database` | Driver queue database |
+| `SEED_PASSWORD` | `<password-khusus-staging>` | Password default untuk seeder akun member/admin di staging |
 
-### Menjalankan Migrasi Database
+### Migrasi Database & Seeding Staging
 
-1. **Otomatis (Pre-deploy Command)**:
-   - Telah dikonfigurasi melalui `api/railway.json`:
-     ```json
-     "preDeployCommand": "php artisan migrate --force"
-     ```
-   - Setiap deployment baru akan mengeksekusi migrasi terlebih dahulu sebelum container baru melayani request. Apabila migrasi gagal, deployment akan dibatalkan tanpa menghentikan service aktif.
+1. **Migrasi Otomatis (Saat Container Start)**:
+   - Migrasi berjalan otomatis setiap kali container baru menyala melalui mekanisme `AUTORUN_ENABLED=true` (`php artisan migrate --force`).
+   - Apabila migrasi database gagal saat startup, container akan keluar dengan status error, deploy dianggap gagal oleh Railway, dan container versi lama tetap melayani traffic publik.
 
-2. **Manual (Dashboard / CLI)**:
-   - **Dashboard**: Buka service API di Railway > buka tab **Deployments** atau **Command/Terminal** > jalankan:
+2. **Seeding Database Staging**:
+   - Pastikan variabel `SEED_PASSWORD` sudah diisi terlebih dahulu di tab **Variables** Railway dengan nilai rahasia khusus staging (berbeda dari lokal).
+   - Jalankan seeder secara manual dari **Console / Command** service Railway:
      ```bash
-     php artisan migrate --force
+     php artisan db:seed --force
      ```
-   - **Railway CLI**:
-     ```bash
-     railway run php artisan migrate --force
-     ```
+   - **PENTING**: Dilarang menjalankan `php artisan migrate:fresh` di staging agar data operasional tidak terhapus.
 
 ### URL Staging API & Verifikasi
 
