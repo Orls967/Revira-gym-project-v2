@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
 use App\Services\Auth\ApiTokenService;
 use Illuminate\Http\JsonResponse;
@@ -51,6 +53,33 @@ class AuthController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /**
+     * POST /api/v1/register. Membuat akun member baru dan langsung login (token dikirim balik).
+     */
+    public function register(RegisterRequest $request): JsonResponse
+    {
+        $user = new User($request->safe()->only(['name', 'email', 'phone_number', 'password']));
+        // role tidak boleh diisi dari input; registrasi publik selalu menjadi member
+        $user->role = UserRole::Member;
+        $user->save();
+
+        $token = $this->tokens->createToken($user, $request->validated('device_name'));
+
+        return response()->json([
+            'message' => 'Registrasi berhasil',
+            'data' => [
+                'token' => $token->plainTextToken,
+                'token_type' => 'Bearer',
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ],
+            ],
+        ], 201);
     }
 
     /**

@@ -85,6 +85,88 @@ Butuh header `Authorization: Bearer <token>`. Hanya mencabut token yang dipakai 
 | 200 | `{ "message": "Logout berhasil" }` |
 | 401 | `{ "message": "Unauthenticated." }` |
 
+### `POST /api/v1/register` (SCRUM-92)
+
+Registrasi akun member dari aplikasi mobile. Akun selalu ber-role `member` (field `role` dari input diabaikan).
+Setelah berhasil, member **langsung login**: respons berisi token dengan bentuk yang sama seperti login.
+Endpoint ini hanya membuat akun; pemilihan paket membership dan pembayaran adalah alur terpisah.
+Dibatasi **5 percobaan per menit** per IP.
+
+Body:
+
+```json
+{
+  "name": "Member Baru",
+  "email": "baru@example.com",
+  "phone_number": "081234567890",
+  "password": "rahasia123",
+  "password_confirmation": "rahasia123",
+  "device_name": "mobile"
+}
+```
+
+| Field | Aturan |
+|-------|--------|
+| `name` | wajib, maks. 100 karakter |
+| `email` | wajib, format email, maks. 150 karakter, belum terdaftar. Disimpan huruf kecil. |
+| `phone_number` | wajib, nomor Indonesia. Boleh diawali `08`, `+62`, atau `62`, boleh pakai spasi/strip; disimpan sebagai `08xxxxxxxxxx` (10–13 digit). |
+| `password` | wajib, min. 8 karakter, harus sama dengan `password_confirmation` |
+| `device_name` | wajib `mobile` |
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 201 | Registrasi berhasil | sama seperti respons 200 login, dengan `message: "Registrasi berhasil"` |
+| 422 | Validasi gagal (termasuk email sudah terdaftar) | `{ "message": "...", "errors": { "field": ["..."] } }` |
+| 429 | Lebih dari 5 percobaan dalam 1 menit | `{ "message": "Too Many Attempts." }` |
+
+### `GET /api/v1/me` (SCRUM-92)
+
+Profil member pemilik token beserta status keanggotaannya. Butuh header `Authorization: Bearer <token>` dan **hanya untuk role `member`** (admin mendapat 403; Admin Web bisa memakai `GET /api/v1/user`).
+
+Aplikasi mobile memakai **`data.membership.is_active`** untuk mengaktifkan tombol booking (SCRUM-26 AC1).
+`is_active` bernilai `true` hanya jika ada membership berstatus `active` yang `end_date`-nya belum lewat (hari terakhir masih dihitung aktif).
+
+Contoh respons 200:
+
+```json
+{
+  "data": {
+    "id": 2,
+    "name": "Member Contoh",
+    "email": "member@example.com",
+    "phone_number": "081234567890",
+    "profile_photo": null,
+    "role": "member",
+    "membership": {
+      "is_active": true,
+      "status": "active",
+      "plan": { "id": 1, "name": "Bulanan", "duration_days": 30 },
+      "start_date": "2026-09-20",
+      "end_date": "2026-10-20"
+    }
+  }
+}
+```
+
+Nilai `membership.status`:
+
+| Status | Arti | `is_active` |
+|--------|------|-------------|
+| `active` | Membership sedang berlaku | `true` |
+| `pending` | Pendaftaran/perpanjangan terbaru menunggu verifikasi admin | `false` |
+| `rejected` | Pendaftaran/perpanjangan terbaru ditolak | `false` |
+| `expired` | Membership terakhir sudah berakhir | `false` |
+| `none` | Belum pernah mendaftar membership; `plan`, `start_date`, `end_date` bernilai `null` | `false` |
+
+Jika ada membership yang sedang berlaku, data itu yang ditampilkan walaupun ada catatan lebih baru (mis. perpanjangan yang masih `pending`).
+Jika tidak ada, yang ditampilkan adalah catatan membership terbaru. `start_date`/`end_date` bisa `null` untuk status `pending` dan `rejected`.
+
+| Status | Body |
+|--------|------|
+| 200 | lihat contoh di atas |
+| 401 | `{ "message": "Unauthenticated." }` |
+| 403 | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
+
 ### Akun Uji Coba (Seeder & Manual)
  
 Database seeder (`php artisan db:seed`) telah menyediakan akun uji coba bawaan yang mencakup seluruh variasi status:
