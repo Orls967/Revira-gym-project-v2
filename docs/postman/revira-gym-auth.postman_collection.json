@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Revira Gym API - Auth",
-    "description": "Login dan logout Bearer token. Ganti variabel `baseUrl` ke URL lokal atau staging. Setelah Login dijalankan, token otomatis tersimpan di variabel `token` dan dipakai request lain. Request Admin ping / Member ping membuktikan middleware role (SCRUM-40): login sebagai admin atau member lewat variabel `email`.",
+    "description": "Login dan logout Bearer token. Ganti variabel `baseUrl` ke URL lokal atau staging. Setelah Login dijalankan, token otomatis tersimpan di variabel `token` dan dipakai request lain. Request Admin ping / Member ping membuktikan middleware role (SCRUM-40): login sebagai admin atau member lewat variabel `email`. Register (SCRUM-92) membuat akun member baru dan otomatis menyimpan token; Me hanya untuk role member.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -106,6 +106,54 @@
       }
     },
     {
+      "name": "Register (member, mobile)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "if (body.data && body.data.token) {",
+              "  pm.collectionVariables.set('token', body.data.token);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Member Baru\",\n  \"email\": \"baru{{$timestamp}}@example.com\",\n  \"phone_number\": \"081234567890\",\n  \"password\": \"rahasia123\",\n  \"password_confirmation\": \"rahasia123\",\n  \"device_name\": \"mobile\"\n}"
+        },
+        "url": "{{baseUrl}}/register"
+      },
+      "response": [
+        {
+          "name": "201 Registrasi berhasil",
+          "status": "Created",
+          "code": 201,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Registrasi berhasil\",\n  \"data\": {\n    \"token\": \"2|AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd\",\n    \"token_type\": \"Bearer\",\n    \"user\": {\n      \"id\": 7,\n      \"name\": \"Member Baru\",\n      \"email\": \"baru@example.com\",\n      \"role\": \"member\"\n    }\n  }\n}"
+        },
+        {
+          "name": "422 Email sudah terdaftar",
+          "status": "Unprocessable Content",
+          "code": 422,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"The email has already been taken.\",\n  \"errors\": {\n    \"email\": [\"The email has already been taken.\"]\n  }\n}"
+        }
+      ]
+    },
+    {
       "name": "User (cek token)",
       "request": {
         "method": "GET",
@@ -116,6 +164,52 @@
         },
         "url": "{{baseUrl}}/user"
       }
+    },
+    {
+      "name": "Me (profil + status membership, role:member)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "url": "{{baseUrl}}/me"
+      },
+      "response": [
+        {
+          "name": "200 Membership aktif",
+          "status": "OK",
+          "code": 200,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"data\": {\n    \"id\": 2,\n    \"name\": \"Member Contoh\",\n    \"email\": \"member@example.com\",\n    \"phone_number\": \"081234567890\",\n    \"profile_photo\": null,\n    \"role\": \"member\",\n    \"membership\": {\n      \"is_active\": true,\n      \"status\": \"active\",\n      \"plan\": { \"id\": 1, \"name\": \"Bulanan\", \"duration_days\": 30 },\n      \"start_date\": \"2026-09-20\",\n      \"end_date\": \"2026-10-20\"\n    }\n  }\n}"
+        },
+        {
+          "name": "200 Belum punya membership",
+          "status": "OK",
+          "code": 200,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"data\": {\n    \"id\": 7,\n    \"name\": \"Member Baru\",\n    \"email\": \"baru@example.com\",\n    \"phone_number\": \"081234567890\",\n    \"profile_photo\": null,\n    \"role\": \"member\",\n    \"membership\": {\n      \"is_active\": false,\n      \"status\": \"none\",\n      \"plan\": null,\n      \"start_date\": null,\n      \"end_date\": null\n    }\n  }\n}"
+        },
+        {
+          "name": "401 Tanpa token",
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+        },
+        {
+          "name": "403 Login sebagai admin",
+          "status": "Forbidden",
+          "code": 403,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+        }
+      ]
     },
     {
       "name": "Admin ping (role:admin)",
