@@ -95,6 +95,20 @@ class RegisterTest extends TestCase
     }
 
     /**
+     * Memastikan nomor HP berawalan 62 (tanpa +) juga diubah ke format 08.
+     */
+    public function test_register_normalizes_phone_with_62_prefix_without_plus(): void
+    {
+        $this->postJson('/api/v1/register', $this->payload(['phone_number' => '6281234567890']))
+            ->assertCreated();
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'baru@example.com',
+            'phone_number' => '081234567890',
+        ]);
+    }
+
+    /**
      * Memastikan email yang sudah terdaftar ditolak, termasuk beda huruf besar/kecil.
      */
     public function test_register_rejects_duplicate_email(): void
