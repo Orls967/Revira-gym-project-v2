@@ -1,17 +1,16 @@
 import axios from 'axios';
-import { getAuthToken, clearAuth } from './auth';
-
-console.log("Cek URL .env:", import.meta.env.VITE_API_URL);
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1',
   headers: {
+    'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
 
+// Interceptor untuk menyisipkan token ke setiap request
 api.interceptors.request.use((config) => {
-  const token = getAuthToken();
+  const token = localStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -21,13 +20,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-
+    // Cek jika API merespons 401 DAN request-nya BUKAN ke endpoint '/login'
     if (error.response?.status === 401 && !error.config.url?.includes('/login')) {
-      localStorage.removeItem('auth_token'); 
+      localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
       window.location.href = '/login';
     }
-
+    
     return Promise.reject(error);
   }
 );
