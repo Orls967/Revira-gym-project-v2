@@ -42,9 +42,6 @@ export default function Login() {
   };
 
   return (
-    // bg-zinc-950 setara dengan --color-bg-base (#09090b)
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 py-12 px-4 sm:px-6 lg:px-8">
-      {/* bg-zinc-900 setara dengan --color-surface (#18181b) */}
       <div className="max-w-md w-full bg-zinc-900 p-8 rounded-xl shadow-lg border border-zinc-800 space-y-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-white">Revira Gym Admin</h2>
@@ -52,7 +49,6 @@ export default function Login() {
         </div>
 
         {error && (
-          // Warna error menyesuaikan tema gelap
           <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-md text-sm text-center">
             {error}
           </div>
@@ -66,7 +62,6 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              // Input field gelap dengan focus ring warna amber
               className="mt-1 block w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md shadow-sm text-white focus:outline-none focus:ring-amber-400 focus:border-amber-400"
             />
           </div>
@@ -85,7 +80,6 @@ export default function Login() {
           <button
             type="submit"
             disabled={isLoading}
-            // bg-amber-400 setara dengan --color-primary (#fbbf24)
             className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-bold transition-colors ${
               isLoading 
                 ? 'bg-amber-600 text-zinc-900 cursor-not-allowed' 
