@@ -267,15 +267,16 @@ class SeederTest extends TestCase
         );
     }
 
-    public function test_seeder_copies_dummy_receipt_image_to_public_storage(): void
+    public function test_seeder_copies_dummy_receipt_image_to_receipts_storage(): void
     {
-        Storage::fake('public');
+        $receiptDisk = config('filesystems.receipts_disk', 'receipts');
+        Storage::fake($receiptDisk);
 
         $this->seed();
 
         $pendingTx = Transaction::where('verification_status', 'pending')->first();
         $this->assertNotNull($pendingTx);
         $this->assertNotNull($pendingTx->receipt_image);
-        Storage::disk('public')->assertExists($pendingTx->receipt_image);
+        Storage::disk($receiptDisk)->assertExists($pendingTx->receipt_image);
     }
 }

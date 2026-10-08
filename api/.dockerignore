@@ -17,3 +17,7 @@ storage/framework/testing/*
 !storage/framework/testing/.gitignore
 *.sqlite
 .phpunit.result.cache
+storage/app/private/*
+!storage/app/private/.gitignore
+storage/app/public/*
+!storage/app/public/.gitignore

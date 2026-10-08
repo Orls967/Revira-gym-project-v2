@@ -17,6 +17,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Receipts Filesystem Disk
+    |--------------------------------------------------------------------------
+    |
+    | Disk yang digunakan untuk menyimpan bukti transfer pembayaran secara privat.
+    | Default menggunakan disk privat 'receipts', dan dapat dialihkan ke 's3' via env.
+    |
+    */
+
+    'receipts_disk' => env('RECEIPTS_DISK', 'receipts'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |
@@ -29,6 +41,14 @@ return [
     */
 
     'disks' => [
+
+        'receipts' => [
+            'driver' => env('RECEIPT_STORAGE_DRIVER', 'local'),
+            'root' => storage_path(env('RECEIPT_STORAGE_PATH', 'app/private')),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
 
         'local' => [
             'driver' => 'local',
