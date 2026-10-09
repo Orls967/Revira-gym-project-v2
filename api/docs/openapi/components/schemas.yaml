@@ -284,9 +284,9 @@ MembershipPlan:
       type: integer
       minimum: 1
     price:
-      type: string
-      description: Desimal 2 digit (cast `decimal:2`), dikirim sebagai string.
-      examples: ['150000.00']
+      type: integer
+      description: Harga dalam rupiah (bilangan bulat)
+      examples: [150000]
     description:
       type: [string, 'null']
     is_active:
@@ -306,8 +306,9 @@ MembershipPlanInput:
       type: integer
       minimum: 1
     price:
-      type: number
+      type: integer
       minimum: 0
+      maximum: 99999999
       examples: [150000]
     description:
       type: [string, 'null']
@@ -325,8 +326,9 @@ PublicMembershipPlan:
     duration_days:
       type: integer
     price:
-      type: string
-      examples: ['150000.00']
+      type: integer
+      description: Harga dalam rupiah (bilangan bulat)
+      examples: [150000]
     description:
       type: [string, 'null']
 MembershipPlanResponse:

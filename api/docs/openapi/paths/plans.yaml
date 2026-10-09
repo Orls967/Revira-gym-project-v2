@@ -18,7 +18,7 @@ publicPlans:
                 - id: 1
                   name: Bulanan
                   duration_days: 30
-                  price: '150000.00'
+                  price: 150000
                   description: Akses gym 30 hari
       '429':
         $ref: ../components/responses.yaml#/TooManyRequests
