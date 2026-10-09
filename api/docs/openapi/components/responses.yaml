@@ -1,0 +1,51 @@
+Unauthorized:
+  description: Token tidak ada, tidak valid, atau sudah dicabut.
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Unauthenticated.
+Forbidden:
+  description: Peran pengguna tidak diizinkan (mis. member mengakses route admin).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Anda tidak memiliki akses ke sumber daya ini.
+NotFound:
+  description: Data tidak ditemukan.
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Data tidak ditemukan.
+Conflict:
+  description: Data masih dipakai data lain sehingga tidak bisa dihapus.
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Data tidak dapat dihapus karena masih dipakai.
+ValidationError:
+  description: Validasi gagal.
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: The name field is required.
+        errors:
+          name:
+            - The name field is required.
+TooManyRequests:
+  description: Terlalu banyak percobaan (rate limit).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Too Many Attempts.

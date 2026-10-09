@@ -1,0 +1,59 @@
+health:
+  get:
+    operationId: getHealth
+    tags: [Diagnostics]
+    summary: Health check
+    description: Memantau status server API. Tanpa autentikasi.
+    security: []
+    responses:
+      '200':
+        description: Server hidup.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Health
+            example:
+              status: ok
+              time: '2026-10-09T23:00:00+08:00'
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests
+adminPing:
+  get:
+    operationId: getAdminPing
+    tags: [Diagnostics]
+    summary: Ping admin
+    description: Hanya untuk uji middleware role, jangan dipakai frontend. Dipertimbangkan untuk dihapus nanti.
+    responses:
+      '200':
+        description: Token milik admin.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Ping
+            example:
+              message: pong
+              role: admin
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+memberPing:
+  get:
+    operationId: getMemberPing
+    tags: [Diagnostics]
+    summary: Ping member
+    description: Hanya untuk uji middleware role, jangan dipakai frontend. Dipertimbangkan untuk dihapus nanti.
+    responses:
+      '200':
+        description: Token milik member.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Ping
+            example:
+              message: pong
+              role: member
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden

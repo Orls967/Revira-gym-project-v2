@@ -1,0 +1,49 @@
+publicOperationalHours:
+  get:
+    operationId: listPublicOperationalHours
+    tags: [Public, Sprint 2]
+    x-status: planned
+    summary: Jam operasional (publik)
+    description: SCRUM-93. Tanpa autentikasi, field minimal.
+    security: []
+    responses:
+      '200':
+        description: Jam operasional per hari.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/PublicOperationalHourList
+            example:
+              data:
+                - day_of_week: Senin
+                  open_time: '06:00'
+                  close_time: '21:00'
+                  is_closed: false
+                - day_of_week: Minggu
+                  open_time: null
+                  close_time: null
+                  is_closed: true
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests
+publicClasses:
+  get:
+    operationId: listPublicClasses
+    tags: [Public, Sprint 2]
+    x-status: planned
+    summary: Daftar kelas aktif (publik)
+    description: SCRUM-93. Tanpa autentikasi, field minimal. Hanya kelas dengan `is_active` true.
+    security: []
+    responses:
+      '200':
+        description: Daftar kelas aktif.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/PublicGymClassList
+            example:
+              data:
+                - id: 1
+                  name: Yoga Pagi
+                  description: Yoga untuk pemula
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests

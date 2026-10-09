@@ -1,0 +1,124 @@
+adminInstructors:
+  get:
+    operationId: listInstructors
+    tags: [Instructors, Sprint 2]
+    x-status: planned
+    summary: Daftar instruktur (admin)
+    description: SCRUM-54. Role admin. Paginasi dan cari nama.
+    parameters:
+      - $ref: ../components/parameters.yaml#/Search
+      - $ref: ../components/parameters.yaml#/Page
+      - $ref: ../components/parameters.yaml#/PerPage
+    responses:
+      '200':
+        description: Halaman instruktur.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/InstructorPage
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+  post:
+    operationId: createInstructor
+    tags: [Instructors, Sprint 2]
+    x-status: planned
+    summary: Buat instruktur (admin)
+    description: SCRUM-54. Role admin.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/InstructorInput
+          example:
+            name: Budi Santoso
+            specialization: Yoga
+            phone_number: '081234567890'
+            is_active: true
+    responses:
+      '201':
+        description: Dibuat.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/InstructorMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+adminInstructorById:
+  parameters:
+    - $ref: ../components/parameters.yaml#/Id
+  get:
+    operationId: getInstructor
+    tags: [Instructors, Sprint 2]
+    x-status: planned
+    summary: Detail instruktur (admin)
+    description: SCRUM-54. Role admin.
+    responses:
+      '200':
+        description: Detail instruktur.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/InstructorResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+  put:
+    operationId: updateInstructor
+    tags: [Instructors, Sprint 2]
+    x-status: planned
+    summary: Ubah instruktur (admin)
+    description: SCRUM-54. Role admin.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/InstructorInput
+    responses:
+      '200':
+        description: Diubah.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/InstructorMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+  delete:
+    operationId: deleteInstructor
+    tags: [Instructors, Sprint 2]
+    x-status: planned
+    summary: Hapus instruktur (admin)
+    description: SCRUM-54. Instruktur yang punya jadwal ditolak dengan 409.
+    responses:
+      '200':
+        description: Dihapus.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MessageResponse
+            example:
+              message: Instruktur berhasil dihapus
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '409':
+        $ref: ../components/responses.yaml#/Conflict

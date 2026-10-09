@@ -1,0 +1,745 @@
+Error:
+  type: object
+  required: [message]
+  properties:
+    message:
+      type: string
+    errors:
+      type: object
+      description: Pesan validasi per field (hanya pada 422).
+      additionalProperties:
+        type: array
+        items:
+          type: string
+MessageResponse:
+  type: object
+  required: [message]
+  properties:
+    message:
+      type: string
+PaginationLinks:
+  type: object
+  description: Format `links` bawaan `paginate()` Laravel.
+  required: [first, last, prev, next]
+  properties:
+    first:
+      type: [string, 'null']
+      format: uri
+    last:
+      type: [string, 'null']
+      format: uri
+    prev:
+      type: [string, 'null']
+      format: uri
+    next:
+      type: [string, 'null']
+      format: uri
+PaginationMeta:
+  type: object
+  description: Format `meta` bawaan `paginate()` Laravel.
+  required: [current_page, from, last_page, links, path, per_page, to, total]
+  properties:
+    current_page:
+      type: integer
+    from:
+      type: [integer, 'null']
+    last_page:
+      type: integer
+    links:
+      type: array
+      items:
+        type: object
+        required: [url, label, active]
+        properties:
+          url:
+            type: [string, 'null']
+            format: uri
+          label:
+            type: string
+          active:
+            type: boolean
+    path:
+      type: string
+      format: uri
+    per_page:
+      type: integer
+    to:
+      type: [integer, 'null']
+    total:
+      type: integer
+UserRole:
+  type: string
+  enum: [admin, member]
+MembershipStatus:
+  type: string
+  description: Status catatan membership (migration `memberships.status`).
+  enum: [pending, active, expired, rejected]
+MembershipSummaryStatus:
+  type: string
+  description: Status pada `/me`. `none` berarti belum punya catatan membership.
+  enum: [none, pending, active, expired, rejected]
+DayOfWeek:
+  type: string
+  enum: [Senin, Selasa, Rabu, Kamis, Jumat, Sabtu, Minggu]
+ScheduleStatus:
+  type: string
+  enum: [scheduled, ongoing, completed, cancelled]
+ClockTime:
+  type: string
+  description: Jam `HH:MM`.
+  pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+  examples: ['08:00']
+Timestamp:
+  type: string
+  format: date-time
+  description: ISO 8601 dengan offset +08:00.
+  examples: ['2026-10-10T08:00:00+08:00']
+
+Health:
+  type: object
+  required: [status, time]
+  properties:
+    status:
+      type: string
+      enum: [ok]
+    time:
+      type: string
+      format: date-time
+      description: Waktu server (ISO 8601, offset zona waktu aplikasi).
+Ping:
+  type: object
+  required: [message, role]
+  properties:
+    message:
+      type: string
+      enum: [pong]
+    role:
+      $ref: '#/UserRole'
+
+LoginRequest:
+  type: object
+  required: [email, password, device_name]
+  properties:
+    email:
+      type: string
+      format: email
+      maxLength: 255
+      description: Tidak peka huruf besar/kecil (dinormalisasi ke huruf kecil).
+    password:
+      type: string
+    device_name:
+      type: string
+      enum: [mobile, admin-web]
+RegisterRequest:
+  type: object
+  required: [name, email, phone_number, password, password_confirmation, device_name]
+  properties:
+    name:
+      type: string
+      maxLength: 100
+    email:
+      type: string
+      format: email
+      maxLength: 150
+      description: Harus unik; dinormalisasi ke huruf kecil.
+    phone_number:
+      type: string
+      pattern: '^08[0-9]{8,11}$'
+      description: Nomor Indonesia. Format `+62`/`62` dan spasi/tanda hubung dinormalisasi ke `08...` sebelum validasi.
+    password:
+      type: string
+      minLength: 8
+      format: password
+    password_confirmation:
+      type: string
+      format: password
+      description: Harus sama dengan `password`.
+    device_name:
+      type: string
+      enum: [mobile]
+      description: Registrasi hanya dari aplikasi mobile.
+AuthUser:
+  type: object
+  required: [id, name, email, role]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    email:
+      type: string
+      format: email
+    role:
+      $ref: '#/UserRole'
+AuthResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+    data:
+      type: object
+      required: [token, token_type, user]
+      properties:
+        token:
+          type: string
+          description: Plain text token Sanctum (`id|secret`).
+        token_type:
+          type: string
+          enum: [Bearer]
+        user:
+          $ref: '#/AuthUser'
+
+PlanSummary:
+  type: object
+  required: [id, name, duration_days]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    duration_days:
+      type: integer
+MembershipSummary:
+  type: object
+  required: [is_active, status, plan, start_date, end_date]
+  properties:
+    is_active:
+      type: boolean
+      description: True bila ada membership berstatus active dan `end_date` belum lewat (inklusif hari terakhir).
+    status:
+      $ref: '#/MembershipSummaryStatus'
+      description: Status active yang `end_date`-nya sudah lewat dilaporkan `expired`.
+    plan:
+      oneOf:
+        - $ref: '#/PlanSummary'
+        - type: 'null'
+    start_date:
+      type: [string, 'null']
+      format: date
+    end_date:
+      type: [string, 'null']
+      format: date
+MeResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: object
+      required: [id, name, email, phone_number, profile_photo, role, membership]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone_number:
+          type: [string, 'null']
+        profile_photo:
+          type: [string, 'null']
+        role:
+          $ref: '#/UserRole'
+        membership:
+          $ref: '#/MembershipSummary'
+UserModel:
+  type: object
+  description: Serialisasi model User apa adanya (tanpa `password` dan `remember_token`). Deprecated, gunakan `/me`.
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    email:
+      type: string
+      format: email
+    phone_number:
+      type: [string, 'null']
+    profile_photo:
+      type: [string, 'null']
+    role:
+      $ref: '#/UserRole'
+    email_verified_at:
+      type: [string, 'null']
+      format: date-time
+    created_at:
+      type: [string, 'null']
+      format: date-time
+    updated_at:
+      type: [string, 'null']
+      format: date-time
+  additionalProperties: true
+
+MembershipPlan:
+  type: object
+  required: [id, name, duration_days, price, description, is_active, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+      maxLength: 100
+    duration_days:
+      type: integer
+      minimum: 1
+    price:
+      type: string
+      description: Desimal 2 digit (cast `decimal:2`), dikirim sebagai string.
+      examples: ['150000.00']
+    description:
+      type: [string, 'null']
+    is_active:
+      type: boolean
+    created_at:
+      $ref: '#/Timestamp'
+    updated_at:
+      $ref: '#/Timestamp'
+MembershipPlanInput:
+  type: object
+  required: [name, duration_days, price]
+  properties:
+    name:
+      type: string
+      maxLength: 100
+    duration_days:
+      type: integer
+      minimum: 1
+    price:
+      type: number
+      minimum: 0
+      examples: [150000]
+    description:
+      type: [string, 'null']
+    is_active:
+      type: boolean
+      default: true
+PublicMembershipPlan:
+  type: object
+  required: [id, name, duration_days, price, description]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    duration_days:
+      type: integer
+    price:
+      type: string
+      examples: ['150000.00']
+    description:
+      type: [string, 'null']
+MembershipPlanResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      $ref: '#/MembershipPlan'
+MembershipPlanMutationResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/MembershipPlan'
+MembershipPlanList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/MembershipPlan'
+PublicMembershipPlanList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/PublicMembershipPlan'
+
+OperationalHour:
+  type: object
+  required: [id, day_of_week, open_time, close_time, is_closed, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    day_of_week:
+      $ref: '#/DayOfWeek'
+    open_time:
+      oneOf:
+        - $ref: '#/ClockTime'
+        - type: 'null'
+    close_time:
+      oneOf:
+        - $ref: '#/ClockTime'
+        - type: 'null'
+    is_closed:
+      type: boolean
+      description: Penanda libur. Bila true, jam buka/tutup boleh null.
+    created_at:
+      $ref: '#/Timestamp'
+    updated_at:
+      $ref: '#/Timestamp'
+OperationalHourInput:
+  type: object
+  required: [day_of_week, is_closed]
+  properties:
+    day_of_week:
+      $ref: '#/DayOfWeek'
+    open_time:
+      oneOf:
+        - $ref: '#/ClockTime'
+        - type: 'null'
+      description: Wajib bila `is_closed` false.
+    close_time:
+      oneOf:
+        - $ref: '#/ClockTime'
+        - type: 'null'
+      description: Wajib bila `is_closed` false dan harus lebih besar dari `open_time`.
+    is_closed:
+      type: boolean
+PublicOperationalHour:
+  type: object
+  required: [day_of_week, open_time, close_time, is_closed]
+  properties:
+    day_of_week:
+      $ref: '#/DayOfWeek'
+    open_time:
+      oneOf:
+        - $ref: '#/ClockTime'
+        - type: 'null'
+    close_time:
+      oneOf:
+        - $ref: '#/ClockTime'
+        - type: 'null'
+    is_closed:
+      type: boolean
+OperationalHourResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      $ref: '#/OperationalHour'
+OperationalHourMutationResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/OperationalHour'
+OperationalHourList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/OperationalHour'
+PublicOperationalHourList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/PublicOperationalHour'
+
+GymClass:
+  type: object
+  required: [id, name, description, min_participants, default_instructor_id, is_active, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+      maxLength: 100
+    description:
+      type: [string, 'null']
+    min_participants:
+      type: integer
+      minimum: 1
+      description: Batas minimum peserta. Tidak ada kapasitas maksimum.
+    default_instructor_id:
+      type: [integer, 'null']
+    is_active:
+      type: boolean
+    created_at:
+      $ref: '#/Timestamp'
+    updated_at:
+      $ref: '#/Timestamp'
+GymClassInput:
+  type: object
+  required: [name, min_participants]
+  properties:
+    name:
+      type: string
+      maxLength: 100
+    description:
+      type: [string, 'null']
+    min_participants:
+      type: integer
+      minimum: 1
+    default_instructor_id:
+      type: [integer, 'null']
+    is_active:
+      type: boolean
+      default: true
+PublicGymClass:
+  type: object
+  required: [id, name, description]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    description:
+      type: [string, 'null']
+GymClassResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      $ref: '#/GymClass'
+GymClassMutationResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/GymClass'
+GymClassPage:
+  type: object
+  required: [data, links, meta]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/GymClass'
+    links:
+      $ref: '#/PaginationLinks'
+    meta:
+      $ref: '#/PaginationMeta'
+PublicGymClassList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/PublicGymClass'
+
+Instructor:
+  type: object
+  required: [id, name, specialization, phone_number, is_active, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+      maxLength: 100
+    specialization:
+      type: [string, 'null']
+      maxLength: 100
+    phone_number:
+      type: [string, 'null']
+      maxLength: 20
+    is_active:
+      type: boolean
+    created_at:
+      $ref: '#/Timestamp'
+    updated_at:
+      $ref: '#/Timestamp'
+InstructorInput:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+      maxLength: 100
+    specialization:
+      type: [string, 'null']
+      maxLength: 100
+    phone_number:
+      type: [string, 'null']
+      maxLength: 20
+    is_active:
+      type: boolean
+      default: true
+InstructorResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      $ref: '#/Instructor'
+InstructorMutationResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/Instructor'
+InstructorPage:
+  type: object
+  required: [data, links, meta]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/Instructor'
+    links:
+      $ref: '#/PaginationLinks'
+    meta:
+      $ref: '#/PaginationMeta'
+
+ClassSchedule:
+  type: object
+  required: [id, class_id, instructor_id, schedule_date, start_time, end_time, status, cancel_reason, participants_count, min_participants, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    class_id:
+      type: integer
+    instructor_id:
+      type: integer
+    schedule_date:
+      type: string
+      format: date
+    start_time:
+      $ref: '#/ClockTime'
+    end_time:
+      $ref: '#/ClockTime'
+    status:
+      $ref: '#/ScheduleStatus'
+    cancel_reason:
+      type: [string, 'null']
+      maxLength: 255
+    participants_count:
+      type: integer
+      minimum: 0
+      description: Jumlah peserta aktif (status bukan `cancelled`).
+    min_participants:
+      type: integer
+      description: Diambil dari kelas terkait.
+    created_at:
+      $ref: '#/Timestamp'
+    updated_at:
+      $ref: '#/Timestamp'
+ClassScheduleInput:
+  type: object
+  required: [class_id, instructor_id, schedule_date, start_time, end_time]
+  properties:
+    class_id:
+      type: integer
+    instructor_id:
+      type: integer
+      description: Jadwal instruktur yang sama tidak boleh tumpang tindih (422).
+    schedule_date:
+      type: string
+      format: date
+    start_time:
+      $ref: '#/ClockTime'
+    end_time:
+      $ref: '#/ClockTime'
+      description: Harus lebih besar dari `start_time`.
+ClassScheduleStatusInput:
+  type: object
+  required: [status]
+  properties:
+    status:
+      $ref: '#/ScheduleStatus'
+    cancel_reason:
+      type: string
+      maxLength: 255
+      description: Wajib bila `status` = `cancelled`.
+ClassScheduleResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      $ref: '#/ClassSchedule'
+ClassScheduleMutationResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/ClassSchedule'
+ClassSchedulePage:
+  type: object
+  required: [data, links, meta]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/ClassSchedule'
+    links:
+      $ref: '#/PaginationLinks'
+    meta:
+      $ref: '#/PaginationMeta'
+PublicClassSchedule:
+  type: object
+  description: Jadwal publik tanpa data pribadi (hanya nama instruktur tanpa kontak, dan tanpa daftar peserta).
+  required: [id, class_id, class_name, instructor_name, schedule_date, start_time, end_time, status, participants_count, min_participants]
+  properties:
+    id:
+      type: integer
+    class_id:
+      type: integer
+    class_name:
+      type: string
+    instructor_name:
+      type: string
+      description: Nama instruktur.
+    schedule_date:
+      type: string
+      format: date
+    start_time:
+      $ref: '#/ClockTime'
+    end_time:
+      $ref: '#/ClockTime'
+    status:
+      $ref: '#/ScheduleStatus'
+    cancel_reason:
+      type: [string, 'null']
+      description: Alasan pembatalan (hanya terisi bila status cancelled).
+    participants_count:
+      type: integer
+    min_participants:
+      type: integer
+PublicClassScheduleList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/PublicClassSchedule'
+ScheduleStatusItem:
+  type: object
+  required: [id, status, participants_count, min_participants, updated_at]
+  properties:
+    id:
+      type: integer
+    status:
+      $ref: '#/ScheduleStatus'
+    participants_count:
+      type: integer
+    min_participants:
+      type: integer
+    updated_at:
+      $ref: '#/Timestamp'
+ScheduleStatusList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/ScheduleStatusItem'

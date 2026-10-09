@@ -1,0 +1,126 @@
+adminClasses:
+  get:
+    operationId: listClasses
+    tags: [Classes, Sprint 2]
+    x-status: planned
+    summary: Daftar kelas (admin)
+    description: SCRUM-52. Role admin. Paginasi, filter `is_active`, cari nama.
+    parameters:
+      - $ref: ../components/parameters.yaml#/IsActiveFilter
+      - $ref: ../components/parameters.yaml#/Search
+      - $ref: ../components/parameters.yaml#/Page
+      - $ref: ../components/parameters.yaml#/PerPage
+    responses:
+      '200':
+        description: Halaman kelas.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/GymClassPage
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+  post:
+    operationId: createClass
+    tags: [Classes, Sprint 2]
+    x-status: planned
+    summary: Buat kelas (admin)
+    description: SCRUM-52. `min_participants` >= 1. Tanpa kapasitas maksimum.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/GymClassInput
+          example:
+            name: Yoga Pagi
+            description: Yoga untuk pemula
+            min_participants: 3
+            default_instructor_id: 1
+            is_active: true
+    responses:
+      '201':
+        description: Dibuat.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/GymClassMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+adminClassById:
+  parameters:
+    - $ref: ../components/parameters.yaml#/Id
+  get:
+    operationId: getClass
+    tags: [Classes, Sprint 2]
+    x-status: planned
+    summary: Detail kelas (admin)
+    description: SCRUM-52. Role admin.
+    responses:
+      '200':
+        description: Detail kelas.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/GymClassResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+  put:
+    operationId: updateClass
+    tags: [Classes, Sprint 2]
+    x-status: planned
+    summary: Ubah kelas (admin)
+    description: SCRUM-52. Role admin.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/GymClassInput
+    responses:
+      '200':
+        description: Diubah.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/GymClassMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+  delete:
+    operationId: deleteClass
+    tags: [Classes, Sprint 2]
+    x-status: planned
+    summary: Hapus kelas (admin)
+    description: SCRUM-52. Kelas yang sudah punya jadwal ditolak dengan 409.
+    responses:
+      '200':
+        description: Dihapus.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MessageResponse
+            example:
+              message: Kelas berhasil dihapus
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '409':
+        $ref: ../components/responses.yaml#/Conflict

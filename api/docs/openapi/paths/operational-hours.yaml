@@ -1,0 +1,118 @@
+adminHours:
+  get:
+    operationId: listOperationalHours
+    tags: [Operational Hours, Sprint 2]
+    x-status: planned
+    summary: Daftar jam operasional (admin)
+    description: SCRUM-51. Role admin. Maksimal satu baris per `day_of_week`.
+    responses:
+      '200':
+        description: Jam operasional.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourList
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+  post:
+    operationId: createOperationalHour
+    tags: [Operational Hours, Sprint 2]
+    x-status: planned
+    summary: Tambah jam operasional (admin)
+    description: SCRUM-51. Satu baris per `day_of_week` (duplikat 422). Jam tutup harus lebih besar dari jam buka, kecuali `is_closed` true.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/OperationalHourInput
+          example:
+            day_of_week: Senin
+            open_time: '06:00'
+            close_time: '21:00'
+            is_closed: false
+    responses:
+      '201':
+        description: Dibuat.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+adminHourById:
+  parameters:
+    - $ref: ../components/parameters.yaml#/Id
+  get:
+    operationId: getOperationalHour
+    tags: [Operational Hours, Sprint 2]
+    x-status: planned
+    summary: Detail jam operasional (admin)
+    description: SCRUM-51. Role admin.
+    responses:
+      '200':
+        description: Detail.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+  put:
+    operationId: updateOperationalHour
+    tags: [Operational Hours, Sprint 2]
+    x-status: planned
+    summary: Ubah jam operasional (admin)
+    description: SCRUM-51. Aturan validasi sama dengan POST.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/OperationalHourInput
+    responses:
+      '200':
+        description: Diubah.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+  delete:
+    operationId: deleteOperationalHour
+    tags: [Operational Hours, Sprint 2]
+    x-status: planned
+    summary: Hapus jam operasional (admin)
+    description: SCRUM-51. Role admin.
+    responses:
+      '200':
+        description: Dihapus.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MessageResponse
+            example:
+              message: Jam operasional berhasil dihapus
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound

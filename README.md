@@ -141,6 +141,40 @@ Route::middleware(['auth:sanctum', 'role:admin,member'])->get('/contoh', ...);
 
 Route uji `GET /api/v1/admin/ping` dan `GET /api/v1/member/ping` tersedia untuk membuktikan middleware ini (lihat `api/tests/Feature/RoleMiddlewareTest.php`).
 
+## Dokumentasi API (OpenAPI)
+
+Kontrak API (OpenAPI 3.1, prefix `/api/v1`) untuk aplikasi mobile dan Admin Web:
+
+| Berkas | Isi |
+|--------|-----|
+| `api/docs/openapi.yaml` | Dokumen utama: info, servers (lokal + staging), security Bearer, daftar path |
+| `api/docs/openapi/paths/*.yaml` | Definisi endpoint per area (auth, me, health, plans, public, operational-hours, classes, instructors, schedules, receipts) |
+| `api/docs/openapi/components/*.yaml` | Skema, respons, dan parameter bersama |
+| `docs/postman/revira-gym-auth.postman_collection.json` | Koleksi Postman (variabel `{{baseUrl}}` dan `{{token}}`) |
+
+Endpoint yang belum dibuat ditandai `x-status: planned` dan tag **Sprint 2**; endpoint tanpa tanda itu sudah ada di kode.
+
+### Cara Melihat
+
+```bash
+# Dari root repo: pratinjau dokumentasi di browser
+npx @redocly/cli preview-docs api/docs/openapi.yaml
+
+# Atau gabungkan jadi satu file lalu tempel ke https://editor.swagger.io
+npx @redocly/cli bundle api/docs/openapi.yaml -o /tmp/openapi.bundled.yaml
+```
+
+### Validasi
+
+```bash
+# Jalankan dari root repo (konfigurasi di redocly.yaml)
+npx @redocly/cli lint api/docs/openapi.yaml
+```
+
+### Aturan
+
+**PR yang mengubah endpoint (route, request, respons, atau status code) wajib memperbarui OpenAPI dan koleksi Postman dalam PR yang sama.** Saat endpoint Sprint 2 selesai dibuat, hapus `x-status: planned` dan tag `Sprint 2` pada endpoint tersebut, lalu sesuaikan contoh dengan tes.
+
 ## Akun Uji (Seeder)
 
 Untuk mempermudah pengujian otentikasi, otorisasi, transaksi, dan jadwal kelas di lingkungan pengembangan lokal maupun staging, seeder database telah menyediakan kumpulan akun dan data awal yang mencakup seluruh skenario status.

@@ -1,0 +1,145 @@
+publicPlans:
+  get:
+    operationId: listPublicMembershipPlans
+    tags: [Membership Plans, Sprint 2]
+    x-status: planned
+    summary: Daftar paket membership aktif (publik)
+    description: SCRUM-93. Tanpa autentikasi. Hanya paket dengan `is_active` true.
+    security: []
+    responses:
+      '200':
+        description: Daftar paket aktif.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/PublicMembershipPlanList
+            example:
+              data:
+                - id: 1
+                  name: Bulanan
+                  duration_days: 30
+                  price: '150000.00'
+                  description: Akses gym 30 hari
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests
+adminPlans:
+  get:
+    operationId: listAdminMembershipPlans
+    tags: [Membership Plans, Sprint 2]
+    x-status: planned
+    summary: Daftar semua paket (admin)
+    description: SCRUM-93. Role admin. Termasuk paket nonaktif.
+    responses:
+      '200':
+        description: Semua paket.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MembershipPlanList
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+  post:
+    operationId: createMembershipPlan
+    tags: [Membership Plans, Sprint 2]
+    x-status: planned
+    summary: Buat paket (admin)
+    description: SCRUM-93. Role admin.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/MembershipPlanInput
+          example:
+            name: Bulanan
+            duration_days: 30
+            price: 150000
+            description: Akses gym 30 hari
+            is_active: true
+    responses:
+      '201':
+        description: Paket dibuat.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MembershipPlanMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+adminPlanById:
+  parameters:
+    - $ref: ../components/parameters.yaml#/Id
+  get:
+    operationId: getMembershipPlan
+    tags: [Membership Plans, Sprint 2]
+    x-status: planned
+    summary: Detail paket (admin)
+    description: SCRUM-93. Role admin.
+    responses:
+      '200':
+        description: Detail paket.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MembershipPlanResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+  put:
+    operationId: updateMembershipPlan
+    tags: [Membership Plans, Sprint 2]
+    x-status: planned
+    summary: Ubah paket (admin)
+    description: SCRUM-93. Role admin.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/MembershipPlanInput
+    responses:
+      '200':
+        description: Paket diubah.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MembershipPlanMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+  delete:
+    operationId: deleteMembershipPlan
+    tags: [Membership Plans, Sprint 2]
+    x-status: planned
+    summary: Hapus paket (admin)
+    description: SCRUM-93. Role admin. Paket yang sudah dipakai membership ditolak dengan 409.
+    responses:
+      '200':
+        description: Paket dihapus.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MessageResponse
+            example:
+              message: Paket berhasil dihapus
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '409':
+        $ref: ../components/responses.yaml#/Conflict
