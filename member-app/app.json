@@ -17,7 +17,9 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.revira.gym",
+      "versionCode": 1
     },
     "web": {
       "output": "static",
@@ -38,6 +40,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2d533b29-2521-45be-b7aa-1dbba40436f0"
+      }
+    },
+    "owner": "ichigo216"
   }
 }
