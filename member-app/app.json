@@ -18,8 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.revira.gym",
-      "versionCode": 1
+      "package": "com.revira.gym"
     },
     "web": {
       "output": "static",
