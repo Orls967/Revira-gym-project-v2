@@ -18,7 +18,7 @@ me:
                   data:
                     id: 2
                     name: Member Contoh
-                    email: member@example.com
+                    email: member1@revira.test
                     phone_number: '081234567890'
                     profile_photo: null
                     role: member

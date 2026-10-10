@@ -69,7 +69,7 @@ register:
               invalidFields:
                 summary: Nomor HP salah, password pendek dan tidak cocok, device_name bukan mobile
                 value:
-                  message: The name field is required. (and 3 more errors)
+                  message: Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62. (and 3 more errors)
                   errors:
                     phone_number:
                       - Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
@@ -97,7 +97,7 @@ login:
           schema:
             $ref: ../components/schemas.yaml#/LoginRequest
           example:
-            email: member@example.com
+            email: member1@revira.test
             password: password
             device_name: mobile
     responses:
@@ -115,7 +115,7 @@ login:
                 user:
                   id: 1
                   name: Member Contoh
-                  email: member@example.com
+                  email: member1@revira.test
                   role: member
       '401':
         description: Email atau password salah (pesan sama untuk email tidak terdaftar).

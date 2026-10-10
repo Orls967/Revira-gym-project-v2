@@ -75,7 +75,7 @@ UpdatedSince:
   name: updated_since
   in: query
   required: false
-  description: Hanya jadwal yang `updated_at`-nya setelah waktu ini (ISO 8601 dengan offset).
+  description: Hanya jadwal yang `updated_at`-nya setelah waktu ini (ISO 8601 dengan offset). Perubahan peserta (booking atau pembatalan) WAJIB memperbarui class_schedules.updated_at, mis. lewat $touches = ['classSchedule'] di model ClassParticipant, agar perubahan participants_count ikut terdeteksi (sesuai SCRUM-56).
   schema:
     type: string
     format: date-time

@@ -15,7 +15,7 @@ Forbidden:
       example:
         message: Anda tidak memiliki akses ke sumber daya ini.
 NotFound:
-  description: Data tidak ditemukan.
+  description: Data tidak ditemukan. Beberapa endpoint memakai pesan khusus (mis. receipt). Frontend sebaiknya bergantung pada status code, bukan teks message.
   content:
     application/json:
       schema:

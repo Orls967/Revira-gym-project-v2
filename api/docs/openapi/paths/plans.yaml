@@ -4,7 +4,7 @@ publicPlans:
     tags: [Membership Plans, Sprint 2]
     x-status: planned
     summary: Daftar paket membership aktif (publik)
-    description: SCRUM-93. Tanpa autentikasi. Hanya paket dengan `is_active` true.
+    description: SCRUM-93. Tanpa autentikasi. Hanya paket dengan `is_active` true. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
     security: []
     responses:
       '200':
@@ -125,7 +125,7 @@ adminPlanById:
     tags: [Membership Plans, Sprint 2]
     x-status: planned
     summary: Hapus paket (admin)
-    description: SCRUM-93. Role admin. Paket yang sudah dipakai membership ditolak dengan 409.
+    description: SCRUM-93. Role admin. Hanya untuk data yang belum pernah dipakai. Bila sudah dipakai → 409; nonaktifkan dengan is_active=false.
     responses:
       '200':
         description: Paket dihapus.
@@ -134,7 +134,7 @@ adminPlanById:
             schema:
               $ref: ../components/schemas.yaml#/MessageResponse
             example:
-              message: Paket berhasil dihapus
+              message: Paket membership berhasil dihapus.
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -142,4 +142,10 @@ adminPlanById:
       '404':
         $ref: ../components/responses.yaml#/NotFound
       '409':
-        $ref: ../components/responses.yaml#/Conflict
+        description: Paket sudah pernah digunakan oleh member.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Paket membership tidak dapat dihapus karena sudah pernah digunakan oleh member. Silakan nonaktifkan paket (is_active = false) sebagai alternatif.

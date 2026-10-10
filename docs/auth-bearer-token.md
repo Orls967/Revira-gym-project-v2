@@ -1,5 +1,7 @@
 # Autentikasi API: Bearer Token (Laravel Sanctum)
 
+> **Penting:** Sumber kontrak API utama adalah `api/docs/openapi.yaml`. Dokumen ini hanya menjelaskan alur token; bila ada perbedaan, OpenAPI yang berlaku.
+
 Dokumen ini menjelaskan cara klien (aplikasi mobile member dan Admin Web) memakai token API. Dibuat di SCRUM-39.
 
 ## Keputusan desain

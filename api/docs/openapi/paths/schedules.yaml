@@ -110,7 +110,7 @@ adminScheduleById:
     tags: [Schedules, Sprint 2]
     x-status: planned
     summary: Hapus jadwal (admin)
-    description: SCRUM-55. Role admin.
+    description: SCRUM-55. Role admin. Hapus hanya bila belum ada peserta. Bila sudah memiliki peserta → 409.
     responses:
       '200':
         description: Dihapus.
@@ -126,6 +126,14 @@ adminScheduleById:
         $ref: ../components/responses.yaml#/Forbidden
       '404':
         $ref: ../components/responses.yaml#/NotFound
+      '409':
+        description: Jadwal sudah memiliki peserta.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Jadwal sudah memiliki peserta. Batalkan jadwal lewat PATCH /admin/class-schedules/{id}/status dengan status cancelled.
 adminScheduleStatus:
   parameters:
     - $ref: ../components/parameters.yaml#/Id
@@ -165,7 +173,7 @@ publicSchedules:
     tags: [Schedules, Public, Sprint 2]
     x-status: planned
     summary: Jadwal kelas (publik)
-    description: SCRUM-56. Tanpa autentikasi dan tanpa data pribadi. Bila `date_from`/`date_to` kosong, default 7 hari ke depan.
+    description: SCRUM-56. Tanpa autentikasi dan tanpa data pribadi. Bila `date_from`/`date_to` kosong, default 7 hari ke depan. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
     security: []
     parameters:
       - $ref: ../components/parameters.yaml#/DateFrom
@@ -201,7 +209,7 @@ publicScheduleStatus:
     x-status: planned
     summary: Status jadwal ringkas untuk polling (publik)
     description: |
-      SCRUM-56. Tanpa autentikasi. Mendukung `ETag`/`If-None-Match`: bila data tidak berubah, server membalas 304 tanpa body.
+      SCRUM-56. Tanpa autentikasi. Mendukung `ETag`/`If-None-Match`: bila data tidak berubah, server membalas 304 tanpa body. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
     security: []
     parameters:
       - $ref: ../components/parameters.yaml#/UpdatedSince

@@ -106,7 +106,7 @@ adminClassById:
     tags: [Classes, Sprint 2]
     x-status: planned
     summary: Hapus kelas (admin)
-    description: SCRUM-52. Kelas yang sudah punya jadwal ditolak dengan 409.
+    description: SCRUM-52. Role admin. Hanya untuk data yang belum pernah dipakai. Bila sudah dipakai → 409; nonaktifkan dengan is_active=false.
     responses:
       '200':
         description: Dihapus.
@@ -115,7 +115,7 @@ adminClassById:
             schema:
               $ref: ../components/schemas.yaml#/MessageResponse
             example:
-              message: Kelas berhasil dihapus
+              message: Kelas berhasil dihapus.
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -123,4 +123,10 @@ adminClassById:
       '404':
         $ref: ../components/responses.yaml#/NotFound
       '409':
-        $ref: ../components/responses.yaml#/Conflict
+        description: Kelas sudah memiliki jadwal.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif.

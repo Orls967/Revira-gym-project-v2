@@ -104,7 +104,7 @@ adminInstructorById:
     tags: [Instructors, Sprint 2]
     x-status: planned
     summary: Hapus instruktur (admin)
-    description: SCRUM-54. Instruktur yang punya jadwal ditolak dengan 409.
+    description: SCRUM-54. Role admin. Hanya untuk data yang belum pernah dipakai. Bila sudah dipakai → 409; nonaktifkan dengan is_active=false.
     responses:
       '200':
         description: Dihapus.
@@ -113,7 +113,7 @@ adminInstructorById:
             schema:
               $ref: ../components/schemas.yaml#/MessageResponse
             example:
-              message: Instruktur berhasil dihapus
+              message: Instruktur berhasil dihapus.
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -121,4 +121,10 @@ adminInstructorById:
       '404':
         $ref: ../components/responses.yaml#/NotFound
       '409':
-        $ref: ../components/responses.yaml#/Conflict
+        description: Instruktur sudah memiliki jadwal.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Instruktur tidak dapat dihapus karena sudah memiliki jadwal. Silakan pindahkan/batalkan jadwal atau nonaktifkan instruktur (is_active = false) sebagai alternatif.

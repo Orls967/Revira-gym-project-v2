@@ -4,7 +4,7 @@ publicOperationalHours:
     tags: [Public, Sprint 2]
     x-status: planned
     summary: Jam operasional (publik)
-    description: SCRUM-93. Tanpa autentikasi, field minimal.
+    description: SCRUM-93. Tanpa autentikasi, field minimal. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
     security: []
     responses:
       '200':
@@ -31,7 +31,7 @@ publicClasses:
     tags: [Public, Sprint 2]
     x-status: planned
     summary: Daftar kelas aktif (publik)
-    description: SCRUM-93. Tanpa autentikasi, field minimal. Hanya kelas dengan `is_active` true.
+    description: SCRUM-93. Tanpa autentikasi, field minimal. Hanya kelas dengan `is_active` true. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
     security: []
     responses:
       '200':

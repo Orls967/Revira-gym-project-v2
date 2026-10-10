@@ -15,8 +15,6 @@ health:
             example:
               status: ok
               time: '2026-10-09T23:00:00+08:00'
-      '429':
-        $ref: ../components/responses.yaml#/TooManyRequests
 adminPing:
   get:
     operationId: getAdminPing
