@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "member-app",
+    "name": "Revira Gym",
     "slug": "member-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -46,6 +46,6 @@
         "projectId": "2d533b29-2521-45be-b7aa-1dbba40436f0"
       }
     },
-    "owner": "ichigo216"
+    "owner": "ichigo216s-team"
   }
 }

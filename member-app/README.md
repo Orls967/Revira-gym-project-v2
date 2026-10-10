@@ -18,8 +18,9 @@ Aplikasi mobile untuk member Revira Gym BJM berbasis Expo dan React Native.
 6. Buka aplikasi menggunakan **Expo Go** pada perangkat Android fisik dengan memindai QR code.
 
 ## Build APK Preview (EAS)
-- **Versi**: Expo SDK 57 (`expo ~57.0.26`), Node 24 (lihat `.nvmrc`), package Android `com.revira.gym`.
-- **Prasyarat**: `npm i -g eas-cli`, lalu `eas login` dengan akun Expo pemilik proyek (`ichigo216`).
+- **Versi**: Expo SDK 57, Node 24 (lihat `.nvmrc`), package Android `com.revira.gym`.
+- **Kepemilikan Project**: Project EAS (`@ichigo216s-team/member-app`) dimiliki oleh organisasi Expo tim (`ichigo216s-team`). Anggota tim diundang ke organisasi Expo untuk mendapatkan akses build, dan login CLI (`eas login`) memakai akun pribadi masing-masing yang sudah menjadi anggota organisasi.
+- **Prasyarat**: `npm i -g eas-cli`, lalu jalankan `eas login` dengan akun pribadi Expo yang telah tergabung ke organisasi `ichigo216s-team`.
 
 ### Cara Build
 1. `cd member-app`
@@ -32,7 +33,10 @@ Aplikasi mobile untuk member Revira Gym BJM berbasis Expo dan React Native.
 2. Buka file APK. Jika diminta, izinkan **Instal dari sumber tidak dikenal** untuk browser/file manager yang dipakai.
 3. Ketuk **Instal**, lalu buka aplikasi.
 
-### Catatan Keystore
-- Keystore Android dikelola oleh EAS (dibuat otomatis saat build pertama).
-- Backup keystore (`eas credentials`) disimpan di luar repo. Jangan commit `*.jks`, `*.keystore`, atau `credentials.json`.
-- Profil `production` menghasilkan `app-bundle` (AAB) dan tidak memuat env rahasia.
+### Catatan Keystore & Build Profile
+- Keystore Android dikelola oleh EAS di organisasi `ichigo216s-team` (dibuat otomatis saat build pertama).
+- Backup keystore (`eas credentials`) sudah diunduh dan disimpan di luar repo. Jangan commit `*.jks`, `*.keystore`, atau `credentials.json`.
+- Profil `production` menghasilkan Android App Bundle (`app-bundle` / AAB).
+- `EXPO_PUBLIC_API_URL` WAJIB ada di setiap profile (`preview` dan `production`) di `eas.json` karena file `.env` tidak ikut diunggah ke EAS (di-gitignore).
+- Untuk sementara, profile `production` memakai URL staging dan harus diganti ke URL produksi saat build rilis (SCRUM-81, Sprint 4).
+- Nilai variabel `EXPO_PUBLIC_*` tertanam di dalam APK/AAB dan bukan rahasia, jadi jangan pernah menaruh rahasia pada variabel `EXPO_PUBLIC_*`.
