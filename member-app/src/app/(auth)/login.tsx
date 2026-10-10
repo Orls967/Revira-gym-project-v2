@@ -7,24 +7,25 @@ import {
   Platform,
   TextInput,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
-import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "@/context/AuthContext";
-import { ApiError } from "@/lib/api";
+import api from "@/lib/api";
 
 export default function LoginScreen() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
   const passwordInputRef = useRef<TextInput>(null);
-  const { login } = useAuth();
 
   const validate = (): boolean => {
     let isValid = true;
@@ -56,12 +57,22 @@ export default function LoginScreen() {
     setApiError(null);
 
     try {
-      await login(email, password);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setApiError(err.message);
+      // Menghubungi API Railway dengan mengirimkan device_name
+      await api.post("/api/v1/login", {
+        email: email.trim(),
+        password: password,
+        device_name: "mobile",
+      });
+
+      // Pindah ke Beranda jika sukses
+      router.replace("/(app)");
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setApiError(err.response.data.message);
+      } else if (err.response?.status === 401) {
+        setApiError("Email atau password salah.");
       } else {
-        setApiError("Terjadi gangguan jaringan. Silakan coba lagi.");
+        setApiError("Terjadi kesalahan koneksi. Periksa internet Anda.");
       }
     } finally {
       setIsLoading(false);
@@ -88,6 +99,7 @@ export default function LoginScreen() {
         bounces={false}
         className="w-full px-6"
       >
+        {/* Branding Revira Gym */}
         <View className="items-center mb-8">
           <View className="w-16 h-16 bg-amber-400/10 rounded-2xl items-center justify-center border border-amber-400/20 mb-3">
             <Ionicons name="barbell" size={32} color="#fbbf24" />
@@ -100,6 +112,7 @@ export default function LoginScreen() {
           </Text>
         </View>
 
+        {/* Banner Error API */}
         {apiError && (
           <View className="bg-red-500/10 border border-red-500/30 rounded-xl p-3.5 mb-5 flex-row items-center">
             <Ionicons name="alert-circle-outline" size={20} color="#f87171" />
@@ -109,6 +122,7 @@ export default function LoginScreen() {
           </View>
         )}
 
+        {/* Formulir Login */}
         <View className="w-full">
           <TextField
             label="Email Member"
@@ -152,6 +166,7 @@ export default function LoginScreen() {
           </View>
         </View>
 
+        {/* Footer Info */}
         <View className="mt-10 items-center">
           <Text className="text-zinc-500 text-xs">
             Revira Gym BJM • v1.0.0 (Expo SDK 57)

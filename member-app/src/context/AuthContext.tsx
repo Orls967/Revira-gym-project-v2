@@ -55,21 +55,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const login = async (email: string, password: string) => {
     // Sesuai Kontrak SCRUM-41: POST /api/v1/login dengan device_name: "mobile"
-    const result = await apiClient<any>("api/v1/login", {
-      method: "POST",
-      body: JSON.stringify({
-        email: email.trim(),
-        password,
-        device_name: "mobile",
-      }),
-    });
+    // ✅ SINTAKS AXIOS (Benar):
+  const result = await apiClient.post("/api/v1/login", {
+    email,
+    password,
+    device_name: "mobile",
+  });
 
-    const token = result.token || result.data?.token;
-    const profile = result.user || result.data?.user;
+  const token = result.data?.token || result.data?.data?.token;
+  const profile = result.data?.user || result.data?.data?.user;
 
-    if (!token) {
-      throw new ApiError(500, "Format data respon tidak memiliki token.");
-    }
+  if (!token) {
+    throw new ApiError(500, "Format data respon tidak memiliki token.");
+  }
 
     await saveToken(token);
     if (profile) {
