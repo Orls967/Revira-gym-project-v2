@@ -160,4 +160,16 @@ class TransactionReceiptTest extends TestCase
         $resOwner = $this->get("/api/v1/transactions/{$pendingTx->id}/receipt");
         $resOwner->assertOk();
     }
+
+    public function test_admin_accessing_transaction_with_traversal_receipt_image_returns_404(): void
+    {
+        [$owner, $transaction] = $this->createMemberWithTransaction('../.env');
+        $admin = User::factory()->create(['role' => UserRole::Admin]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson("/api/v1/transactions/{$transaction->id}/receipt")
+            ->assertNotFound()
+            ->assertJson(['message' => 'Bukti transfer tidak ditemukan.']);
+    }
 }

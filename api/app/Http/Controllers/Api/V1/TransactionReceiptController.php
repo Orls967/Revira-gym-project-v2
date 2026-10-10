@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Transaction;
-use App\Models\User;
 use App\Services\ReceiptStorage;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -26,16 +24,9 @@ class TransactionReceiptController extends Controller
      * GET /api/v1/transactions/{transaction}/receipt
      * Menyajikan file bukti transfer secara privat kepada admin atau pemilik transaksi.
      */
-    public function show(Request $request, Transaction $transaction): Response
+    public function show(Transaction $transaction): Response
     {
-        /** @var User $user */
-        $user = $request->user();
-
-        if ($user->role !== UserRole::Admin && $transaction->user_id !== $user->id) {
-            return response()->json([
-                'message' => 'Anda tidak memiliki akses ke sumber daya ini.',
-            ], 403);
-        }
+        Gate::authorize('view', $transaction);
 
         if (! $transaction->receipt_image || ! $this->receiptStorage->exists($transaction->receipt_image)) {
             return response()->json([
@@ -43,9 +34,6 @@ class TransactionReceiptController extends Controller
             ], 404);
         }
 
-        return $this->receiptStorage->response($transaction->receipt_image, null, [
-            'X-Content-Type-Options' => 'nosniff',
-            'Cache-Control' => 'private, no-store',
-        ]);
+        return $this->receiptStorage->response($transaction->receipt_image);
     }
 }

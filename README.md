@@ -82,7 +82,7 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
 | `SESSION_DRIVER` | `database` | Driver session database |
 | `CACHE_STORE` | `database` | Driver cache database |
 | `QUEUE_CONNECTION` | `database` | Driver queue database |
-| `RECEIPTS_DISK` | `receipts` | Disk penyimpanan bukti transfer (default receipts untuk volume privat lokal, atau s3 bila menggunakan S3) |
+| `RECEIPTS_DISK` | `receipts` | Disk penyimpanan bukti transfer: `receipts` (volume privat lokal, default) atau `s3` (S3-compatible) |
 | `SEED_PASSWORD` | `<password-khusus-staging>` | Password default untuk seeder akun member/admin di staging |
 
 ### Penyimpanan Persisten Bukti Transfer (SCRUM-48)
@@ -98,8 +98,12 @@ Filesystem container di platform Railway bersifat non-permanen (ephemeral), sehi
      - Dipilih hanya bila ada kebutuhan di luar Railway (misalnya pencadangan otomatis berkala, multi-region, atau pemindahan hosting produksi keluar Railway).
 
 2. **Abstraksi Disk via Environment Variable**:
-   - Disk bukti transfer dipilih secara fleksibel melalui variabel lingkungan `RECEIPTS_DISK` (default `receipts` yang mengarah ke `storage_path('app/private')`).
-   - Apabila ingin beralih ke S3, cukup ubah nilai `RECEIPTS_DISK=s3` dan daftarkan variabel lingkungan `AWS_*` (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_BUCKET`, `AWS_ENDPOINT`) di tab Variables Railway tanpa mengubah kode program dan tanpa menyimpan kredensial di repository.
+   - Disk bukti transfer dipilih hanya lewat variabel lingkungan `RECEIPTS_DISK` (`receipts` atau `s3`). Disk `receipts` terkunci di kode: driver `local`, root `storage_path('app/private')`, visibility `private`, dan `throw => true` sehingga kegagalan tulis selalu menjadi exception. Driver dan path disk tidak dapat diubah lewat env; pindah penyimpanan cukup lewat `RECEIPTS_DISK`.
+   - **Pindah ke S3-compatible (AWS S3, Cloudflare R2, MinIO)**:
+     1. Pasang adapter: `composer require league/flysystem-aws-s3-v3` (commit `composer.json` dan `composer.lock`).
+     2. Isi variabel berikut di env server (Variables Railway), tanpa menyimpan nilainya di repository: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_BUCKET`, serta `AWS_ENDPOINT` untuk R2/MinIO (dan `AWS_USE_PATH_STYLE_ENDPOINT=true` bila penyedia membutuhkannya).
+     3. Set `RECEIPTS_DISK=s3`, lalu redeploy.
+     4. Berkas lama pada volume tidak otomatis berpindah; salin manual ke bucket bila diperlukan.
 
 3. **Disk Privat & Akses Terautentikasi**:
    - Bukti transfer disimpan pada disk privat (`storage/app/private/receipts/{tahun}/{bulan}/`), **bukan** pada disk public, sehingga tidak dapat diakses langsung melalui URL publik browser tanpa otentikasi.
@@ -114,12 +118,25 @@ Filesystem container di platform Railway bersifat non-permanen (ephemeral), sehi
    - **Ukuran Maksimum**: 2 MB (2048 KB).
    - **Penamaan Acak**: Menggunakan UUID (misalnya `receipts/2026/10/{uuid}.jpg`) untuk mencegah nama bertabrakan dan menjamin kerahasiaan berkas.
    - **Struktur Folder**: `receipts/{tahun}/{bulan}/`.
+   - **Respons Error Validasi**: File tidak valid menghasilkan `422` dengan key `receipt_image` (bukan `500`). `ReceiptStorage::rules()` menyediakan aturan siap pakai untuk FormRequest (`required`, `file`, `mimetypes:image/jpeg,image/png,image/webp`, `max:2048`); validasi isi di service tetap berjalan sebagai lapis kedua.
+   - **Kegagalan Tulis**: Bila penulisan ke disk gagal (izin volume, disk penuh, dsb.), `ReceiptStorage::store()` melempar `RuntimeException` ("Gagal menyimpan bukti transfer"); path tidak pernah dikembalikan untuk file yang tidak tersimpan.
 
 5. **Service `ReceiptStorage`**:
-   - Tersedia service reusable `App\Services\ReceiptStorage` (`store()`, `get()`, `delete()`, `exists()`, `response()`, `validate()`) yang siap digunakan langsung oleh modul transaksi dan perpanjangan membership pada SCRUM-69 (Sprint 3).
+   - Tersedia service reusable `App\Services\ReceiptStorage` (`store()`, `get()`, `delete()`, `exists()`, `response()`, `validate()`, `rules()`) yang siap digunakan langsung oleh modul transaksi dan perpanjangan membership pada SCRUM-69 (Sprint 3).
 
 6. **Dukungan Seeder**:
    - `TransactionSeeder` otomatis menyalin gambar dummy bukti transfer langsung ke disk privat `receipts` (tidak ada bukti transfer pada disk `public`). Tester dapat langsung menguji akses bukti transfer dummy via endpoint terautentikasi `GET /api/v1/transactions/{transaction}/receipt` di staging.
+   - **Catatan Format Path**: Bukti dummy seeder memakai path `receipts/transfer_{id}.jpg` (serta `receipts/dummy_transfer_pending.jpg` dan `receipts/dummy_invalid_transfer.jpg`), berbeda dari format upload asli `receipts/{tahun}/{bulan}/{uuid}.{ext}`.
+
+7. **Verifikasi Persistensi & Izin di Staging**:
+   1. Buka Console service API di Railway, jalankan `php artisan tinker`, lalu:
+      ```php
+      Storage::disk('receipts')->put('receipts/_probe.txt', 'ok');
+      Storage::disk('receipts')->exists('receipts/_probe.txt'); // harus true
+      ```
+   2. Redeploy service, buka tinker lagi, lalu cek `Storage::disk('receipts')->exists('receipts/_probe.txt')`. Hasil `true` berarti volume persisten. Hapus berkas probe setelahnya (`Storage::disk('receipts')->delete('receipts/_probe.txt')`).
+   3. Cari baris `ERROR receipts storage not writable by` di log Railway; baris ini dicetak script startup bila folder `receipts` tidak dapat ditulis.
+   4. Bila gagal karena izin, opsi solusi adalah menjalankan container sebagai root dengan variabel `RAILWAY_RUN_UID=0` (periksa dokumentasi Railway tentang Volumes dan `RAILWAY_RUN_UID` sebelum memakainya; variabel ini tidak tercantum pada halaman referensi Volumes, dan image yang menolak berjalan sebagai root tidak akan bisa memakainya, sehingga perbaikan izin harus dilakukan lewat script startup).
 
 ### Migrasi Database & Seeding Staging
 

@@ -6,9 +6,13 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
+use League\Flysystem\PathTraversalDetected;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Throwable;
 
 /**
  * Service untuk mengelola penyimpanan bukti transfer pembayaran secara aman dan persisten.
@@ -42,6 +46,22 @@ class ReceiptStorage
     public const MAX_FILE_SIZE_BYTES = 2048 * 1024;
 
     /**
+     * Aturan validasi untuk dipakai FormRequest (mis. SCRUM-69) pada field receipt_image.
+     * Validasi isi file di service ini tetap dijalankan sebagai lapis kedua.
+     *
+     * @return array<int, string>
+     */
+    public static function rules(): array
+    {
+        return [
+            'required',
+            'file',
+            'mimetypes:'.implode(',', self::ALLOWED_MIME_TYPES),
+            'max:'.self::MAX_FILE_SIZE_KB,
+        ];
+    }
+
+    /**
      * Mendapatkan nama disk yang dikonfigurasi untuk bukti transfer.
      */
     public function diskName(): string
@@ -55,6 +75,28 @@ class ReceiptStorage
     public function disk(): Filesystem
     {
         return Storage::disk($this->diskName());
+    }
+
+    /**
+     * Memvalidasi format path bukti transfer untuk mencegah path traversal dan akses luar boundary.
+     * Harus string non-kosong, diawali "receipts/", tidak mengandung "..", tidak diawali "/",
+     * dan hanya berisi karakter [A-Za-z0-9/_.-].
+     */
+    private function isValidPath(?string $path): bool
+    {
+        if (empty($path)) {
+            return false;
+        }
+
+        if (! str_starts_with($path, 'receipts/')) {
+            return false;
+        }
+
+        if (str_starts_with($path, '/') || str_contains($path, '..')) {
+            return false;
+        }
+
+        return (bool) preg_match('/^[A-Za-z0-9\/_.\-]+$/', $path);
     }
 
     /**
@@ -77,21 +119,33 @@ class ReceiptStorage
     /**
      * Validasi konten file dan ukurannya sebelum disimpan.
      *
-     * @throws InvalidArgumentException
+     * @throws ValidationException
      */
     public function validate(UploadedFile $file): void
     {
         if (! $file->isValid()) {
-            throw new InvalidArgumentException('File bukti transfer yang diunggah tidak valid.');
+            throw ValidationException::withMessages([
+                'receipt_image' => ['File bukti transfer yang diunggah tidak valid.'],
+            ]);
+        }
+
+        if ($file->getSize() > self::MAX_FILE_SIZE_BYTES) {
+            throw ValidationException::withMessages([
+                'receipt_image' => ['Ukuran file bukti transfer melebihi batas maksimum 2 MB.'],
+            ]);
+        }
+
+        if ($file->getSize() <= 0) {
+            throw ValidationException::withMessages([
+                'receipt_image' => ['Format file tidak didukung. Bukti transfer harus berupa gambar JPG, PNG, atau WEBP.'],
+            ]);
         }
 
         $mime = $this->detectMimeType($file);
         if (! in_array($mime, self::ALLOWED_MIME_TYPES, true)) {
-            throw new InvalidArgumentException("Tipe konten file tidak diizinkan ({$mime}). Bukti transfer harus berupa gambar JPG, PNG, atau WEBP.");
-        }
-
-        if ($file->getSize() > self::MAX_FILE_SIZE_BYTES) {
-            throw new InvalidArgumentException('Ukuran file bukti transfer melebihi batas maksimum 2 MB.');
+            throw ValidationException::withMessages([
+                'receipt_image' => ['Format file tidak didukung. Bukti transfer harus berupa gambar JPG, PNG, atau WEBP.'],
+            ]);
         }
     }
 
@@ -99,7 +153,8 @@ class ReceiptStorage
      * Menyimpan file bukti transfer ke storage privat.
      * Mengembalikan path relatif di dalam disk (contoh: receipts/2026/10/{uuid}.jpg).
      *
-     * @throws InvalidArgumentException
+     * @throws ValidationException bila file tidak lolos validasi isi/ukuran
+     * @throws RuntimeException bila penulisan ke disk gagal
      */
     public function store(UploadedFile $file): string
     {
@@ -118,25 +173,17 @@ class ReceiptStorage
         $directory = "receipts/{$year}/{$month}";
         $filename = sprintf('%s.%s', Str::uuid()->toString(), $extension);
 
-        $storedPath = $this->disk()->putFileAs($directory, $file, $filename);
+        try {
+            $storedPath = $this->disk()->putFileAs($directory, $file, $filename);
+        } catch (Throwable $e) {
+            throw new RuntimeException('Gagal menyimpan bukti transfer', 0, $e);
+        }
 
-        return $storedPath ?: "{$directory}/{$filename}";
-    }
+        if (! is_string($storedPath) || $storedPath === '') {
+            throw new RuntimeException('Gagal menyimpan bukti transfer');
+        }
 
-    /**
-     * Menyimpan konten mentah (raw bytes) sebagai file bukti transfer (mis. untuk seeder / testing).
-     */
-    public function storeRaw(string $contents, string $extension = 'jpg'): string
-    {
-        $year = now()->format('Y');
-        $month = now()->format('m');
-        $directory = "receipts/{$year}/{$month}";
-        $filename = sprintf('%s.%s', Str::uuid()->toString(), $extension);
-        $path = "{$directory}/{$filename}";
-
-        $this->disk()->put($path, $contents);
-
-        return $path;
+        return $storedPath;
     }
 
     /**
@@ -144,23 +191,37 @@ class ReceiptStorage
      */
     public function exists(?string $path): bool
     {
-        if (empty($path)) {
+        if (! $this->isValidPath($path)) {
             return false;
         }
 
-        return $this->disk()->exists($path);
+        try {
+            return $this->disk()->exists($path);
+        } catch (PathTraversalDetected) {
+            return false;
+        }
     }
 
     /**
      * Mengambil konten biner file bukti transfer.
+     *
+     * @throws InvalidArgumentException bila path tidak valid
      */
     public function get(string $path): ?string
     {
+        if (! $this->isValidPath($path)) {
+            throw new InvalidArgumentException('Path bukti transfer tidak valid.');
+        }
+
         if (! $this->exists($path)) {
             return null;
         }
 
-        return $this->disk()->get($path);
+        try {
+            return $this->disk()->get($path);
+        } catch (PathTraversalDetected) {
+            throw new InvalidArgumentException('Path bukti transfer tidak valid.');
+        }
     }
 
     /**
@@ -168,11 +229,15 @@ class ReceiptStorage
      */
     public function delete(?string $path): bool
     {
-        if (empty($path) || ! $this->exists($path)) {
+        if (! $this->isValidPath($path) || ! $this->exists($path)) {
             return false;
         }
 
-        return $this->disk()->delete($path);
+        try {
+            return $this->disk()->delete($path);
+        } catch (PathTraversalDetected) {
+            return false;
+        }
     }
 
     /**
@@ -184,17 +249,21 @@ class ReceiptStorage
      */
     public function response(string $path, ?string $name = null, array $headers = []): StreamedResponse
     {
-        if (! $this->exists($path)) {
+        if (! $this->isValidPath($path) || ! $this->exists($path)) {
             throw new NotFoundHttpException('Bukti transfer tidak ditemukan.');
         }
 
-        $mime = $this->disk()->mimeType($path) ?: 'application/octet-stream';
-        $defaultHeaders = [
-            'Content-Type' => $mime,
-            'X-Content-Type-Options' => 'nosniff',
-            'Cache-Control' => 'private, no-store',
-        ];
+        try {
+            $mime = $this->disk()->mimeType($path) ?: 'application/octet-stream';
+            $defaultHeaders = [
+                'Content-Type' => $mime,
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store',
+            ];
 
-        return $this->disk()->response($path, $name, array_merge($defaultHeaders, $headers));
+            return $this->disk()->response($path, $name, array_merge($defaultHeaders, $headers));
+        } catch (PathTraversalDetected) {
+            throw new NotFoundHttpException('Bukti transfer tidak ditemukan.');
+        }
     }
 }

@@ -43,10 +43,10 @@ return [
     'disks' => [
 
         'receipts' => [
-            'driver' => env('RECEIPT_STORAGE_DRIVER', 'local'),
-            'root' => storage_path(env('RECEIPT_STORAGE_PATH', 'app/private')),
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
             'visibility' => 'private',
-            'throw' => false,
+            'throw' => true,
             'report' => false,
         ],
 
