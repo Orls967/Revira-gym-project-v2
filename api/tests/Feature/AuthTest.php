@@ -74,6 +74,22 @@ class AuthTest extends TestCase
     }
 
     /**
+     * Memastikan email dengan huruf besar dan spasi tetap bisa login (email disimpan huruf kecil).
+     */
+    public function test_login_email_is_case_insensitive(): void
+    {
+        $user = User::factory()->create(['email' => 'member@example.com']);
+
+        $this->postJson('/api/v1/login', [
+            'email' => '  Member@Example.COM ',
+            'password' => 'password',
+            'device_name' => 'mobile',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.user.id', $user->id);
+    }
+
+    /**
      * Memastikan password salah ditolak dengan pesan umum dan tanpa token.
      */
     public function test_login_fails_with_wrong_password(): void

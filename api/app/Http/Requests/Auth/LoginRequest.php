@@ -18,6 +18,17 @@ class LoginRequest extends FormRequest
     }
 
     /**
+     * Menyeragamkan email (huruf kecil) seperti saat registrasi, supaya pencarian user
+     * tidak bergantung pada collation database (SQLite membedakan huruf besar/kecil).
+     */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('email'))) {
+            $this->merge(['email' => mb_strtolower(trim($this->input('email')))]);
+        }
+    }
+
+    /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array

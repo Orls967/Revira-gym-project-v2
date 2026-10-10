@@ -54,6 +54,22 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the user's class bookings/participations.
+     */
+    public function classParticipants(): HasMany
+    {
+        return $this->hasMany(ClassParticipant::class);
+    }
+
+    /**
+     * Get the notifications sent to this user.
+     */
+    public function notificationLogs(): HasMany
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
