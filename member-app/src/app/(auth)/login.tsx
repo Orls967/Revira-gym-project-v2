@@ -7,17 +7,21 @@ import {
   Platform,
   TextInput,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
-import { Ionicons } from "@expo/vector-icons";
+import api from "@/lib/api";
 
 export default function LoginScreen() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -53,15 +57,23 @@ export default function LoginScreen() {
     setApiError(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      // Menghubungi API Railway dengan mengirimkan device_name
+      await api.post("/api/v1/login", {
+        email: email.trim(),
+        password: password,
+        device_name: "mobile",
+      });
 
-      if (email.trim().toLowerCase() === "member@revira.com" && password === "password123") {
-        setApiError(null);
-      } else {
+      // Pindah ke Beranda jika sukses
+      router.replace("/(app)");
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setApiError(err.response.data.message);
+      } else if (err.response?.status === 401) {
         setApiError("Email atau password salah.");
+      } else {
+        setApiError("Terjadi kesalahan koneksi. Periksa internet Anda.");
       }
-    } catch {
-      setApiError("Terjadi kesalahan koneksi. Periksa internet Anda.");
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +89,7 @@ export default function LoginScreen() {
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: "center",
-          paddingBottom: 140, // Memberi ruang ekstra tinggi agar tombol Masuk terangkat bebas di atas keyboard
+          paddingBottom: 140,
           paddingTop: 40,
         }}
         keyboardShouldPersistTaps="handled"
