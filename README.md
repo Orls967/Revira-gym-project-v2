@@ -141,6 +141,49 @@ Route::middleware(['auth:sanctum', 'role:admin,member'])->get('/contoh', ...);
 
 Route uji `GET /api/v1/admin/ping` dan `GET /api/v1/member/ping` tersedia untuk membuktikan middleware ini (lihat `api/tests/Feature/RoleMiddlewareTest.php`).
 
+## Dokumentasi API (OpenAPI)
+
+Kontrak API (OpenAPI 3.1, prefix `/api/v1`) untuk aplikasi mobile dan Admin Web:
+
+| Berkas | Isi |
+|--------|-----|
+| `api/docs/openapi.yaml` | Dokumen utama: info, servers (lokal + staging), security Bearer, daftar path |
+| `api/docs/openapi/paths/*.yaml` | Definisi endpoint per area (auth, me, health, plans, public, operational-hours, classes, instructors, schedules, receipts) |
+| `api/docs/openapi/components/*.yaml` | Skema, respons, dan parameter bersama |
+| `docs/postman/revira-gym-auth.postman_collection.json` | Koleksi Postman (variabel `{{baseUrl}}` dan `{{token}}`) |
+
+Endpoint yang belum dibuat ditandai `x-status: planned` dan tag **Sprint 2**; endpoint tanpa tanda itu sudah ada di kode.
+
+### Cara Melihat
+
+```bash
+# Dari root repo: buat file HTML dokumentasi lalu buka di browser
+npx @redocly/cli build-docs api/docs/openapi.yaml -o api-docs.html
+
+# Atau gabungkan jadi satu file lalu tempel ke https://editor.swagger.io
+npx @redocly/cli bundle api/docs/openapi.yaml -o openapi.bundled.yaml
+```
+
+### Validasi
+
+```bash
+# Jalankan dari root repo (konfigurasi di redocly.yaml)
+npx @redocly/cli lint api/docs/openapi.yaml
+```
+
+### Konvensi format respons
+
+Berlaku untuk tiket implementasi SCRUM-51, SCRUM-52, SCRUM-54, SCRUM-55, SCRUM-56, dan SCRUM-93:
+- **API Resource**: Respons wajib lewat API Resource; jangan me-return model Eloquent langsung.
+- **Datetime**: ISO 8601 dengan offset `+08:00` (contoh `2026-10-12T07:00:00+08:00`; di Resource: `->toIso8601String()`), BUKAN default Eloquent UTC (`.000000Z`).
+- **Kolom date** (`schedule_date`, `start_date`, `end_date`): string `Y-m-d` (`->format('Y-m-d')`), jangan diserialisasi sebagai datetime karena bisa mundur satu hari.
+- **Kolom time** (`open_time`, `close_time`, `start_time`, `end_time`): "HH:MM" (5 karakter).
+- **Uang** (`price`, `amount`): integer rupiah (`(int)` di Resource) walau kolom DB decimal.
+
+### Aturan
+
+**PR yang mengubah endpoint (route, request, respons, atau status code) wajib memperbarui OpenAPI dan koleksi Postman dalam PR yang sama.** Saat endpoint Sprint 2 selesai dibuat, hapus `x-status: planned` dan tag `Sprint 2` pada endpoint tersebut, lalu sesuaikan contoh dengan tes.
+
 ## Akun Uji (Seeder)
 
 Untuk mempermudah pengujian otentikasi, otorisasi, transaksi, dan jadwal kelas di lingkungan pengembangan lokal maupun staging, seeder database telah menyediakan kumpulan akun dan data awal yang mencakup seluruh skenario status.

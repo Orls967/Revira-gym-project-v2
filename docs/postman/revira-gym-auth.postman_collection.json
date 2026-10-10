@@ -6,9 +6,11 @@
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8000/api/v1" },
-    { "key": "email", "value": "member@example.com" },
-    { "key": "password", "value": "password" },
-    { "key": "token", "value": "" }
+    { "key": "email", "value": "member1@revira.test" },
+    { "key": "adminEmail", "value": "admin@revira.test" },
+    { "key": "password", "value": "" },
+    { "key": "token", "value": "" },
+    { "key": "id", "value": "1" }
   ],  
   "item": [
     {
@@ -47,7 +49,7 @@
           "code": 200,
           "header": [{ "key": "Content-Type", "value": "application/json" }],
           "_postman_previewlanguage": "json",
-          "body": "{\n  \"message\": \"Login berhasil\",\n  \"data\": {\n    \"token\": \"1|AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd\",\n    \"token_type\": \"Bearer\",\n    \"user\": {\n      \"id\": 1,\n      \"name\": \"Member Contoh\",\n      \"email\": \"member@example.com\",\n      \"role\": \"member\"\n    }\n  }\n}"
+          "body": "{\n  \"message\": \"Login berhasil\",\n  \"data\": {\n    \"token\": \"1|AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd\",\n    \"token_type\": \"Bearer\",\n    \"user\": {\n      \"id\": 1,\n      \"name\": \"Member Contoh\",\n      \"email\": \"member1@revira.test\",\n      \"role\": \"member\"\n    }\n  }\n}"
         },
         {
           "name": "401 Email atau password salah",
@@ -100,7 +102,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_name\": \"admin-web\"\n}"
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{password}}\",\n  \"device_name\": \"admin-web\"\n}"
         },
         "url": "{{baseUrl}}/login"
       }
@@ -183,7 +185,7 @@
           "code": 200,
           "header": [{ "key": "Content-Type", "value": "application/json" }],
           "_postman_previewlanguage": "json",
-          "body": "{\n  \"data\": {\n    \"id\": 2,\n    \"name\": \"Member Contoh\",\n    \"email\": \"member@example.com\",\n    \"phone_number\": \"081234567890\",\n    \"profile_photo\": null,\n    \"role\": \"member\",\n    \"membership\": {\n      \"is_active\": true,\n      \"status\": \"active\",\n      \"plan\": { \"id\": 1, \"name\": \"Bulanan\", \"duration_days\": 30 },\n      \"start_date\": \"2026-09-20\",\n      \"end_date\": \"2026-10-20\"\n    }\n  }\n}"
+          "body": "{\n  \"data\": {\n    \"id\": 2,\n    \"name\": \"Member Contoh\",\n    \"email\": \"member1@revira.test\",\n    \"phone_number\": \"081234567890\",\n    \"profile_photo\": null,\n    \"role\": \"member\",\n    \"membership\": {\n      \"is_active\": true,\n      \"status\": \"active\",\n      \"plan\": { \"id\": 1, \"name\": \"Bulanan\", \"duration_days\": 30 },\n      \"start_date\": \"2026-09-20\",\n      \"end_date\": \"2026-10-20\"\n    }\n  }\n}"
         },
         {
           "name": "200 Belum punya membership",
@@ -326,6 +328,862 @@
           "header": [{ "key": "Content-Type", "value": "application/json" }],
           "_postman_previewlanguage": "json",
           "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Sprint 2 - Paket (SCRUM-93)",
+      "item": [
+        {
+          "name": "Paket publik (aktif)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/membership-plans",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - daftar paket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/membership-plans",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - buat paket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bulanan\",\n  \"duration_days\": 30,\n  \"price\": 150000,\n  \"description\": \"Akses gym 30 hari\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/admin/membership-plans",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - detail paket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - ubah paket",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bulanan\",\n  \"duration_days\": 30,\n  \"price\": 150000,\n  \"description\": \"Akses gym 30 hari\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - hapus paket (409 bila terpakai)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sprint 2 - Publik (SCRUM-93)",
+      "item": [
+        {
+          "name": "Jam operasional publik",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/operational-hours",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Kelas publik (aktif)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/classes",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sprint 2 - Jam operasional (SCRUM-51)",
+      "item": [
+        {
+          "name": "Admin - daftar jam",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - tambah jam",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"day_of_week\": \"Senin\",\n  \"open_time\": \"06:00\",\n  \"close_time\": \"21:00\",\n  \"is_closed\": false\n}"
+            },
+            "url": "{{baseUrl}}/admin/operational-hours",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - detail jam",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - ubah jam",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"day_of_week\": \"Senin\",\n  \"open_time\": \"06:00\",\n  \"close_time\": \"21:00\",\n  \"is_closed\": false\n}"
+            },
+            "url": "{{baseUrl}}/admin/operational-hours/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - hapus jam",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sprint 2 - Kelas (SCRUM-52)",
+      "item": [
+        {
+          "name": "Admin - daftar kelas (filter, cari, paginasi)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes?is_active=true&search=yoga&page=1",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - buat kelas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Yoga Pagi\",\n  \"description\": \"Yoga untuk pemula\",\n  \"min_participants\": 3,\n  \"default_instructor_id\": 1,\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/admin/classes",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - detail kelas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - ubah kelas",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Yoga Pagi\",\n  \"description\": \"Yoga untuk pemula\",\n  \"min_participants\": 3,\n  \"default_instructor_id\": 1,\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/admin/classes/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - hapus kelas (409 bila berjadwal)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sprint 2 - Instruktur (SCRUM-54)",
+      "item": [
+        {
+          "name": "Admin - daftar instruktur (cari, paginasi)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/instructors?search=budi&page=1",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - buat instruktur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Budi Santoso\",\n  \"specialization\": \"Yoga\",\n  \"phone_number\": \"081234567890\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/admin/instructors",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - detail instruktur",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/instructors/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - ubah instruktur",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Budi Santoso\",\n  \"specialization\": \"Yoga\",\n  \"phone_number\": \"081234567890\",\n  \"is_active\": true\n}"
+            },
+            "url": "{{baseUrl}}/admin/instructors/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - hapus instruktur (409 bila punya jadwal)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/instructors/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sprint 2 - Jadwal (SCRUM-55, SCRUM-56)",
+      "item": [
+        {
+          "name": "Admin - daftar jadwal",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/class-schedules?date_from=2026-10-12&date_to=2026-10-18&status=scheduled&page=1",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - buat jadwal (tumpang tindih 422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"class_id\": 1,\n  \"instructor_id\": 1,\n  \"schedule_date\": \"2026-10-12\",\n  \"start_time\": \"07:00\",\n  \"end_time\": \"08:00\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/class-schedules",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - detail jadwal",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/class-schedules/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - ubah jadwal",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"class_id\": 1,\n  \"instructor_id\": 1,\n  \"schedule_date\": \"2026-10-12\",\n  \"start_time\": \"07:00\",\n  \"end_time\": \"08:00\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/class-schedules/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - ubah status jadwal (cancelled wajib alasan)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"cancelled\",\n  \"cancel_reason\": \"Instruktur berhalangan hadir\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/class-schedules/{{id}}/status",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Admin - hapus jadwal",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/class-schedules/{{id}}",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+          }
+        },
+        {
+          "name": "Jadwal publik (default 7 hari)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/class-schedules?date_from=2026-10-12&date_to=2026-10-18",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). Memuat instructor_name (nama saja) dan cancel_reason (nullable), tanpa data pribadi peserta."
+          },
+          "response": [
+            {
+              "name": "200 Daftar jadwal publik",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 10,\n      \"class_id\": 1,\n      \"class_name\": \"Yoga Pagi\",\n      \"instructor_name\": \"Budi Santoso\",\n      \"schedule_date\": \"2026-10-12\",\n      \"start_time\": \"07:00\",\n      \"end_time\": \"08:00\",\n      \"status\": \"scheduled\",\n      \"cancel_reason\": null,\n      \"participants_count\": 4,\n      \"min_participants\": 3\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Status jadwal publik (ETag / If-None-Match)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/class-schedules/status?updated_since=2026-10-10T08:00:00%2B08:00",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). Kirim header If-None-Match dengan ETag respons sebelumnya untuk mendapat 304."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sprint 2 - Bukti transfer (SCRUM-48)",
+      "item": [
+        {
+          "name": "Bukti transfer (gambar, admin atau pemilik)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/transactions/{{id}}/receipt",
+            "description": "PLANNED (Sprint 2, belum diimplementasikan). PR SCRUM-48 masih terbuka. Respons berupa gambar biner."
+          }
         }
       ]
     }

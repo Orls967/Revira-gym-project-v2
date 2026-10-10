@@ -1,0 +1,51 @@
+receipt:
+  get:
+    operationId: getTransactionReceipt
+    tags: [Receipts, Sprint 2]
+    x-status: planned
+    summary: Bukti transfer (gambar)
+    description: |
+      SCRUM-48 (PR terbuka). Hanya admin atau pemilik transaksi. Respons berupa gambar biner; `Content-Type` ditentukan dari isi file.
+      Header `X-Content-Type-Options: nosniff` dan `Cache-Control: private, no-store`.
+    parameters:
+      - $ref: ../components/parameters.yaml#/TransactionId
+    responses:
+      '200':
+        description: File gambar bukti transfer.
+        headers:
+          X-Content-Type-Options:
+            schema:
+              type: string
+              enum: [nosniff]
+          Cache-Control:
+            schema:
+              type: string
+              examples: ['private, no-store']
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              contentMediaType: image/jpeg
+              contentEncoding: binary
+          image/png:
+            schema:
+              type: string
+              contentMediaType: image/png
+              contentEncoding: binary
+          image/webp:
+            schema:
+              type: string
+              contentMediaType: image/webp
+              contentEncoding: binary
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        description: Transaksi tidak ada, belum punya bukti, atau file tidak ditemukan.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Bukti transfer tidak ditemukan.

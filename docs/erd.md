@@ -13,7 +13,7 @@
 | Tidak ada kolom kapasitas maksimum kelas | Aturan bisnis eksplisit dari blueprint: kelas tidak dibatasi jumlah peserta, hanya punya `min_participants`. Kolom "unlimited" yang nullable justru berisiko disalahartikan sebagai "belum diisi". |
 | Riwayat, bukan overwrite, untuk `memberships` & `transactions` | Setiap pendaftaran/perpanjangan/percobaan pembayaran baru = baris baru. Admin butuh riwayat lengkap untuk fitur "database member" (US-13), dan ini menghindari race condition saat update status. |
 | Jumlah peserta dihitung real-time dari `class_participants`, bukan kolom counter tersimpan | Menghindari bug klasik "counter drift" (counter tidak sinkron dengan data asli). Skala gym kecil, biaya query `COUNT()` masih murah. |
-| Soft-delete via `is_active`, bukan hapus baris (instruktur, paket) | `class_schedules` & `memberships` lama tetap harus bisa merujuk instruktur/paket yang sudah tidak aktif, agar riwayat tidak rusak (integritas referensial). |
+| Soft-delete via `is_active`, bukan hapus baris (instruktur, paket, kelas) | `class_schedules` & `memberships` lama tetap harus bisa merujuk instruktur/paket/kelas yang sudah tidak aktif, agar riwayat tidak rusak (integritas referensial). Hard delete hanya diizinkan bila data belum pernah dipakai. |
 
 ---
 
@@ -127,7 +127,7 @@ erDiagram
 | description | TEXT | NULLABLE | |
 | is_active | BOOLEAN | DEFAULT true | |
 
-**Justifikasi:** Master data terpisah supaya admin bisa ubah harga/nonaktifkan paket lewat UI tanpa sentuh kode (US-08). `is_active` dipakai untuk *hide*, bukan *delete* — paket lama tetap harus ada karena `memberships` & `transactions` historis merujuknya; menghapus baris akan memutus integritas riwayat.
+**Justifikasi:** Master data terpisah supaya admin bisa ubah harga/nonaktifkan paket lewat UI tanpa sentuh kode (US-08). `is_active` dipakai untuk *hide*, bukan *delete* — paket lama tetap harus ada karena `memberships` & `transactions` historis merujuknya; menghapus baris akan memutus integritas riwayat. Hard delete hanya diizinkan bila data belum pernah dipakai.
 
 ### 3.3 `memberships`
 | Kolom | Tipe | Key | Ket. |
@@ -155,7 +155,7 @@ erDiagram
 | is_active | BOOLEAN | DEFAULT true | |
 | created_at / updated_at | TIMESTAMP | | |
 
-**Justifikasi:** Master data terpisah karena satu instruktur dipakai lintas banyak `classes` dan `class_schedules` — tanpa tabel ini, nama instruktur akan terduplikasi di tiap baris jadwal (rawan inkonsisten penulisan nama). `is_active` (bukan delete) menjaga riwayat sesi lama tetap menampilkan nama instruktur yang benar walau ia sudah berhenti mengajar.
+**Justifikasi:** Master data terpisah karena satu instruktur dipakai lintas banyak `classes` dan `class_schedules` — tanpa tabel ini, nama instruktur akan terduplikasi di tiap baris jadwal (rawan inkonsisten penulisan nama). `is_active` (bukan delete) menjaga riwayat sesi lama tetap menampilkan nama instruktur yang benar walau ia sudah berhenti mengajar. Hard delete hanya diizinkan bila data belum pernah dipakai.
 
 ### 3.5 `classes`
 | Kolom | Tipe | Key | Ket. |
@@ -168,7 +168,7 @@ erDiagram
 | is_active | BOOLEAN | | DEFAULT true |
 | created_at / updated_at | TIMESTAMP | | |
 
-**Justifikasi:** `min_participants` adalah satu-satunya batas kapasitas — **tidak ada kolom `max_participants` sama sekali** (bukan nullable, dihapus total dari skema) sesuai keputusan bisnis eksplisit di blueprint; ini mencegah developer lain di kemudian hari menambahkan validasi "kelas penuh" yang justru bertentangan dengan requirement. `default_instructor_id` hanya prefill form saat admin membuat jadwal baru (REV-08/REV-10) — instruktur aktual per sesi tetap dicatat di `class_schedules.instructor_id`, supaya jika instruktur diganti, sesi yang sudah lewat tidak ikut berubah datanya.
+**Justifikasi:** `min_participants` adalah satu-satunya batas kapasitas — **tidak ada kolom `max_participants` sama sekali** (bukan nullable, dihapus total dari skema) sesuai keputusan bisnis eksplisit di blueprint; ini mencegah developer lain di kemudian hari menambahkan validasi "kelas penuh" yang justru bertentangan dengan requirement. `default_instructor_id` hanya prefill form saat admin membuat jadwal baru (REV-08/REV-10) — instruktur aktual per sesi tetap dicatat di `class_schedules.instructor_id`, supaya jika instruktur diganti, sesi yang sudah lewat tidak ikut berubah datanya. `is_active` dipakai untuk menonaktifkan kelas; hard delete hanya diizinkan bila data belum pernah dipakai.
 
 ### 3.6 `class_schedules`
 | Kolom | Tipe | Key | Ket. |

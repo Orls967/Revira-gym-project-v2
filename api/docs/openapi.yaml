@@ -1,0 +1,118 @@
+openapi: 3.1.0
+info:
+  title: Revira Gym BJM API
+  version: 1.0.0
+  summary: Kontrak API untuk aplikasi mobile member dan Admin Web.
+  description: |
+    Kontrak REST API Revira Gym BJM. Semua endpoint berada di bawah prefix `/api/v1`.
+
+    **Status endpoint**
+    - Tanpa `x-status`: sudah ada di kode dan didokumentasikan sesuai kode dan tes.
+    - `x-status: planned` + tag `Sprint 2`: belum diimplementasikan, field mengikuti migration.
+
+    **Konvensi format respons** (berlaku untuk SCRUM-51, SCRUM-52, SCRUM-54, SCRUM-55, SCRUM-56, SCRUM-93)
+    - Respons wajib lewat API Resource; jangan me-return model Eloquent langsung.
+    - Datetime: ISO 8601 dengan offset `+08:00` (contoh `2026-10-12T07:00:00+08:00`; di Resource: `->toIso8601String()`), BUKAN default Eloquent UTC (`.000000Z`).
+    - Kolom date (`schedule_date`, `start_date`, `end_date`): string `Y-m-d` (`->format('Y-m-d')`), jangan diserialisasi sebagai datetime karena bisa mundur satu hari.
+    - Kolom time (`open_time`, `close_time`, `start_time`, `end_time`): `HH:MM` (5 karakter).
+    - Uang (`price`, `amount`): integer rupiah (`(int)` di Resource) walau kolom DB decimal.
+
+    **Konvensi umum**
+    - Autentikasi: Bearer token Sanctum (`Authorization: Bearer <token>`), didapat dari `POST /login` atau `POST /register`.
+    - Error: `{ "message": string, "errors"?: { "field": [string] } }` untuk 401, 403, 404, 409, 422, 429.
+    - Paginasi mengikuti format `paginate()` Laravel: `data`, `links`, `meta`.
+    - Tanggal-waktu ISO 8601 dengan offset `+08:00` (zona waktu aplikasi Asia/Makassar). Tanggal `YYYY-MM-DD`. Jam `HH:MM`.
+    - Kirim header `Accept: application/json` pada setiap request.
+  contact:
+    name: Tim Backend Revira Gym
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Lokal
+  - url: https://revira-gym-project-production.up.railway.app/api/v1
+    description: Staging (Railway)
+security:
+  - BearerAuth: []
+tags:
+  - name: Auth
+    description: Registrasi, login, dan logout.
+  - name: Me
+    description: Profil pengguna yang sedang login.
+  - name: Diagnostics
+    description: Health check dan route uji middleware.
+  - name: Membership Plans
+    description: Paket membership.
+  - name: Public
+    description: Data publik tanpa autentikasi.
+  - name: Operational Hours
+    description: Jam operasional gym (admin).
+  - name: Classes
+    description: Kelas gym (admin).
+  - name: Instructors
+    description: Instruktur (admin).
+  - name: Schedules
+    description: Jadwal kelas.
+  - name: Receipts
+    description: Bukti transfer.
+  - name: Sprint 2
+    description: Endpoint yang belum diimplementasikan (`x-status` planned).
+paths:
+  /health:
+    $ref: ./openapi/paths/health.yaml#/health
+  /admin/ping:
+    $ref: ./openapi/paths/health.yaml#/adminPing
+  /member/ping:
+    $ref: ./openapi/paths/health.yaml#/memberPing
+  /register:
+    $ref: ./openapi/paths/auth.yaml#/register
+  /login:
+    $ref: ./openapi/paths/auth.yaml#/login
+  /logout:
+    $ref: ./openapi/paths/auth.yaml#/logout
+  /me:
+    $ref: ./openapi/paths/me.yaml#/me
+  /user:
+    $ref: ./openapi/paths/me.yaml#/user
+  /membership-plans:
+    $ref: ./openapi/paths/plans.yaml#/publicPlans
+  /admin/membership-plans:
+    $ref: ./openapi/paths/plans.yaml#/adminPlans
+  /admin/membership-plans/{id}:
+    $ref: ./openapi/paths/plans.yaml#/adminPlanById
+  /operational-hours:
+    $ref: ./openapi/paths/public.yaml#/publicOperationalHours
+  /classes:
+    $ref: ./openapi/paths/public.yaml#/publicClasses
+  /admin/operational-hours:
+    $ref: ./openapi/paths/operational-hours.yaml#/adminHours
+  /admin/operational-hours/{id}:
+    $ref: ./openapi/paths/operational-hours.yaml#/adminHourById
+  /admin/classes:
+    $ref: ./openapi/paths/classes.yaml#/adminClasses
+  /admin/classes/{id}:
+    $ref: ./openapi/paths/classes.yaml#/adminClassById
+  /admin/instructors:
+    $ref: ./openapi/paths/instructors.yaml#/adminInstructors
+  /admin/instructors/{id}:
+    $ref: ./openapi/paths/instructors.yaml#/adminInstructorById
+  /admin/class-schedules:
+    $ref: ./openapi/paths/schedules.yaml#/adminSchedules
+  /admin/class-schedules/{id}:
+    $ref: ./openapi/paths/schedules.yaml#/adminScheduleById
+  /admin/class-schedules/{id}/status:
+    $ref: ./openapi/paths/schedules.yaml#/adminScheduleStatus
+  /class-schedules:
+    $ref: ./openapi/paths/schedules.yaml#/publicSchedules
+  /class-schedules/status:
+    $ref: ./openapi/paths/schedules.yaml#/publicScheduleStatus
+  /transactions/{transaction}/receipt:
+    $ref: ./openapi/paths/receipts.yaml#/receipt
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum personal access token
+      description: Token dari `POST /login` atau `POST /register`.
