@@ -37,64 +37,40 @@ class MembershipPlanController extends Controller
     }
 
     /**
-     * GET /api/v1/admin/membership-plans/{id}
+     * GET /api/v1/admin/membership-plans/{membershipPlan}
      */
-    public function show(int $id): JsonResponse
+    public function show(MembershipPlan $membershipPlan): JsonResponse
     {
-        $plan = MembershipPlan::find($id);
-
-        if (! $plan) {
-            return response()->json([
-                'message' => 'Paket membership tidak ditemukan.',
-            ], 404);
-        }
-
         return response()->json([
-            'data' => new MembershipPlanResource($plan),
+            'data' => new MembershipPlanResource($membershipPlan),
         ]);
     }
 
     /**
-     * PUT /api/v1/admin/membership-plans/{id}
+     * PUT /api/v1/admin/membership-plans/{membershipPlan}
      */
-    public function update(UpdateMembershipPlanRequest $request, int $id): JsonResponse
+    public function update(UpdateMembershipPlanRequest $request, MembershipPlan $membershipPlan): JsonResponse
     {
-        $plan = MembershipPlan::find($id);
-
-        if (! $plan) {
-            return response()->json([
-                'message' => 'Paket membership tidak ditemukan.',
-            ], 404);
-        }
-
-        $plan->update($request->validated());
+        $membershipPlan->update($request->validated());
 
         return response()->json([
             'message' => 'Paket membership berhasil diperbarui.',
-            'data' => new MembershipPlanResource($plan),
+            'data' => new MembershipPlanResource($membershipPlan),
         ]);
     }
 
     /**
-     * DELETE /api/v1/admin/membership-plans/{id}
+     * DELETE /api/v1/admin/membership-plans/{membershipPlan}
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy(MembershipPlan $membershipPlan): JsonResponse
     {
-        $plan = MembershipPlan::find($id);
-
-        if (! $plan) {
-            return response()->json([
-                'message' => 'Paket membership tidak ditemukan.',
-            ], 404);
-        }
-
-        if ($plan->memberships()->exists()) {
+        if ($membershipPlan->memberships()->exists()) {
             return response()->json([
                 'message' => 'Paket membership tidak dapat dihapus karena sudah pernah digunakan oleh member. Silakan nonaktifkan paket (is_active = false) sebagai alternatif.',
             ], 409);
         }
 
-        $plan->delete();
+        $membershipPlan->delete();
 
         return response()->json([
             'message' => 'Paket membership berhasil dihapus.',

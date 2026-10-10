@@ -48,9 +48,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     // Manajemen paket membership (SCRUM-93)
     Route::get('/membership-plans', [MembershipPlanController::class, 'index']);
     Route::post('/membership-plans', [MembershipPlanController::class, 'store']);
-    Route::get('/membership-plans/{id}', [MembershipPlanController::class, 'show'])->whereNumber('id');
-    Route::put('/membership-plans/{id}', [MembershipPlanController::class, 'update'])->whereNumber('id');
-    Route::delete('/membership-plans/{id}', [MembershipPlanController::class, 'destroy'])->whereNumber('id');
+    Route::get('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'show'])
+        ->whereNumber('membershipPlan')
+        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404));
+    Route::put('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'update'])
+        ->whereNumber('membershipPlan')
+        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404));
+    Route::delete('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'destroy'])
+        ->whereNumber('membershipPlan')
+        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404));
 });
 
 Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {

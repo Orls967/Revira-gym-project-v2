@@ -21,7 +21,7 @@ class StoreMembershipPlanRequest extends FormRequest
             'name' => ['required', 'string', 'max:100'],
             'duration_days' => ['required', 'integer', 'min:1'],
             'price' => ['required', 'integer', 'min:0', 'max:99999999'],
-            'description' => ['nullable', 'string'],
+            'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }

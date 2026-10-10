@@ -41,6 +41,8 @@ class AdminMembershipPlanTest extends TestCase
         $member = User::factory()->create();
         Sanctum::actingAs($member);
 
+        $plan = MembershipPlan::factory()->create();
+
         $this->getJson('/api/v1/admin/membership-plans')
             ->assertForbidden()
             ->assertExactJson(['message' => 'Anda tidak memiliki akses ke sumber daya ini.']);
@@ -53,15 +55,15 @@ class AdminMembershipPlanTest extends TestCase
             ->assertForbidden()
             ->assertExactJson(['message' => 'Anda tidak memiliki akses ke sumber daya ini.']);
 
-        $this->getJson('/api/v1/admin/membership-plans/1')
+        $this->getJson("/api/v1/admin/membership-plans/{$plan->id}")
             ->assertForbidden()
             ->assertExactJson(['message' => 'Anda tidak memiliki akses ke sumber daya ini.']);
 
-        $this->putJson('/api/v1/admin/membership-plans/1', ['name' => 'Update'])
+        $this->putJson("/api/v1/admin/membership-plans/{$plan->id}", ['name' => 'Update'])
             ->assertForbidden()
             ->assertExactJson(['message' => 'Anda tidak memiliki akses ke sumber daya ini.']);
 
-        $this->deleteJson('/api/v1/admin/membership-plans/1')
+        $this->deleteJson("/api/v1/admin/membership-plans/{$plan->id}")
             ->assertForbidden()
             ->assertExactJson(['message' => 'Anda tidak memiliki akses ke sumber daya ini.']);
     }
@@ -147,6 +149,33 @@ class AdminMembershipPlanTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_create_membership_plan_without_is_active_defaults_to_true_boolean(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($admin);
+
+        $payload = [
+            'name' => 'Paket Default Aktif',
+            'duration_days' => 30,
+            'price' => 150000,
+            'description' => 'Akses gym 30 hari tanpa is_active',
+        ];
+
+        $response = $this->postJson('/api/v1/admin/membership-plans', $payload);
+
+        $response->assertCreated();
+
+        $this->assertIsBool($response->json('data.is_active'));
+        $this->assertTrue($response->json('data.is_active'));
+
+        $this->assertDatabaseHas('membership_plans', [
+            'name' => 'Paket Default Aktif',
+            'duration_days' => 30,
+            'price' => 150000.00,
+            'is_active' => 1,
+        ]);
+    }
+
     public function test_create_membership_plan_validation_fails_with_invalid_data(): void
     {
         $admin = User::factory()->admin()->create();
@@ -177,6 +206,56 @@ class AdminMembershipPlanTest extends TestCase
 
         $responseOverflow->assertUnprocessable()
             ->assertJsonValidationErrors(['price']);
+    }
+
+    public function test_membership_plan_description_max_length_validation(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($admin);
+
+        // Store: 1001 karakter → 422
+        $responseStoreInvalid = $this->postJson('/api/v1/admin/membership-plans', [
+            'name' => 'Paket Test',
+            'duration_days' => 30,
+            'price' => 100000,
+            'description' => str_repeat('a', 1001),
+        ]);
+
+        $responseStoreInvalid->assertUnprocessable()
+            ->assertJsonValidationErrors(['description']);
+
+        // Store: 1000 karakter → lolos (201)
+        $responseStoreValid = $this->postJson('/api/v1/admin/membership-plans', [
+            'name' => 'Paket 1000 Char',
+            'duration_days' => 30,
+            'price' => 100000,
+            'description' => str_repeat('a', 1000),
+        ]);
+
+        $responseStoreValid->assertCreated();
+
+        $plan = MembershipPlan::where('name', 'Paket 1000 Char')->firstOrFail();
+
+        // Update: 1001 karakter → 422
+        $responseUpdateInvalid = $this->putJson("/api/v1/admin/membership-plans/{$plan->id}", [
+            'name' => 'Paket 1000 Char',
+            'duration_days' => 30,
+            'price' => 100000,
+            'description' => str_repeat('b', 1001),
+        ]);
+
+        $responseUpdateInvalid->assertUnprocessable()
+            ->assertJsonValidationErrors(['description']);
+
+        // Update: 1000 karakter → lolos (200)
+        $responseUpdateValid = $this->putJson("/api/v1/admin/membership-plans/{$plan->id}", [
+            'name' => 'Paket 1000 Char',
+            'duration_days' => 30,
+            'price' => 100000,
+            'description' => str_repeat('b', 1000),
+        ]);
+
+        $responseUpdateValid->assertOk();
     }
 
     public function test_admin_can_view_single_membership_plan(): void
@@ -214,7 +293,7 @@ class AdminMembershipPlanTest extends TestCase
 
         $this->getJson('/api/v1/admin/membership-plans/99999')
             ->assertNotFound()
-            ->assertExactJson(['message' => 'Paket membership tidak ditemukan.']);
+            ->assertExactJson(['message' => 'Data tidak ditemukan.']);
     }
 
     public function test_admin_access_with_non_numeric_id_returns_404(): void
@@ -232,6 +311,30 @@ class AdminMembershipPlanTest extends TestCase
         $resDelete->assertNotFound();
     }
 
+    public function test_admin_access_with_overflow_id_returns_404(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($admin);
+
+        $overflowId = '99999999999999999999';
+
+        $resGet = $this->getJson("/api/v1/admin/membership-plans/{$overflowId}");
+        $resGet->assertNotFound()
+            ->assertExactJson(['message' => 'Data tidak ditemukan.']);
+
+        $resPut = $this->putJson("/api/v1/admin/membership-plans/{$overflowId}", [
+            'name' => 'Update',
+            'duration_days' => 30,
+            'price' => 100000,
+        ]);
+        $resPut->assertNotFound()
+            ->assertExactJson(['message' => 'Data tidak ditemukan.']);
+
+        $resDelete = $this->deleteJson("/api/v1/admin/membership-plans/{$overflowId}");
+        $resDelete->assertNotFound()
+            ->assertExactJson(['message' => 'Data tidak ditemukan.']);
+    }
+
     public function test_admin_can_update_membership_plan(): void
     {
         $admin = User::factory()->admin()->create();
@@ -246,6 +349,7 @@ class AdminMembershipPlanTest extends TestCase
 
         $response = $this->putJson("/api/v1/admin/membership-plans/{$plan->id}", [
             'name' => 'Nama Baru',
+            'duration_days' => 30,
             'price' => 120000,
             'is_active' => false,
         ]);
@@ -267,9 +371,49 @@ class AdminMembershipPlanTest extends TestCase
         $this->assertDatabaseHas('membership_plans', [
             'id' => $plan->id,
             'name' => 'Nama Baru',
+            'duration_days' => 30,
             'price' => 120000.00,
             'is_active' => 0,
         ]);
+    }
+
+    public function test_update_membership_plan_requires_all_mandatory_fields(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($admin);
+
+        $plan = MembershipPlan::factory()->create([
+            'name' => 'Paket Asli',
+            'duration_days' => 30,
+            'price' => 100000,
+        ]);
+
+        // PUT hanya dengan price → 422 dengan error untuk name dan duration_days
+        $responsePartial = $this->putJson("/api/v1/admin/membership-plans/{$plan->id}", [
+            'price' => 150000,
+        ]);
+
+        $responsePartial->assertUnprocessable()
+            ->assertJsonValidationErrors(['name', 'duration_days']);
+
+        // PUT lengkap → 200 {message, data}
+        $responseComplete = $this->putJson("/api/v1/admin/membership-plans/{$plan->id}", [
+            'name' => 'Paket Lengkap Diperbarui',
+            'duration_days' => 45,
+            'price' => 200000,
+        ]);
+
+        $responseComplete->assertOk()
+            ->assertJsonStructure(['message', 'data'])
+            ->assertJson([
+                'message' => 'Paket membership berhasil diperbarui.',
+                'data' => [
+                    'id' => $plan->id,
+                    'name' => 'Paket Lengkap Diperbarui',
+                    'duration_days' => 45,
+                    'price' => 200000,
+                ],
+            ]);
     }
 
     public function test_update_membership_plan_returns_404_if_not_found(): void
@@ -277,9 +421,13 @@ class AdminMembershipPlanTest extends TestCase
         $admin = User::factory()->admin()->create();
         Sanctum::actingAs($admin);
 
-        $this->putJson('/api/v1/admin/membership-plans/99999', ['name' => 'Update'])
+        $this->putJson('/api/v1/admin/membership-plans/99999', [
+            'name' => 'Update',
+            'duration_days' => 30,
+            'price' => 100000,
+        ])
             ->assertNotFound()
-            ->assertExactJson(['message' => 'Paket membership tidak ditemukan.']);
+            ->assertExactJson(['message' => 'Data tidak ditemukan.']);
     }
 
     public function test_admin_can_delete_unused_membership_plan(): void
@@ -304,7 +452,7 @@ class AdminMembershipPlanTest extends TestCase
 
         $this->deleteJson('/api/v1/admin/membership-plans/99999')
             ->assertNotFound()
-            ->assertExactJson(['message' => 'Paket membership tidak ditemukan.']);
+            ->assertExactJson(['message' => 'Data tidak ditemukan.']);
     }
 
     public function test_admin_cannot_delete_used_membership_plan_returns_409(): void

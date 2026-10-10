@@ -9,6 +9,10 @@ class MembershipPlan extends Model
 {
     use HasFactory;
 
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
     protected $fillable = [
         'name',
         'duration_days',
