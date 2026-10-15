@@ -332,7 +332,7 @@
       ]
     },
     {
-      "name": "Sprint 2 - Paket (SCRUM-93)",
+      "name": "Paket (SCRUM-93)",
       "item": [
         {
           "name": "Paket publik (aktif)",
@@ -345,7 +345,7 @@
               }
             ],
             "url": "{{baseUrl}}/membership-plans",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Tanpa autentikasi. Hanya paket aktif; field id, name, duration_days, price, description. Rate limit public-api 120 request/menit per IP (429 bila terlampaui)."
           }
         },
         {
@@ -369,7 +369,7 @@
               ]
             },
             "url": "{{baseUrl}}/admin/membership-plans",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. Semua paket termasuk yang nonaktif. Tanpa token 401, member 403."
           }
         },
         {
@@ -401,7 +401,7 @@
               "raw": "{\n  \"name\": \"Bulanan\",\n  \"duration_days\": 30,\n  \"price\": 150000,\n  \"description\": \"Akses gym 30 hari\",\n  \"is_active\": true\n}"
             },
             "url": "{{baseUrl}}/admin/membership-plans",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. name, duration_days, price wajib; description maks 1000 karakter; is_active default true bila tidak dikirim. Sukses 201, validasi gagal 422."
           }
         },
         {
@@ -425,7 +425,7 @@
               ]
             },
             "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. ID tidak ada atau bukan angka dibalas 404 \"Data tidak ditemukan.\". Member selalu 403, termasuk untuk ID yang tidak ada."
           }
         },
         {
@@ -457,7 +457,7 @@
               "raw": "{\n  \"name\": \"Bulanan\",\n  \"duration_days\": 30,\n  \"price\": 150000,\n  \"description\": \"Akses gym 30 hari\",\n  \"is_active\": true\n}"
             },
             "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. Update penuh, bukan parsial: name, duration_days, price wajib; description maks 1000 karakter. ID tidak ada dibalas 404, member 403."
           }
         },
         {
@@ -481,13 +481,13 @@
               ]
             },
             "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. 200 bila paket belum pernah dipakai; 409 bila sudah dipakai member (nonaktifkan lewat is_active=false). ID tidak ada dibalas 404, member 403."
           }
         }
       ]
     },
     {
-      "name": "Sprint 2 - Publik (SCRUM-93)",
+      "name": "Publik (SCRUM-93)",
       "item": [
         {
           "name": "Jam operasional publik",
@@ -500,7 +500,7 @@
               }
             ],
             "url": "{{baseUrl}}/operational-hours",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Tanpa autentikasi. Field day_of_week, open_time, close_time, is_closed. Rate limit public-api 120 request/menit per IP (429 bila terlampaui)."
           }
         },
         {
@@ -514,7 +514,7 @@
               }
             ],
             "url": "{{baseUrl}}/classes",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Tanpa autentikasi. Hanya kelas aktif; field id, name, description. Rate limit public-api 120 request/menit per IP (429 bila terlampaui)."
           }
         }
       ]

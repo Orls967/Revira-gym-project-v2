@@ -6,6 +6,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -24,6 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => EnsureRole::class,
         ]);
+
+        // Cek peran harus berjalan sebelum route model binding; jika tidak, member mendapat 404 untuk ID
+        // yang tidak ada tetapi 403 untuk ID yang ada, sehingga keberadaan ID bisa ditebak.
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureRole::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Memastikan request api/* selalu menerima respons error berformat JSON
