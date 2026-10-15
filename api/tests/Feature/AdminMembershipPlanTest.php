@@ -68,6 +68,47 @@ class AdminMembershipPlanTest extends TestCase
             ->assertExactJson(['message' => 'Anda tidak memiliki akses ke sumber daya ini.']);
     }
 
+    public function test_member_gets_403_not_404_for_nonexistent_plan_id(): void
+    {
+        $member = User::factory()->create();
+        Sanctum::actingAs($member);
+
+        $forbidden = ['message' => 'Anda tidak memiliki akses ke sumber daya ini.'];
+
+        foreach (['99999', '99999999999999999999'] as $id) {
+            $this->getJson("/api/v1/admin/membership-plans/{$id}")
+                ->assertForbidden()
+                ->assertExactJson($forbidden);
+
+            $this->putJson("/api/v1/admin/membership-plans/{$id}", [
+                'name' => 'Update',
+                'duration_days' => 30,
+                'price' => 100000,
+            ])
+                ->assertForbidden()
+                ->assertExactJson($forbidden);
+
+            $this->deleteJson("/api/v1/admin/membership-plans/{$id}")
+                ->assertForbidden()
+                ->assertExactJson($forbidden);
+        }
+    }
+
+    public function test_guest_gets_401_for_nonexistent_plan_id(): void
+    {
+        $this->getJson('/api/v1/admin/membership-plans/99999')
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Unauthenticated.']);
+
+        $this->putJson('/api/v1/admin/membership-plans/99999', [])
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Unauthenticated.']);
+
+        $this->deleteJson('/api/v1/admin/membership-plans/99999')
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Unauthenticated.']);
+    }
+
     public function test_admin_can_list_all_membership_plans_including_inactive(): void
     {
         $admin = User::factory()->admin()->create();

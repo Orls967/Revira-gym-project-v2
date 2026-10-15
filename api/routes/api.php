@@ -55,14 +55,11 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     Route::get('/membership-plans', [MembershipPlanController::class, 'index']);
     Route::post('/membership-plans', [MembershipPlanController::class, 'store']);
     Route::get('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'show'])
-        ->whereNumber('membershipPlan')
-        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404));
+        ->whereNumber('membershipPlan');
     Route::put('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'update'])
-        ->whereNumber('membershipPlan')
-        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404));
+        ->whereNumber('membershipPlan');
     Route::delete('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'destroy'])
-        ->whereNumber('membershipPlan')
-        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404));
+        ->whereNumber('membershipPlan');
 });
 
 Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {
