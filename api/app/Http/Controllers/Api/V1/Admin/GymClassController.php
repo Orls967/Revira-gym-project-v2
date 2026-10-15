@@ -24,7 +24,12 @@ class GymClassController extends Controller
 
         $classes = GymClass::query()
             ->when($isActive !== null, fn ($query) => $query->where('is_active', $isActive))
-            ->when(filled($search), fn ($query) => $query->where('name', 'like', '%'.$search.'%'))
+            // % dan _ di kata kunci dicari apa adanya, bukan sebagai wildcard LIKE.
+            // Karakter escape '!' dipakai karena backslash tidak berlaku sama di MySQL dan SQLite.
+            ->when(filled($search), fn ($query) => $query->whereRaw(
+                "name LIKE ? ESCAPE '!'",
+                ['%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%'],
+            ))
             ->orderBy('id')
             ->paginate($request->integer('per_page', 15))
             ->withQueryString();

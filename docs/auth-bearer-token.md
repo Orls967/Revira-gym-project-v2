@@ -292,7 +292,7 @@ Query string `GET /api/v1/admin/classes` (semuanya opsional, nilai tidak valid m
 | Parameter | Keterangan |
 |-----------|------------|
 | `is_active` | `true`/`false` (atau `1`/`0`). Tanpa parameter ini, kelas aktif dan nonaktif sama-sama tampil. |
-| `search` | Cari nama kelas yang mengandung teks ini (maks 100 karakter). |
+| `search` | Cari nama kelas yang mengandung teks ini (maks 100 karakter, tidak peka huruf besar/kecil). `%` dan `_` dicari apa adanya, bukan wildcard. |
 | `page` | Nomor halaman, minimal 1. |
 | `per_page` | 1-100, default 15. |
 
@@ -311,7 +311,7 @@ Body POST dan PUT:
 Aturan:
 
 - `name` wajib, maks 100 karakter. `description` opsional (boleh `null`), maks 1000 karakter.
-- `min_participants` wajib, bilangan bulat **>= 1** (0, negatif, dan pecahan ditolak 422).
+- `min_participants` wajib, bilangan bulat **1-1000** (0, negatif, pecahan, dan nilai di atas 1000 ditolak 422).
 - `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang ada.
 - `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
 - Field lain seperti kapasitas maksimum diabaikan.

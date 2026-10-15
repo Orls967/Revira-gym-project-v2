@@ -1064,6 +1064,19 @@
               "body": "{\n  \"message\": \"Jumlah peserta minimum harus minimal 1.\",\n  \"errors\": {\n    \"min_participants\": [\n      \"Jumlah peserta minimum harus minimal 1.\"\n    ]\n  }\n}"
             },
             {
+              "name": "422 min_participants lebih dari 1000",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jumlah peserta minimum tidak boleh lebih dari 1000.\",\n  \"errors\": {\n    \"min_participants\": [\n      \"Jumlah peserta minimum tidak boleh lebih dari 1000.\"\n    ]\n  }\n}"
+            },
+            {
               "name": "401 Tanpa token",
               "status": "Unauthorized",
               "code": 401,
@@ -1344,7 +1357,7 @@
           ]
         }
       ],
-      "description": "CRUD kelas, role:admin. Login dulu lewat \"Login (admin-web)\" dengan email admin. Kelas hanya punya `min_participants` (bilangan bulat >= 1), tanpa kapasitas maksimum. Daftar mendukung filter `is_active`, `search` (nama), dan paginasi `page`/`per_page` (maks 100). Kelas yang sudah punya jadwal tidak bisa dihapus (409); nonaktifkan dengan `is_active=false`."
+      "description": "CRUD kelas, role:admin. Login dulu lewat \"Login (admin-web)\" dengan email admin. Kelas hanya punya `min_participants` (bilangan bulat 1-1000), tanpa kapasitas maksimum. Daftar mendukung filter `is_active`, `search` (nama; `%` dan `_` dicari apa adanya), dan paginasi `page`/`per_page` (maks 100). Kelas yang sudah punya jadwal tidak bisa dihapus (409); nonaktifkan dengan `is_active=false`."
     },
     {
       "name": "Sprint 2 - Instruktur (SCRUM-54)",

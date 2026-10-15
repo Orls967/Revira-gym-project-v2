@@ -126,6 +126,13 @@ GymClassValidationError:
             errors:
               min_participants:
                 - Jumlah peserta minimum harus minimal 1.
+        minParticipantsTooLarge:
+          summary: min_participants lebih dari 1000
+          value:
+            message: Jumlah peserta minimum tidak boleh lebih dari 1000.
+            errors:
+              min_participants:
+                - Jumlah peserta minimum tidak boleh lebih dari 1000.
         minParticipantsNotInteger:
           summary: min_participants pecahan atau bukan angka
           value:

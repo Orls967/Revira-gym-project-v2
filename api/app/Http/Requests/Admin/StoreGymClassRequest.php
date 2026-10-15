@@ -22,7 +22,8 @@ class StoreGymClassRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'min_participants' => ['required', 'integer', 'min:1'],
+            // Batas atas mencegah nilai di luar rentang kolom integer lolos lalu ditolak database (500)
+            'min_participants' => ['required', 'integer', 'min:1', 'max:1000'],
             'default_instructor_id' => ['nullable', 'integer', 'exists:instructors,id'],
             'is_active' => ['sometimes', 'boolean'],
         ];
@@ -35,6 +36,7 @@ class StoreGymClassRequest extends FormRequest
     {
         return [
             'min_participants.min' => 'Jumlah peserta minimum harus minimal 1.',
+            'min_participants.max' => 'Jumlah peserta minimum tidak boleh lebih dari 1000.',
             'default_instructor_id.exists' => 'Instruktur tidak ditemukan.',
         ];
     }

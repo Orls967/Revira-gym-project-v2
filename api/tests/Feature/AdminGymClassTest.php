@@ -147,6 +147,32 @@ class AdminGymClassTest extends TestCase
     }
 
     /**
+     * Karakter % dan _ pada kata kunci dicari apa adanya, bukan sebagai wildcard.
+     */
+    public function test_search_treats_like_wildcards_literally(): void
+    {
+        $diskon = GymClass::factory()->create(['name' => 'Promo 50% Off']);
+        $underscore = GymClass::factory()->create(['name' => 'Kelas_Pagi']);
+        GymClass::factory()->create(['name' => 'Yoga Morning Flow']);
+        GymClass::factory()->create(['name' => 'Kelas Sore']);
+        $this->actingAsAdmin();
+
+        $this->getJson(self::URL.'?search='.urlencode('%'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $diskon->id);
+
+        $this->getJson(self::URL.'?search=_')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $underscore->id);
+
+        $this->getJson(self::URL.'?search=!')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    /**
      * @return array<string, array{0: string, 1: string}>
      */
     public static function invalidQueryProvider(): array
@@ -306,6 +332,8 @@ class AdminGymClassTest extends TestCase
             'min_participants negatif' => [['min_participants' => -1], 'min_participants'],
             'min_participants pecahan' => [['min_participants' => 2.5], 'min_participants'],
             'min_participants bukan angka' => [['min_participants' => 'tiga'], 'min_participants'],
+            'min_participants lebih dari 1000' => [['min_participants' => 1001], 'min_participants'],
+            'min_participants di luar rentang kolom' => [['min_participants' => 99999999999], 'min_participants'],
             'default_instructor_id tidak ada' => [['default_instructor_id' => 999], 'default_instructor_id'],
             'default_instructor_id bukan angka' => [['default_instructor_id' => 'abc'], 'default_instructor_id'],
             'is_active bukan boolean' => [['is_active' => 'mungkin'], 'is_active'],
@@ -333,6 +361,24 @@ class AdminGymClassTest extends TestCase
 
         $this->assertDatabaseCount('classes', 1);
         $this->assertSame(2, $class->fresh()->min_participants);
+    }
+
+    /**
+     * Batas atas min_participants: 1000 diterima, di atasnya ditolak 422 dengan pesan yang jelas.
+     */
+    public function test_min_participants_above_1000_returns_422(): void
+    {
+        $this->actingAsAdmin();
+
+        $this->postJson(self::URL, $this->validPayload(['min_participants' => 1000]))
+            ->assertCreated()
+            ->assertJsonPath('data.min_participants', 1000);
+
+        $this->postJson(self::URL, $this->validPayload(['min_participants' => 1001]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['min_participants' => 'Jumlah peserta minimum tidak boleh lebih dari 1000.']);
+
+        $this->assertDatabaseCount('classes', 1);
     }
 
     public function test_missing_class_returns_404(): void

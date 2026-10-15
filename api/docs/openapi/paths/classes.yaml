@@ -5,6 +5,7 @@ adminClasses:
     summary: Daftar kelas (admin)
     description: |
       SCRUM-52. Role admin. Paginasi, filter `is_active`, cari nama. Terurut berdasarkan `id`.
+      Pencarian `search` tidak peka huruf besar/kecil; `%` dan `_` dicari apa adanya, bukan wildcard.
       `is_active` menerima `true`/`false` maupun `1`/`0`; tanpa parameter ini kelas aktif dan nonaktif sama-sama tampil.
       Link paginasi membawa query filter yang dikirim.
     parameters:
@@ -76,7 +77,7 @@ adminClasses:
     tags: [Classes]
     summary: Buat kelas (admin)
     description: |
-      SCRUM-52. `min_participants` bilangan bulat >= 1. Tanpa kapasitas maksimum; field lain yang tidak dikenal diabaikan.
+      SCRUM-52. `min_participants` bilangan bulat 1-1000. Tanpa kapasitas maksimum; field lain yang tidak dikenal diabaikan.
       `is_active` default true. `default_instructor_id` boleh null, bila diisi harus ID instruktur yang ada.
     requestBody:
       required: true
