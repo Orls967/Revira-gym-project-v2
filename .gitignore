@@ -6,3 +6,5 @@ node_modules/
 .idea/
 .vscode/
 .claude/
+api-docs.html
+openapi.bundled.yaml

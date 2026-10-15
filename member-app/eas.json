@@ -1,0 +1,31 @@
+{
+  "cli": {
+    "version": ">= 24.12.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "base": {
+      "node": "24.21.0"
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://revira-gym-project-production.up.railway.app"
+      }
+    },
+    "production": {
+      "extends": "base",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://revira-gym-project-production.up.railway.app"
+      }
+    }
+  }
+}
