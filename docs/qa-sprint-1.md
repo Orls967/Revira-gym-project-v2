@@ -17,7 +17,7 @@
 | **Butir 1** | Auth API (Staging) | **SELESAI** | Seluruh skenario auth API berhasil diuji langsung ke staging, termasuk uji login, validasi register, eskalasi peran, dan throttle 429. |
 | **Butir 2** | Middleware Role | **SELESAI** | Validasi pembatasan role admin dan member, akses tanpa token, serta proteksi route model binding terbukti aman. |
 | **Butir 3** | Staging | **SEBAGIAN** | Endpoint `/health` dan login akun seed terverifikasi; pengecekan internal console Railway berstatus MANUAL karena Railway CLI tidak terpasang di workstation penguji. |
-| **Butir 4** | Aplikasi Mobile | **MANUAL (Menunggu Akbar)** | Pengujian aplikasi mobile Android dikerjakan secara terpisah oleh Akbar. |
+| **Butir 4** | Aplikasi Mobile | **SELESAI (diuji Akbar, disaksikan Orlando, tanpa bukti tertulis)** | Pengujian fisik 2 HP Android berhasil untuk seluruh skenario (login, sesi persist, logout, mode pesawat); tidak ada rekaman/tangkapan layar. |
 | **Butir 5** | Admin Web | **GAGAL** | Gagal pada tahap build dan dev server karena error sintaks JSX di `Login.tsx` serta inkonsistensi key LocalStorage; fitur dashboard dan alur login belum dapat diuji interaksinya. |
 | **Butir 6** | CI (Continuous Integration) | **SELESAI** | Verifikasi merge PR dan status pipeline checks via GitHub CLI terbukti hijau pada `ci-api` dan `ci-member-app`. |
 | **Butir 7** | Kebersihan Repo | **SELESAI** | Audit repo menunjukkan file terlacak bebas rahasia dan identitas commit bersih; namun ditemukan kebocoran password staging di deskripsi PR lama serta Secret Scanning belum aktif. |
@@ -25,8 +25,8 @@
 ### Rekapitulasi Temuan
 
 - **Blocker**: 3 temuan (QA-01, QA-02, QA-08)
-- **Mayor**: 4 temuan (QA-03, QA-05b, QA-06, QA-07)
-- **Minor**: 3 temuan (QA-04, QA-05a, QA-09)
+- **Mayor**: 5 temuan (QA-03, QA-05b, QA-06, QA-07, QA-09)
+- **Minor**: 2 temuan (QA-04, QA-05a)
 
 ### Status Tiket Blocker
 
@@ -209,7 +209,7 @@ Pemetaan endpoint mengacu pada `api/routes/api.php` dan `api/bootstrap/app.php` 
 | **QA-06** | API | **Mayor** | Rate limiting login berbasis IP mengunci seluruh user dari IP yang sama | 1. Kirim 5 request login gagal berturut-turut<br>2. Coba login dengan akun valid lain dari IP sama | **Diharapkan**: Throttle mengunci akun spesifik atau membatasi per user + IP.<br>**Aktual**: HTTP 429 mengunci IP global (termasuk login akun lain) selama ~56 detik. | Respons HTTP 429 pada percobaan ke-6, header `retry-after: 53`. | Draf Tiket 6 |
 | **QA-07** | Repo / CI | **Mayor** | Tidak ada workflow CI untuk `admin-web`, menyebabkan bug build lolos ke `dev` | Periksa `.github/workflows/` | **Diharapkan**: PR `admin-web` divalidasi CI otomatis.<br>**Aktual**: Workflow `ci-admin-web.yml.example` belum aktif sehingga bug QA-01 lolos merge. | `.github/workflows/ci-admin-web.yml.example` | Draf Tiket 7 |
 | **QA-08** | Repo / Keamanan | **Blocker** | Kebocoran password staging pada deskripsi PR SCRUM-44 | Buka deskripsi PR #18 di repositori `Orls967/Revira-gym-project` | **Diharapkan**: Bagian Cara Uji bebas dari kredensial rahasia staging.<br>**Aktual**: Password seeder staging ditulis gamblang pada teks PR. | PR `Orls967/Revira-gym-project#18` baris Cara Uji: `Password: ****` | Draf Tiket 3 |
-| **QA-09** | Repo / Keamanan | **Minor** | GitHub Secret Scanning dan Push Protection belum diaktifkan | Jalankan `gh api repos/Orls967/Revira-gym-project-v2 --jq '.security_and_analysis'` | **Diharapkan**: Secret scanning aktif.<br>**Aktual**: Seluruh fitur secret scanning bernilai `disabled`. | API response `.security_and_analysis` | - |
+| **QA-09** | Repo / Keamanan | **Mayor** | GitHub Secret Scanning dan Push Protection belum diaktifkan | Jalankan `gh api repos/Orls967/Revira-gym-project-v2 --jq '.security_and_analysis'` | **Diharapkan**: Secret scanning aktif.<br>**Aktual**: Seluruh fitur secret scanning bernilai `disabled`. | API response `.security_and_analysis` | - |
 
 ---
 
@@ -265,12 +265,21 @@ Pemetaan endpoint mengacu pada `api/routes/api.php` dan `api/bootstrap/app.php` 
 
 ## Butir 4: Aplikasi Mobile (Akbar)
 
-*Pengujian dilakukan secara fisik di perangkat Android nyata oleh Akbar. Hasil berikut menunggu konfirmasi:*
+- **Penguji**: Muhammad Rizky Akbar. Disaksikan langsung oleh Orlando (Orls967).
+- **Tanggal Uji**: tidak dicatat
+- **Sumber Build**: tidak dicatat
+- **Perangkat**:
+  - HP 1: tidak dicatat, Android tidak dicatat
+  - HP 2: tidak dicatat, Android tidak dicatat
 
-| Merek / Model HP | Versi Android | Sumber Build (APK preview SCRUM-80 / Expo Go) | Login Berhasil | Sesi Bertahan Setelah Tutup Paksa | Logout Berhasil | Mode Pesawat (Error Handling Wajar) | Catatan Pengujian |
-|---|---|---|---|---|---|---|---|
-| (Menunggu hasil Akbar) | - | - | - | - | - | - | Menunggu input hasil uji Akbar |
-| (Menunggu hasil Akbar) | - | - | - | - | - | - | Menunggu input hasil uji Akbar |
+### Tabel Hasil Uji per HP
+
+| Perangkat | Login | Sesi Bertahan Setelah Ditutup Paksa | Logout | Pesan Error Jaringan di Mode Pesawat | Status |
+|---|---|---|---|---|---|
+| **HP 1** (tidak dicatat, Android tidak dicatat) | Lulus | Lulus | Lulus | Lulus | **LULUS** |
+| **HP 2** (tidak dicatat, Android tidak dicatat) | Lulus | Lulus | Lulus | Lulus | **LULUS** |
+
+**Catatan Bukti**: Tidak ada tangkapan layar atau rekaman. Hasil berdasarkan pengamatan langsung penguji dan saksi saat pengujian.
 
 ---
 
@@ -310,3 +319,5 @@ App\Models\User::where('email', 'like', 'qa-s1-%@revira.test')->delete();
    - Eksekusi `php artisan db:seed --force` di Railway Console untuk memperbarui status membership `member1` menjadi aktif kembali.
 5. **Pembaruan Dokumentasi README (QA-05a & QA-05b)**:
    - Hapus instruksi `php artisan storage:link` dan sinkronkan panduan direktori proyek.
+6. **Standarisasi Bukti Pengujian Mobile**:
+   - Pengujian mobile berikutnya menyertakan tangkapan layar atau catatan perangkat sebagai bukti.
