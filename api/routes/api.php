@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
+use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PublicClassController;
@@ -60,6 +61,18 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
         ->whereNumber('membershipPlan');
     Route::delete('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'destroy'])
         ->whereNumber('membershipPlan');
+
+    // Jam operasional gym per hari (SCRUM-51)
+    Route::controller(OperationalHourController::class)
+        ->prefix('operational-hours')
+        ->whereNumber('operationalHour')
+        ->group(function () {
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('/{operationalHour}', 'show');
+            Route::put('/{operationalHour}', 'update');
+            Route::delete('/{operationalHour}', 'destroy');
+        });
 });
 
 Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {

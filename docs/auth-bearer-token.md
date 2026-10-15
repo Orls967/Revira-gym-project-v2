@@ -236,6 +236,45 @@ Route uji untuk membuktikan middleware (ada di Postman collection):
 | GET    | `/api/v1/admin/ping`   | `admin`              | `{ "message": "pong", "role": "admin" }` |
 | GET    | `/api/v1/member/ping`  | `member`             | `{ "message": "pong", "role": "member" }` |
 
+## Jam operasional (admin, SCRUM-51)
+
+CRUD jam buka-tutup gym per hari. Semua endpoint memakai `auth:sanctum` + `role:admin` (tamu 401, member 403).
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/operational-hours` | 200, `{ "data": [...] }` terurut Senin sampai Minggu |
+| POST   | `/api/v1/admin/operational-hours` | 201, `{ "message": "Jam operasional berhasil dibuat.", "data": {...} }` |
+| GET    | `/api/v1/admin/operational-hours/{id}` | 200, `{ "data": {...} }` |
+| PUT    | `/api/v1/admin/operational-hours/{id}` | 200, `{ "message": "Jam operasional berhasil diperbarui.", "data": {...} }` |
+| DELETE | `/api/v1/admin/operational-hours/{id}` | 200, `{ "message": "Jam operasional berhasil dihapus." }` |
+
+Body POST dan PUT (PUT mengganti seluruh field, aturan sama dengan POST):
+
+```json
+{ "day_of_week": "Senin", "open_time": "06:00", "close_time": "21:00", "is_closed": false }
+```
+
+Aturan:
+
+- `day_of_week` wajib, salah satu dari `Senin`, `Selasa`, `Rabu`, `Kamis`, `Jumat`, `Sabtu`, `Minggu` (sesuai enum migration). Satu baris per hari; hari yang sudah ada ditolak 422 (`Jam operasional untuk hari ini sudah ada.`).
+- `is_closed` wajib, boolean. Bila `true` (libur), `open_time` dan `close_time` boleh dikosongkan dan nilai yang dikirim **diabaikan**; keduanya disimpan `null`.
+- Bila `is_closed` `false`: `open_time` dan `close_time` wajib berformat `HH:MM`, dan jam tutup harus setelah jam buka (sama dengan jam buka juga ditolak).
+- `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
+
+Contoh item `data`:
+
+```json
+{
+  "id": 7,
+  "day_of_week": "Minggu",
+  "open_time": null,
+  "close_time": null,
+  "is_closed": true,
+  "created_at": "2026-10-10T08:00:00+08:00",
+  "updated_at": "2026-10-10T08:00:00+08:00"
+}
+```
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:
