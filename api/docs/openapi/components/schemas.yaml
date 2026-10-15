@@ -312,6 +312,7 @@ MembershipPlanInput:
       examples: [150000]
     description:
       type: [string, 'null']
+      maxLength: 1000
     is_active:
       type: boolean
       default: true

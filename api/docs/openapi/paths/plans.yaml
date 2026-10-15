@@ -1,8 +1,7 @@
 publicPlans:
   get:
     operationId: listPublicMembershipPlans
-    tags: [Membership Plans, Sprint 2]
-    x-status: planned
+    tags: [Membership Plans]
     summary: Daftar paket membership aktif (publik)
     description: SCRUM-93. Tanpa autentikasi. Hanya paket dengan `is_active` true. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
     security: []
@@ -25,8 +24,7 @@ publicPlans:
 adminPlans:
   get:
     operationId: listAdminMembershipPlans
-    tags: [Membership Plans, Sprint 2]
-    x-status: planned
+    tags: [Membership Plans]
     summary: Daftar semua paket (admin)
     description: SCRUM-93. Role admin. Termasuk paket nonaktif.
     responses:
@@ -36,16 +34,25 @@ adminPlans:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/MembershipPlanList
+            example:
+              data:
+                - id: 1
+                  name: Bulanan
+                  duration_days: 30
+                  price: 150000
+                  description: Akses gym 30 hari
+                  is_active: true
+                  created_at: '2026-10-10T08:00:00+08:00'
+                  updated_at: '2026-10-10T08:00:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
         $ref: ../components/responses.yaml#/Forbidden
   post:
     operationId: createMembershipPlan
-    tags: [Membership Plans, Sprint 2]
-    x-status: planned
+    tags: [Membership Plans]
     summary: Buat paket (admin)
-    description: SCRUM-93. Role admin.
+    description: SCRUM-93. Role admin. `is_active` default `true` bila tidak dikirim, dan respons selalu memuat nilai boolean.
     requestBody:
       required: true
       content:
@@ -65,6 +72,17 @@ adminPlans:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/MembershipPlanMutationResponse
+            example:
+              message: Paket membership berhasil dibuat.
+              data:
+                id: 1
+                name: Bulanan
+                duration_days: 30
+                price: 150000
+                description: Akses gym 30 hari
+                is_active: true
+                created_at: '2026-10-10T08:00:00+08:00'
+                updated_at: '2026-10-10T08:00:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -76,10 +94,9 @@ adminPlanById:
     - $ref: ../components/parameters.yaml#/Id
   get:
     operationId: getMembershipPlan
-    tags: [Membership Plans, Sprint 2]
-    x-status: planned
+    tags: [Membership Plans]
     summary: Detail paket (admin)
-    description: SCRUM-93. Role admin.
+    description: SCRUM-93. Role admin. ID yang tidak ada atau bukan angka dibalas 404. Peran dicek sebelum ID dicari, jadi member selalu mendapat 403, termasuk untuk ID yang tidak ada.
     responses:
       '200':
         description: Detail paket.
@@ -87,6 +104,16 @@ adminPlanById:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/MembershipPlanResponse
+            example:
+              data:
+                id: 1
+                name: Bulanan
+                duration_days: 30
+                price: 150000
+                description: Akses gym 30 hari
+                is_active: true
+                created_at: '2026-10-10T08:00:00+08:00'
+                updated_at: '2026-10-10T08:00:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -95,16 +122,21 @@ adminPlanById:
         $ref: ../components/responses.yaml#/NotFound
   put:
     operationId: updateMembershipPlan
-    tags: [Membership Plans, Sprint 2]
-    x-status: planned
+    tags: [Membership Plans]
     summary: Ubah paket (admin)
-    description: SCRUM-93. Role admin.
+    description: SCRUM-93. Role admin. Update penuh, bukan parsial. Field `name`, `duration_days`, dan `price` wajib dikirim ulang. `is_active` bila tidak dikirim tidak berubah. Peran dicek sebelum ID dicari, jadi member selalu mendapat 403.
     requestBody:
       required: true
       content:
         application/json:
           schema:
             $ref: ../components/schemas.yaml#/MembershipPlanInput
+          example:
+            name: Bulanan
+            duration_days: 30
+            price: 175000
+            description: Akses gym 30 hari
+            is_active: true
     responses:
       '200':
         description: Paket diubah.
@@ -112,6 +144,17 @@ adminPlanById:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/MembershipPlanMutationResponse
+            example:
+              message: Paket membership berhasil diperbarui.
+              data:
+                id: 1
+                name: Bulanan
+                duration_days: 30
+                price: 175000
+                description: Akses gym 30 hari
+                is_active: true
+                created_at: '2026-10-10T08:00:00+08:00'
+                updated_at: '2026-10-10T08:00:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -122,10 +165,9 @@ adminPlanById:
         $ref: ../components/responses.yaml#/ValidationError
   delete:
     operationId: deleteMembershipPlan
-    tags: [Membership Plans, Sprint 2]
-    x-status: planned
+    tags: [Membership Plans]
     summary: Hapus paket (admin)
-    description: SCRUM-93. Role admin. Hanya untuk data yang belum pernah dipakai. Bila sudah dipakai → 409; nonaktifkan dengan is_active=false.
+    description: SCRUM-93. Role admin. Hanya untuk data yang belum pernah dipakai. Bila sudah dipakai → 409; nonaktifkan dengan is_active=false. Peran dicek sebelum ID dicari, jadi member selalu mendapat 403.
     responses:
       '200':
         description: Paket dihapus.
