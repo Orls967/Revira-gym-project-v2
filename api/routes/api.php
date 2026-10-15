@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\TransactionReceiptController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -29,6 +30,11 @@ Route::get('/me', MeController::class)->middleware(['auth:sanctum', 'role:member
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+// Penyajian bukti transfer terautentikasi (admin atau pemilik transaksi)
+Route::middleware('auth:sanctum')->prefix('transactions')->group(function () {
+    Route::get('/{transaction}/receipt', [TransactionReceiptController::class, 'show']);
+});
 
 // Route ping untuk membuktikan middleware role; route admin/member berikutnya mengikuti pola grup ini
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
