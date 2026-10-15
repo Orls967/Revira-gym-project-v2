@@ -49,6 +49,60 @@ TooManyRequests:
         $ref: ./schemas.yaml#/Error
       example:
         message: Too Many Attempts.
+OperationalHourValidationError:
+  description: Validasi jam operasional gagal (SCRUM-51).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        empty:
+          summary: Body kosong
+          value:
+            message: The day of week field is required. (and 3 more errors)
+            errors:
+              day_of_week:
+                - The day of week field is required.
+              is_closed:
+                - The is closed field is required.
+              open_time:
+                - Jam buka wajib diisi bila hari tidak libur.
+              close_time:
+                - Jam tutup wajib diisi bila hari tidak libur.
+        duplicateDay:
+          summary: Hari sudah punya jam operasional
+          value:
+            message: Jam operasional untuk hari ini sudah ada.
+            errors:
+              day_of_week:
+                - Jam operasional untuk hari ini sudah ada.
+        closeBeforeOpen:
+          summary: Jam tutup tidak setelah jam buka
+          value:
+            message: Jam tutup harus setelah jam buka.
+            errors:
+              close_time:
+                - Jam tutup harus setelah jam buka.
+        openWithoutHours:
+          summary: Tidak libur tetapi jam kosong
+          value:
+            message: Jam buka wajib diisi bila hari tidak libur. (and 1 more error)
+            errors:
+              open_time:
+                - Jam buka wajib diisi bila hari tidak libur.
+              close_time:
+                - Jam tutup wajib diisi bila hari tidak libur.
+        invalidFormat:
+          summary: Hari tidak dikenal dan format jam salah
+          value:
+            message: 'Hari harus salah satu dari: Senin, Selasa, Rabu, Kamis, Jumat, Sabtu, Minggu. (and 2 more errors)'
+            errors:
+              day_of_week:
+                - 'Hari harus salah satu dari: Senin, Selasa, Rabu, Kamis, Jumat, Sabtu, Minggu.'
+              open_time:
+                - Jam buka harus berformat HH:MM.
+              close_time:
+                - Jam tutup harus berformat HH:MM.
 GymClassValidationError:
   description: Validasi kelas gagal (SCRUM-52).
   content:

@@ -1,8 +1,13 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\GymClassController;
+use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
+use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\PublicClassController;
+use App\Http\Controllers\Api\V1\PublicOperationalHourController;
+use App\Http\Controllers\Api\V1\PublicPlanController;
 use App\Http\Controllers\Api\V1\TransactionReceiptController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -32,6 +37,13 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
+// Endpoint publik (tanpa autentikasi, throttled 120/menit)
+Route::middleware('throttle:public-api')->group(function () {
+    Route::get('/membership-plans', PublicPlanController::class);
+    Route::get('/operational-hours', PublicOperationalHourController::class);
+    Route::get('/classes', PublicClassController::class);
+});
+
 // Penyajian bukti transfer terautentikasi (admin atau pemilik transaksi)
 Route::middleware('auth:sanctum')->prefix('transactions')->group(function () {
     Route::get('/{transaction}/receipt', [TransactionReceiptController::class, 'show']);
@@ -40,6 +52,28 @@ Route::middleware('auth:sanctum')->prefix('transactions')->group(function () {
 // Route ping untuk membuktikan middleware role; route admin/member berikutnya mengikuti pola grup ini
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
     Route::get('/ping', fn () => response()->json(['message' => 'pong', 'role' => 'admin']));
+
+    // Manajemen paket membership (SCRUM-93)
+    Route::get('/membership-plans', [MembershipPlanController::class, 'index']);
+    Route::post('/membership-plans', [MembershipPlanController::class, 'store']);
+    Route::get('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'show'])
+        ->whereNumber('membershipPlan');
+    Route::put('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'update'])
+        ->whereNumber('membershipPlan');
+    Route::delete('/membership-plans/{membershipPlan}', [MembershipPlanController::class, 'destroy'])
+        ->whereNumber('membershipPlan');
+
+    // Jam operasional gym per hari (SCRUM-51)
+    Route::controller(OperationalHourController::class)
+        ->prefix('operational-hours')
+        ->whereNumber('operationalHour')
+        ->group(function () {
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('/{operationalHour}', 'show');
+            Route::put('/{operationalHour}', 'update');
+            Route::delete('/{operationalHour}', 'destroy');
+        });
 
     // Kelas gym dengan jumlah peserta minimum, tanpa kapasitas maksimum (SCRUM-52)
     Route::controller(GymClassController::class)
