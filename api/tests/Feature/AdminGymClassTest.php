@@ -364,6 +364,57 @@ class AdminGymClassTest extends TestCase
     }
 
     /**
+     * Kelas baru tidak boleh memakai instruktur nonaktif.
+     */
+    public function test_create_with_inactive_instructor_returns_422(): void
+    {
+        $inactive = Instructor::factory()->create(['is_active' => false]);
+        $this->actingAsAdmin();
+
+        $this->postJson(self::URL, $this->validPayload(['default_instructor_id' => $inactive->id]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['default_instructor_id' => 'Instruktur tidak ditemukan atau tidak aktif.']);
+
+        $this->assertDatabaseCount('classes', 0);
+    }
+
+    /**
+     * Kelas yang instrukturnya sudah dinonaktifkan tetap bisa diubah selama instrukturnya tidak diganti.
+     */
+    public function test_update_keeping_inactive_instructor_returns_200(): void
+    {
+        $instructor = Instructor::factory()->create();
+        $class = GymClass::factory()->create(['default_instructor_id' => $instructor->id]);
+        $instructor->update(['is_active' => false]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$class->id}", $this->validPayload([
+            'name' => 'Nama Baru',
+            'default_instructor_id' => $instructor->id,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Nama Baru')
+            ->assertJsonPath('data.default_instructor_id', $instructor->id);
+    }
+
+    /**
+     * Mengganti instruktur kelas ke instruktur nonaktif lain ditolak.
+     */
+    public function test_update_switching_to_other_inactive_instructor_returns_422(): void
+    {
+        $active = Instructor::factory()->create();
+        $inactive = Instructor::factory()->create(['is_active' => false]);
+        $class = GymClass::factory()->create(['default_instructor_id' => $active->id]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$class->id}", $this->validPayload(['default_instructor_id' => $inactive->id]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['default_instructor_id' => 'Instruktur tidak ditemukan atau tidak aktif.']);
+
+        $this->assertSame($active->id, $class->fresh()->default_instructor_id);
+    }
+
+    /**
      * Batas atas min_participants: 1000 diterima, di atasnya ditolak 422 dengan pesan yang jelas.
      */
     public function test_min_participants_above_1000_returns_422(): void

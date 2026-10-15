@@ -4,6 +4,8 @@ namespace App\Http\Requests\Admin;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 
 class StoreGymClassRequest extends FormRequest
 {
@@ -24,9 +26,17 @@ class StoreGymClassRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:1000'],
             // Batas atas mencegah nilai di luar rentang kolom integer lolos lalu ditolak database (500)
             'min_participants' => ['required', 'integer', 'min:1', 'max:1000'],
-            'default_instructor_id' => ['nullable', 'integer', 'exists:instructors,id'],
+            'default_instructor_id' => ['nullable', 'integer', $this->instructorRule()],
             'is_active' => ['sometimes', 'boolean'],
         ];
+    }
+
+    /**
+     * Kelas baru hanya boleh memakai instruktur aktif.
+     */
+    protected function instructorRule(): Exists
+    {
+        return Rule::exists('instructors', 'id')->where('is_active', true);
     }
 
     /**
@@ -37,7 +47,7 @@ class StoreGymClassRequest extends FormRequest
         return [
             'min_participants.min' => 'Jumlah peserta minimum harus minimal 1.',
             'min_participants.max' => 'Jumlah peserta minimum tidak boleh lebih dari 1000.',
-            'default_instructor_id.exists' => 'Instruktur tidak ditemukan.',
+            'default_instructor_id.exists' => 'Instruktur tidak ditemukan atau tidak aktif.',
         ];
     }
 }
