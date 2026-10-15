@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PublicClassController;
 use App\Http\Controllers\Api\V1\PublicOperationalHourController;
 use App\Http\Controllers\Api\V1\PublicPlanController;
+use App\Http\Controllers\Api\V1\TransactionReceiptController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +40,11 @@ Route::middleware('throttle:public-api')->group(function () {
     Route::get('/membership-plans', PublicPlanController::class);
     Route::get('/operational-hours', PublicOperationalHourController::class);
     Route::get('/classes', PublicClassController::class);
+});
+
+// Penyajian bukti transfer terautentikasi (admin atau pemilik transaksi)
+Route::middleware('auth:sanctum')->prefix('transactions')->group(function () {
+    Route::get('/{transaction}/receipt', [TransactionReceiptController::class, 'show']);
 });
 
 // Route ping untuk membuktikan middleware role; route admin/member berikutnya mengikuti pola grup ini
