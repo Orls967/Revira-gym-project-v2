@@ -234,6 +234,51 @@ Route uji untuk membuktikan middleware (ada di Postman collection):
 | GET    | `/api/v1/admin/ping`   | `admin`              | `{ "message": "pong", "role": "admin" }` |
 | GET    | `/api/v1/member/ping`  | `member`             | `{ "message": "pong", "role": "member" }` |
 
+## Kelas (admin, SCRUM-52)
+
+CRUD kelas gym. Semua endpoint memakai `auth:sanctum` + `role:admin` (tamu 401, member 403). Kelas hanya punya jumlah peserta minimum; **tidak ada kapasitas maksimum**.
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/classes` | 200, paginasi Laravel `{ "data": [...], "links": {...}, "meta": {...} }` |
+| POST   | `/api/v1/admin/classes` | 201, `{ "message": "Kelas berhasil dibuat.", "data": {...} }` |
+| GET    | `/api/v1/admin/classes/{id}` | 200, `{ "data": {...} }` |
+| PUT    | `/api/v1/admin/classes/{id}` | 200, `{ "message": "Kelas berhasil diperbarui.", "data": {...} }` |
+| DELETE | `/api/v1/admin/classes/{id}` | 200, `{ "message": "Kelas berhasil dihapus." }` |
+
+Query string `GET /api/v1/admin/classes` (semuanya opsional, nilai tidak valid mendapat 422):
+
+| Parameter | Keterangan |
+|-----------|------------|
+| `is_active` | `true`/`false` (atau `1`/`0`). Tanpa parameter ini, kelas aktif dan nonaktif sama-sama tampil. |
+| `search` | Cari nama kelas yang mengandung teks ini (maks 100 karakter). |
+| `page` | Nomor halaman, minimal 1. |
+| `per_page` | 1-100, default 15. |
+
+Body POST dan PUT:
+
+```json
+{
+  "name": "Yoga Pagi",
+  "description": "Yoga untuk pemula",
+  "min_participants": 3,
+  "default_instructor_id": 1,
+  "is_active": true
+}
+```
+
+Aturan:
+
+- `name` wajib, maks 100 karakter. `description` opsional (boleh `null`), maks 1000 karakter.
+- `min_participants` wajib, bilangan bulat **>= 1** (0, negatif, dan pecahan ditolak 422).
+- `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang ada.
+- `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
+- Field lain seperti kapasitas maksimum diabaikan.
+- Kelas yang sudah punya jadwal **tidak bisa dihapus**: 409 `{ "message": "Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif." }`. Nonaktifkan lewat PUT dengan `is_active: false`.
+- `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
+
+Kelas nonaktif tidak boleh dipilih untuk jadwal baru. Backend jadwal (SCRUM-55) memakai scope `GymClass::active()`.
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\GymClassController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
 use Illuminate\Http\Request;
@@ -33,6 +34,19 @@ Route::get('/user', function (Request $request) {
 // Route ping untuk membuktikan middleware role; route admin/member berikutnya mengikuti pola grup ini
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
     Route::get('/ping', fn () => response()->json(['message' => 'pong', 'role' => 'admin']));
+
+    // Kelas gym dengan jumlah peserta minimum, tanpa kapasitas maksimum (SCRUM-52)
+    Route::controller(GymClassController::class)
+        ->prefix('classes')
+        ->whereNumber('gymClass')
+        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404))
+        ->group(function () {
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('/{gymClass}', 'show');
+            Route::put('/{gymClass}', 'update');
+            Route::delete('/{gymClass}', 'destroy');
+        });
 });
 
 Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Revira Gym API - Auth",
-    "description": "Login dan logout Bearer token. Ganti variabel `baseUrl` ke URL lokal atau staging. Setelah Login dijalankan, token otomatis tersimpan di variabel `token` dan dipakai request lain. Request Admin ping / Member ping membuktikan middleware role (SCRUM-40): login sebagai admin atau member lewat variabel `email`. Register (SCRUM-92) membuat akun member baru dan otomatis menyimpan token; Me hanya untuk role member.",
+    "description": "Login dan logout Bearer token. Ganti variabel `baseUrl` ke URL lokal atau staging. Setelah Login dijalankan, token otomatis tersimpan di variabel `token` dan dipakai request lain. Request Admin ping / Member ping membuktikan middleware role (SCRUM-40): login sebagai admin atau member lewat variabel `email`. Register (SCRUM-92) membuat akun member baru dan otomatis menyimpan token; Me hanya untuk role member. Folder Admin - Kelas (SCRUM-52) berisi CRUD kelas untuk role admin.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -284,6 +284,448 @@
           "header": [{ "key": "Content-Type", "value": "application/json" }],
           "_postman_previewlanguage": "json",
           "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Admin - Kelas (SCRUM-52)",
+      "description": "CRUD kelas, role:admin. Login dulu lewat \"Login (admin-web)\" dengan email admin. Kelas hanya punya `min_participants` (bilangan bulat >= 1), tanpa kapasitas maksimum. Daftar mendukung filter `is_active`, `search` (nama), dan paginasi `page`/`per_page` (maks 100). Kelas yang sudah punya jadwal tidak bisa dihapus (409); nonaktifkan dengan `is_active=false`.",
+      "item": [
+        {
+          "name": "List kelas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/classes?is_active=true&per_page=15",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "classes"
+              ],
+              "query": [
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "description": "Opsional. true/false atau 1/0.",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "yoga",
+                  "description": "Opsional. Cari nama kelas (mengandung teks).",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Opsional. Nomor halaman.",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "description": "Opsional. 1-100, default 15.",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"Yoga Pagi\",\n      \"description\": \"Yoga untuk pemula\",\n      \"min_participants\": 3,\n      \"default_instructor_id\": 1,\n      \"is_active\": true,\n      \"created_at\": \"2026-10-10T08:00:00+08:00\",\n      \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/classes?is_active=true&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/classes?is_active=true&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/classes?is_active=true&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/classes\",\n    \"per_page\": 15,\n    \"to\": 1,\n    \"total\": 1\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Tambah kelas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Yoga Pagi\",\n  \"description\": \"Yoga untuk pemula\",\n  \"min_participants\": 3,\n  \"default_instructor_id\": 1,\n  \"is_active\": true\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "201 Dibuat",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas berhasil dibuat.\",\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Yoga Pagi\",\n    \"description\": \"Yoga untuk pemula\",\n    \"min_participants\": 3,\n    \"default_instructor_id\": 1,\n    \"is_active\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "422 min_participants 0",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jumlah peserta minimum harus minimal 1.\",\n  \"errors\": {\n    \"min_participants\": [\n      \"Jumlah peserta minimum harus minimal 1.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Detail kelas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes/1"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Yoga Pagi\",\n    \"description\": \"Yoga untuk pemula\",\n    \"min_participants\": 3,\n    \"default_instructor_id\": 1,\n    \"is_active\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ubah kelas (nonaktifkan)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Yoga Pagi\",\n  \"description\": \"Yoga untuk pemula\",\n  \"min_participants\": 3,\n  \"default_instructor_id\": 1,\n  \"is_active\": false\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 Diubah",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Yoga Pagi\",\n    \"description\": \"Yoga untuk pemula\",\n    \"min_participants\": 3,\n    \"default_instructor_id\": 1,\n    \"is_active\": false,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Hapus kelas",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes/1"
+          },
+          "response": [
+            {
+              "name": "200 Dihapus",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas berhasil dihapus.\"\n}"
+            },
+            {
+              "name": "409 Kelas sudah memiliki jadwal",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif.\"\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         }
       ]
     },
