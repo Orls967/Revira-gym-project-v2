@@ -268,7 +268,7 @@ class AdminHoursAndClassesCoverageTest extends TestCase
             ],
             'kelas: instruktur tidak ada' => [
                 '/api/v1/admin/classes', [...$class, 'default_instructor_id' => 999], 'default_instructor_id',
-                'Instruktur tidak ditemukan.',
+                'Instruktur tidak ditemukan atau tidak aktif.',
             ],
         ];
     }

@@ -332,7 +332,7 @@
       ]
     },
     {
-      "name": "Sprint 2 - Paket (SCRUM-93)",
+      "name": "Paket (SCRUM-93)",
       "item": [
         {
           "name": "Paket publik (aktif)",
@@ -345,7 +345,7 @@
               }
             ],
             "url": "{{baseUrl}}/membership-plans",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Tanpa autentikasi. Hanya paket aktif; field id, name, duration_days, price, description. Rate limit public-api 120 request/menit per IP (429 bila terlampaui)."
           }
         },
         {
@@ -369,7 +369,7 @@
               ]
             },
             "url": "{{baseUrl}}/admin/membership-plans",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. Semua paket termasuk yang nonaktif. Tanpa token 401, member 403."
           }
         },
         {
@@ -401,7 +401,7 @@
               "raw": "{\n  \"name\": \"Bulanan\",\n  \"duration_days\": 30,\n  \"price\": 150000,\n  \"description\": \"Akses gym 30 hari\",\n  \"is_active\": true\n}"
             },
             "url": "{{baseUrl}}/admin/membership-plans",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. name, duration_days, price wajib; description maks 1000 karakter; is_active default true bila tidak dikirim. Sukses 201, validasi gagal 422."
           }
         },
         {
@@ -425,7 +425,7 @@
               ]
             },
             "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. ID tidak ada atau bukan angka dibalas 404 \"Data tidak ditemukan.\". Member selalu 403, termasuk untuk ID yang tidak ada."
           }
         },
         {
@@ -457,7 +457,7 @@
               "raw": "{\n  \"name\": \"Bulanan\",\n  \"duration_days\": 30,\n  \"price\": 150000,\n  \"description\": \"Akses gym 30 hari\",\n  \"is_active\": true\n}"
             },
             "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. Update penuh, bukan parsial: name, duration_days, price wajib; description maks 1000 karakter. ID tidak ada dibalas 404, member 403."
           }
         },
         {
@@ -481,13 +481,13 @@
               ]
             },
             "url": "{{baseUrl}}/admin/membership-plans/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Role admin. 200 bila paket belum pernah dipakai; 409 bila sudah dipakai member (nonaktifkan lewat is_active=false). ID tidak ada dibalas 404, member 403."
           }
         }
       ]
     },
     {
-      "name": "Sprint 2 - Publik (SCRUM-93)",
+      "name": "Publik (SCRUM-93)",
       "item": [
         {
           "name": "Jam operasional publik",
@@ -500,7 +500,7 @@
               }
             ],
             "url": "{{baseUrl}}/operational-hours",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Tanpa autentikasi. Field day_of_week, open_time, close_time, is_closed. Rate limit public-api 120 request/menit per IP (429 bila terlampaui)."
           }
         },
         {
@@ -514,7 +514,7 @@
               }
             ],
             "url": "{{baseUrl}}/classes",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
+            "description": "Tanpa autentikasi. Hanya kelas aktif; field id, name, description. Rate limit public-api 120 request/menit per IP (429 bila terlampaui)."
           }
         }
       ]
@@ -542,9 +542,49 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/operational-hours",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/operational-hours"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 1,\n      \"day_of_week\": \"Senin\",\n      \"open_time\": \"06:00\",\n      \"close_time\": \"21:00\",\n      \"is_closed\": false,\n      \"created_at\": \"2026-10-10T08:00:00+08:00\",\n      \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n    },\n    {\n      \"id\": 7,\n      \"day_of_week\": \"Minggu\",\n      \"open_time\": null,\n      \"close_time\": null,\n      \"is_closed\": true,\n      \"created_at\": \"2026-10-10T08:00:00+08:00\",\n      \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - tambah jam",
@@ -574,9 +614,88 @@
               "mode": "raw",
               "raw": "{\n  \"day_of_week\": \"Senin\",\n  \"open_time\": \"06:00\",\n  \"close_time\": \"21:00\",\n  \"is_closed\": false\n}"
             },
-            "url": "{{baseUrl}}/admin/operational-hours",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/operational-hours"
+          },
+          "response": [
+            {
+              "name": "201 Dibuat",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil dibuat.\",\n  \"data\": {\n    \"id\": 1,\n    \"day_of_week\": \"Senin\",\n    \"open_time\": \"06:00\",\n    \"close_time\": \"21:00\",\n    \"is_closed\": false,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "201 Hari libur (tanpa jam)",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil dibuat.\",\n  \"data\": {\n    \"id\": 7,\n    \"day_of_week\": \"Minggu\",\n    \"open_time\": null,\n    \"close_time\": null,\n    \"is_closed\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "422 Hari duplikat",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional untuk hari ini sudah ada.\",\n  \"errors\": {\n    \"day_of_week\": [\n      \"Jam operasional untuk hari ini sudah ada.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Jam tutup sebelum jam buka",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam tutup harus setelah jam buka.\",\n  \"errors\": {\n    \"close_time\": [\n      \"Jam tutup harus setelah jam buka.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - detail jam",
@@ -598,12 +717,65 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/operational-hours/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/operational-hours/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": {\n    \"id\": 1,\n    \"day_of_week\": \"Senin\",\n    \"open_time\": \"06:00\",\n    \"close_time\": \"21:00\",\n    \"is_closed\": false,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
-          "name": "Admin - ubah jam",
+          "name": "Admin - ubah jam (tandai libur)",
           "request": {
             "method": "PUT",
             "header": [
@@ -628,11 +800,64 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"day_of_week\": \"Senin\",\n  \"open_time\": \"06:00\",\n  \"close_time\": \"21:00\",\n  \"is_closed\": false\n}"
+              "raw": "{\n  \"day_of_week\": \"Senin\",\n  \"is_closed\": true\n}"
             },
-            "url": "{{baseUrl}}/admin/operational-hours/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/operational-hours/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 Diubah",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 1,\n    \"day_of_week\": \"Senin\",\n    \"open_time\": null,\n    \"close_time\": null,\n    \"is_closed\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - hapus jam",
@@ -654,11 +879,65 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/operational-hours/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/operational-hours/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 Dihapus",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil dihapus.\"\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         }
-      ]
+      ],
+      "description": "CRUD jam operasional per hari, role:admin. Login dulu lewat \"Login (admin-web)\" dengan email admin. Satu baris per `day_of_week` (Senin..Minggu); daftar terurut Senin sampai Minggu. Bila `is_closed` true, `open_time`/`close_time` diabaikan dan disimpan null. Bila tidak libur, jam wajib `HH:MM` dan jam tutup harus setelah jam buka."
     },
     {
       "name": "Sprint 2 - Kelas (SCRUM-52)",
@@ -683,9 +962,88 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/classes?is_active=true&search=yoga&page=1",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/classes?is_active=true&search=yoga&page=1"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"Yoga Pagi\",\n      \"description\": \"Yoga untuk pemula\",\n      \"min_participants\": 3,\n      \"default_instructor_id\": 1,\n      \"is_active\": true,\n      \"created_at\": \"2026-10-10T08:00:00+08:00\",\n      \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/classes?is_active=true&search=yoga&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/classes?is_active=true&search=yoga&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/classes?is_active=true&search=yoga&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/classes\",\n    \"per_page\": 15,\n    \"to\": 1,\n    \"total\": 1\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Admin - cari kelas dengan simbol (search=%25)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes?search=%25",
+            "description": "`%25` adalah `%` yang di-encode. Simbol `%` dan `_` dicari apa adanya, bukan wildcard LIKE. Dengan data seeder (tidak ada nama kelas yang mengandung `%`) hasilnya kosong; tanpa escape, `%` akan cocok dengan semua kelas."
+          },
+          "response": [
+            {
+              "name": "200 Tidak ada nama yang mengandung %",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/classes?search=%25&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/classes?search=%25&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": null,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/classes?search=%25&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/classes\",\n    \"per_page\": 15,\n    \"to\": null,\n    \"total\": 0\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Admin - buat kelas",
@@ -715,9 +1073,75 @@
               "mode": "raw",
               "raw": "{\n  \"name\": \"Yoga Pagi\",\n  \"description\": \"Yoga untuk pemula\",\n  \"min_participants\": 3,\n  \"default_instructor_id\": 1,\n  \"is_active\": true\n}"
             },
-            "url": "{{baseUrl}}/admin/classes",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/classes"
+          },
+          "response": [
+            {
+              "name": "201 Dibuat",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas berhasil dibuat.\",\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Yoga Pagi\",\n    \"description\": \"Yoga untuk pemula\",\n    \"min_participants\": 3,\n    \"default_instructor_id\": 1,\n    \"is_active\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "422 min_participants 0",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jumlah peserta minimum harus minimal 1.\",\n  \"errors\": {\n    \"min_participants\": [\n      \"Jumlah peserta minimum harus minimal 1.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 min_participants lebih dari 1000",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jumlah peserta minimum tidak boleh lebih dari 1000.\",\n  \"errors\": {\n    \"min_participants\": [\n      \"Jumlah peserta minimum tidak boleh lebih dari 1000.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - detail kelas",
@@ -739,12 +1163,65 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/classes/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/classes/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Yoga Pagi\",\n    \"description\": \"Yoga untuk pemula\",\n    \"min_participants\": 3,\n    \"default_instructor_id\": 1,\n    \"is_active\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
-          "name": "Admin - ubah kelas",
+          "name": "Admin - ubah kelas (nonaktifkan)",
           "request": {
             "method": "PUT",
             "header": [
@@ -769,11 +1246,64 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Yoga Pagi\",\n  \"description\": \"Yoga untuk pemula\",\n  \"min_participants\": 3,\n  \"default_instructor_id\": 1,\n  \"is_active\": true\n}"
+              "raw": "{\n  \"name\": \"Yoga Pagi\",\n  \"description\": \"Yoga untuk pemula\",\n  \"min_participants\": 3,\n  \"default_instructor_id\": 1,\n  \"is_active\": false\n}"
             },
-            "url": "{{baseUrl}}/admin/classes/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/classes/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 Diubah",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Yoga Pagi\",\n    \"description\": \"Yoga untuk pemula\",\n    \"min_participants\": 3,\n    \"default_instructor_id\": 1,\n    \"is_active\": false,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - hapus kelas (409 bila berjadwal)",
@@ -795,11 +1325,78 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/classes/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/classes/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 Dihapus",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas berhasil dihapus.\"\n}"
+            },
+            {
+              "name": "409 Kelas sudah memiliki jadwal",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif.\"\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         }
-      ]
+      ],
+      "description": "CRUD kelas, role:admin. Login dulu lewat \"Login (admin-web)\" dengan email admin. Kelas hanya punya `min_participants` (bilangan bulat 1-1000), tanpa kapasitas maksimum. Daftar mendukung filter `is_active`, `search` (nama; `%` dan `_` dicari apa adanya), dan paginasi `page`/`per_page` (maks 100). Kelas yang sudah punya jadwal tidak bisa dihapus (409); nonaktifkan dengan `is_active=false`."
     },
     {
       "name": "Sprint 2 - Instruktur (SCRUM-54)",

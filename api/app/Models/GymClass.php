@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,6 +30,14 @@ class GymClass extends Model
         'min_participants' => 'integer',
         'is_active' => 'boolean',
     ];
+
+    /**
+     * Hanya kelas aktif. Kelas nonaktif tidak boleh dipilih untuk jadwal baru (SCRUM-55).
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
 
     /**
      * Get the default instructor for this class.

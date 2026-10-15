@@ -236,6 +236,90 @@ Route uji untuk membuktikan middleware (ada di Postman collection):
 | GET    | `/api/v1/admin/ping`   | `admin`              | `{ "message": "pong", "role": "admin" }` |
 | GET    | `/api/v1/member/ping`  | `member`             | `{ "message": "pong", "role": "member" }` |
 
+## Jam operasional (admin, SCRUM-51)
+
+CRUD jam buka-tutup gym per hari. Semua endpoint memakai `auth:sanctum` + `role:admin` (tamu 401, member 403).
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/operational-hours` | 200, `{ "data": [...] }` terurut Senin sampai Minggu |
+| POST   | `/api/v1/admin/operational-hours` | 201, `{ "message": "Jam operasional berhasil dibuat.", "data": {...} }` |
+| GET    | `/api/v1/admin/operational-hours/{id}` | 200, `{ "data": {...} }` |
+| PUT    | `/api/v1/admin/operational-hours/{id}` | 200, `{ "message": "Jam operasional berhasil diperbarui.", "data": {...} }` |
+| DELETE | `/api/v1/admin/operational-hours/{id}` | 200, `{ "message": "Jam operasional berhasil dihapus." }` |
+
+Body POST dan PUT (PUT mengganti seluruh field, aturan sama dengan POST):
+
+```json
+{ "day_of_week": "Senin", "open_time": "06:00", "close_time": "21:00", "is_closed": false }
+```
+
+Aturan:
+
+- `day_of_week` wajib, salah satu dari `Senin`, `Selasa`, `Rabu`, `Kamis`, `Jumat`, `Sabtu`, `Minggu` (sesuai enum migration). Satu baris per hari; hari yang sudah ada ditolak 422 (`Jam operasional untuk hari ini sudah ada.`).
+- `is_closed` wajib, boolean. Bila `true` (libur), `open_time` dan `close_time` boleh dikosongkan dan nilai yang dikirim **diabaikan**; keduanya disimpan `null`.
+- Bila `is_closed` `false`: `open_time` dan `close_time` wajib berformat `HH:MM`, dan jam tutup harus setelah jam buka (sama dengan jam buka juga ditolak).
+- `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
+
+Contoh item `data`:
+
+```json
+{
+  "id": 7,
+  "day_of_week": "Minggu",
+  "open_time": null,
+  "close_time": null,
+  "is_closed": true,
+  "created_at": "2026-10-10T08:00:00+08:00",
+  "updated_at": "2026-10-10T08:00:00+08:00"
+}
+```
+
+## Kelas (admin, SCRUM-52)
+
+CRUD kelas gym. Semua endpoint memakai `auth:sanctum` + `role:admin` (tamu 401, member 403). Kelas hanya punya jumlah peserta minimum; **tidak ada kapasitas maksimum**.
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/classes` | 200, paginasi Laravel `{ "data": [...], "links": {...}, "meta": {...} }` |
+| POST   | `/api/v1/admin/classes` | 201, `{ "message": "Kelas berhasil dibuat.", "data": {...} }` |
+| GET    | `/api/v1/admin/classes/{id}` | 200, `{ "data": {...} }` |
+| PUT    | `/api/v1/admin/classes/{id}` | 200, `{ "message": "Kelas berhasil diperbarui.", "data": {...} }` |
+| DELETE | `/api/v1/admin/classes/{id}` | 200, `{ "message": "Kelas berhasil dihapus." }` |
+
+Query string `GET /api/v1/admin/classes` (semuanya opsional, nilai tidak valid mendapat 422):
+
+| Parameter | Keterangan |
+|-----------|------------|
+| `is_active` | `true`/`false` (atau `1`/`0`). Tanpa parameter ini, kelas aktif dan nonaktif sama-sama tampil. |
+| `search` | Cari nama kelas yang mengandung teks ini (maks 100 karakter, tidak peka huruf besar/kecil). `%` dan `_` dicari apa adanya, bukan wildcard. |
+| `page` | Nomor halaman, minimal 1. |
+| `per_page` | 1-100, default 15. |
+
+Body POST dan PUT:
+
+```json
+{
+  "name": "Yoga Pagi",
+  "description": "Yoga untuk pemula",
+  "min_participants": 3,
+  "default_instructor_id": 1,
+  "is_active": true
+}
+```
+
+Aturan:
+
+- `name` wajib, maks 100 karakter. `description` opsional (boleh `null`), maks 1000 karakter.
+- `min_participants` wajib, bilangan bulat **1-1000** (0, negatif, pecahan, dan nilai di atas 1000 ditolak 422).
+- `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang **aktif** (422 `Instruktur tidak ditemukan atau tidak aktif.`). Pada PUT, instruktur yang sudah terpasang boleh dikirim ulang walau kini nonaktif, agar kelas tetap bisa diubah; mengganti ke instruktur lain tetap wajib yang aktif.
+- `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
+- Field lain seperti kapasitas maksimum diabaikan.
+- Kelas yang sudah punya jadwal **tidak bisa dihapus**: 409 `{ "message": "Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif." }`. Nonaktifkan lewat PUT dengan `is_active: false`.
+- `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
+
+Kelas nonaktif tidak boleh dipilih untuk jadwal baru. Backend jadwal (SCRUM-55) memakai scope `GymClass::active()`.
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:
