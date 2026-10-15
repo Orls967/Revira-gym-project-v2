@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Revira Gym API - Auth",
-    "description": "Login dan logout Bearer token. Ganti variabel `baseUrl` ke URL lokal atau staging. Setelah Login dijalankan, token otomatis tersimpan di variabel `token` dan dipakai request lain. Request Admin ping / Member ping membuktikan middleware role (SCRUM-40): login sebagai admin atau member lewat variabel `email`. Register (SCRUM-92) membuat akun member baru dan otomatis menyimpan token; Me hanya untuk role member.",
+    "description": "Login dan logout Bearer token. Ganti variabel `baseUrl` ke URL lokal atau staging. Setelah Login dijalankan, token otomatis tersimpan di variabel `token` dan dipakai request lain. Request Admin ping / Member ping membuktikan middleware role (SCRUM-40): login sebagai admin atau member lewat variabel `email`. Register (SCRUM-92) membuat akun member baru dan otomatis menyimpan token; Me hanya untuk role member. Folder Admin - Jam Operasional (SCRUM-51) berisi CRUD jam operasional untuk role admin.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -284,6 +284,426 @@
           "header": [{ "key": "Content-Type", "value": "application/json" }],
           "_postman_previewlanguage": "json",
           "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Admin - Jam Operasional (SCRUM-51)",
+      "description": "CRUD jam operasional per hari, role:admin. Login dulu lewat \"Login (admin-web)\" dengan email admin. Satu baris per `day_of_week` (Senin..Minggu); daftar terurut Senin sampai Minggu. Bila `is_closed` true, `open_time`/`close_time` diabaikan dan disimpan null. Bila tidak libur, jam wajib `HH:MM` dan jam tutup harus setelah jam buka.",
+      "item": [
+        {
+          "name": "List jam operasional",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 1,\n      \"day_of_week\": \"Senin\",\n      \"open_time\": \"06:00\",\n      \"close_time\": \"21:00\",\n      \"is_closed\": false,\n      \"created_at\": \"2026-10-10T08:00:00+08:00\",\n      \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n    },\n    {\n      \"id\": 7,\n      \"day_of_week\": \"Minggu\",\n      \"open_time\": null,\n      \"close_time\": null,\n      \"is_closed\": true,\n      \"created_at\": \"2026-10-10T08:00:00+08:00\",\n      \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Tambah jam operasional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"day_of_week\": \"Senin\",\n  \"open_time\": \"06:00\",\n  \"close_time\": \"21:00\",\n  \"is_closed\": false\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "201 Dibuat",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil dibuat.\",\n  \"data\": {\n    \"id\": 1,\n    \"day_of_week\": \"Senin\",\n    \"open_time\": \"06:00\",\n    \"close_time\": \"21:00\",\n    \"is_closed\": false,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "201 Hari libur (tanpa jam)",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil dibuat.\",\n  \"data\": {\n    \"id\": 7,\n    \"day_of_week\": \"Minggu\",\n    \"open_time\": null,\n    \"close_time\": null,\n    \"is_closed\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "422 Hari duplikat",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional untuk hari ini sudah ada.\",\n  \"errors\": {\n    \"day_of_week\": [\n      \"Jam operasional untuk hari ini sudah ada.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Jam tutup sebelum jam buka",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam tutup harus setelah jam buka.\",\n  \"errors\": {\n    \"close_time\": [\n      \"Jam tutup harus setelah jam buka.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Detail jam operasional",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours/1"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": {\n    \"id\": 1,\n    \"day_of_week\": \"Senin\",\n    \"open_time\": \"06:00\",\n    \"close_time\": \"21:00\",\n    \"is_closed\": false,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ubah jam operasional (tandai libur)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"day_of_week\": \"Senin\",\n  \"is_closed\": true\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 Diubah",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 1,\n    \"day_of_week\": \"Senin\",\n    \"open_time\": null,\n    \"close_time\": null,\n    \"is_closed\": true,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Hapus jam operasional",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/operational-hours/1"
+          },
+          "response": [
+            {
+              "name": "200 Dihapus",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam operasional berhasil dihapus.\"\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         }
       ]
     },
