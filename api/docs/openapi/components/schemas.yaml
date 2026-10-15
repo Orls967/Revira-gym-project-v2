@@ -482,11 +482,13 @@ GymClassInput:
       maxLength: 100
     description:
       type: [string, 'null']
+      maxLength: 1000
     min_participants:
       type: integer
       minimum: 1
     default_instructor_id:
       type: [integer, 'null']
+      description: ID instruktur yang ada, atau null.
     is_active:
       type: boolean
       default: true

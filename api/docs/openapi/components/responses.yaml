@@ -49,3 +49,40 @@ TooManyRequests:
         $ref: ./schemas.yaml#/Error
       example:
         message: Too Many Attempts.
+GymClassValidationError:
+  description: Validasi kelas gagal (SCRUM-52).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        empty:
+          summary: Body kosong
+          value:
+            message: The name field is required. (and 1 more error)
+            errors:
+              name:
+                - The name field is required.
+              min_participants:
+                - The min participants field is required.
+        minParticipantsZero:
+          summary: min_participants 0 atau negatif
+          value:
+            message: Jumlah peserta minimum harus minimal 1.
+            errors:
+              min_participants:
+                - Jumlah peserta minimum harus minimal 1.
+        minParticipantsNotInteger:
+          summary: min_participants pecahan atau bukan angka
+          value:
+            message: The min participants field must be an integer.
+            errors:
+              min_participants:
+                - The min participants field must be an integer.
+        instructorNotFound:
+          summary: Instruktur tidak ada
+          value:
+            message: Instruktur tidak ditemukan.
+            errors:
+              default_instructor_id:
+                - Instruktur tidak ditemukan.
