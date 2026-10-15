@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\GymClassController;
 use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
 use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -72,6 +73,18 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
             Route::get('/{operationalHour}', 'show');
             Route::put('/{operationalHour}', 'update');
             Route::delete('/{operationalHour}', 'destroy');
+        });
+
+    // Kelas gym dengan jumlah peserta minimum, tanpa kapasitas maksimum (SCRUM-52)
+    Route::controller(GymClassController::class)
+        ->prefix('classes')
+        ->whereNumber('gymClass')
+        ->group(function () {
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('/{gymClass}', 'show');
+            Route::put('/{gymClass}', 'update');
+            Route::delete('/{gymClass}', 'destroy');
         });
 });
 
