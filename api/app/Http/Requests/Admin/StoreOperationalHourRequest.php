@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\OperationalHour;
+use DateTime;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -32,9 +33,28 @@ class StoreOperationalHourRequest extends FormRequest
                 Rule::unique('operational_hours', 'day_of_week')->ignore($this->route('operationalHour')),
             ],
             'is_closed' => ['required', 'boolean'],
-            'open_time' => [Rule::excludeIf($isClosed), 'required', 'date_format:H:i'],
-            'close_time' => [Rule::excludeIf($isClosed), 'required', 'date_format:H:i', 'after:open_time'],
+            'open_time' => [Rule::excludeIf($isClosed), 'bail', 'required', 'date_format:H:i'],
+            // bail: format salah cukup satu pesan. Jam tutup hanya dibandingkan bila jam buka valid,
+            // agar jam buka yang salah tidak ikut menandai jam tutup yang benar.
+            'close_time' => [
+                Rule::excludeIf($isClosed),
+                'bail',
+                'required',
+                'date_format:H:i',
+                Rule::when($this->isValidTime($this->input('open_time')), 'after:open_time'),
+            ],
         ];
+    }
+
+    private function isValidTime(mixed $value): bool
+    {
+        if (! is_string($value)) {
+            return false;
+        }
+
+        $time = DateTime::createFromFormat('!H:i', $value);
+
+        return $time !== false && $time->format('H:i') === $value;
     }
 
     /**

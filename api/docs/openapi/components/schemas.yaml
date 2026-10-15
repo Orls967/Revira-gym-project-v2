@@ -395,14 +395,15 @@ OperationalHourInput:
       oneOf:
         - $ref: '#/ClockTime'
         - type: 'null'
-      description: Wajib bila `is_closed` false.
+      description: Wajib bila `is_closed` false. Diabaikan (disimpan null) bila `is_closed` true.
     close_time:
       oneOf:
         - $ref: '#/ClockTime'
         - type: 'null'
-      description: Wajib bila `is_closed` false dan harus lebih besar dari `open_time`.
+      description: Wajib bila `is_closed` false dan harus lebih besar dari `open_time`. Diabaikan (disimpan null) bila `is_closed` true.
     is_closed:
       type: boolean
+      description: Penanda libur.
 PublicOperationalHour:
   type: object
   required: [day_of_week, open_time, close_time, is_closed]

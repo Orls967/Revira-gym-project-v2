@@ -45,7 +45,6 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     Route::controller(OperationalHourController::class)
         ->prefix('operational-hours')
         ->whereNumber('operationalHour')
-        ->missing(fn () => response()->json(['message' => 'Data tidak ditemukan.'], 404))
         ->group(function () {
             Route::get('/', 'index');
             Route::post('/', 'store');

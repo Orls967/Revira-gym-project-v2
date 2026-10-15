@@ -227,6 +227,32 @@ class AdminOperationalHourTest extends TestCase
             ->assertJsonValidationErrors(['close_time' => 'Jam tutup harus setelah jam buka.']);
     }
 
+    /**
+     * Format jam tutup yang salah hanya memunculkan pesan format, tanpa pesan "setelah jam buka".
+     */
+    public function test_invalid_close_time_format_returns_422_with_single_format_message(): void
+    {
+        $this->actingAsAdmin();
+
+        $response = $this->postJson(self::URL, $this->validPayload(['close_time' => 'sembilan malam']))
+            ->assertUnprocessable();
+
+        $this->assertSame(['close_time' => ['Jam tutup harus berformat HH:MM.']], $response->json('errors'));
+    }
+
+    /**
+     * Jam buka yang salah tidak ikut menandai jam tutup yang benar.
+     */
+    public function test_invalid_open_time_format_returns_422_only_for_open_time(): void
+    {
+        $this->actingAsAdmin();
+
+        $response = $this->postJson(self::URL, $this->validPayload(['open_time' => '6 pagi']))
+            ->assertUnprocessable();
+
+        $this->assertSame(['open_time' => ['Jam buka harus berformat HH:MM.']], $response->json('errors'));
+    }
+
     public function test_close_time_equal_to_open_time_is_rejected(): void
     {
         $this->actingAsAdmin();
