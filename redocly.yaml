@@ -1,0 +1,6 @@
+# Konfigurasi lint OpenAPI (jalankan dari root repo: npx @redocly/cli lint api/docs/openapi.yaml)
+extends:
+  - recommended
+rules:
+  # Server lokal (localhost) memang sengaja didokumentasikan di api/docs/openapi.yaml
+  no-server-example.com: off
