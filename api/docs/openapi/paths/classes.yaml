@@ -78,7 +78,7 @@ adminClasses:
     summary: Buat kelas (admin)
     description: |
       SCRUM-52. `min_participants` bilangan bulat 1-1000. Tanpa kapasitas maksimum; field lain yang tidak dikenal diabaikan.
-      `is_active` default true. `default_instructor_id` boleh null, bila diisi harus ID instruktur yang ada.
+      `is_active` default true. `default_instructor_id` boleh null; bila diisi harus ID instruktur yang aktif.
     requestBody:
       required: true
       content:
@@ -150,7 +150,9 @@ adminClassById:
     operationId: updateClass
     tags: [Classes]
     summary: Ubah kelas (admin)
-    description: SCRUM-52. Role admin. Aturan validasi sama dengan POST. Bila `is_active` tidak dikirim, status aktif tidak berubah.
+    description: |
+      SCRUM-52. Role admin. Aturan validasi sama dengan POST. Bila `is_active` tidak dikirim, status aktif tidak berubah.
+      `default_instructor_id` yang sama dengan instruktur kelas saat ini tetap diterima walau instruktur itu sudah nonaktif; mengganti ke instruktur lain wajib yang aktif.
     requestBody:
       required: true
       content:

@@ -312,7 +312,7 @@ Aturan:
 
 - `name` wajib, maks 100 karakter. `description` opsional (boleh `null`), maks 1000 karakter.
 - `min_participants` wajib, bilangan bulat **1-1000** (0, negatif, pecahan, dan nilai di atas 1000 ditolak 422).
-- `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang ada.
+- `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang **aktif** (422 `Instruktur tidak ditemukan atau tidak aktif.`). Pada PUT, instruktur yang sudah terpasang boleh dikirim ulang walau kini nonaktif, agar kelas tetap bisa diubah; mengganti ke instruktur lain tetap wajib yang aktif.
 - `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
 - Field lain seperti kapasitas maksimum diabaikan.
 - Kelas yang sudah punya jadwal **tidak bisa dihapus**: 409 `{ "message": "Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif." }`. Nonaktifkan lewat PUT dengan `is_active: false`.

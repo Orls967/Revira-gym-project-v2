@@ -1007,6 +1007,45 @@
           ]
         },
         {
+          "name": "Admin - cari kelas dengan simbol (search=%25)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/classes?search=%25",
+            "description": "`%25` adalah `%` yang di-encode. Simbol `%` dan `_` dicari apa adanya, bukan wildcard LIKE. Dengan data seeder (tidak ada nama kelas yang mengandung `%`) hasilnya kosong; tanpa escape, `%` akan cocok dengan semua kelas."
+          },
+          "response": [
+            {
+              "name": "200 Tidak ada nama yang mengandung %",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/classes?search=%25&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/classes?search=%25&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": null,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/classes?search=%25&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/classes\",\n    \"per_page\": 15,\n    \"to\": null,\n    \"total\": 0\n  }\n}"
+            }
+          ]
+        },
+        {
           "name": "Admin - buat kelas",
           "request": {
             "method": "POST",

@@ -141,9 +141,9 @@ GymClassValidationError:
               min_participants:
                 - The min participants field must be an integer.
         instructorNotFound:
-          summary: Instruktur tidak ada
+          summary: Instruktur tidak ada atau nonaktif
           value:
-            message: Instruktur tidak ditemukan.
+            message: Instruktur tidak ditemukan atau tidak aktif.
             errors:
               default_instructor_id:
-                - Instruktur tidak ditemukan.
+                - Instruktur tidak ditemukan atau tidak aktif.
