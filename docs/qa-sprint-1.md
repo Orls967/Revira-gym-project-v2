@@ -18,7 +18,7 @@
 | **Butir 2** | Middleware Role | **SELESAI** | Validasi pembatasan role admin dan member, akses tanpa token, serta proteksi route model binding terbukti aman. |
 | **Butir 3** | Staging | **SELESAI** | Hasil cek manual A1-A4 terkonfirmasi sesuai harapan: konfigurasi variabel Railway aman (APP_ENV=staging, APP_DEBUG=false, SEED_PASSWORD dirotasi), 16 migrasi Ran, dan reseed staging berhasil dengan status membership member1 aktif. |
 | **Butir 4** | Aplikasi Mobile | **SELESAI (diuji Akbar, disaksikan Orlando, tanpa bukti tertulis)** | Pengujian fisik 2 HP Android berhasil untuk seluruh skenario (login, sesi bertahan setelah ditutup paksa, logout, penanganan offline mode pesawat). |
-| **Butir 5** | Admin Web | **MENUNGGU SCRUM-100/SCRUM-101 (16 Oktober 2026)** | Pengecekan origin/dev per 16 Oktober 2026 menunjukkan sinkronisasi key LocalStorage (QA-02 / SCRUM-101) belum dimerge ke dev. Pengujian alur admin-web ditunda sampai perbaikan blocker tersedia di dev. |
+| **Butir 5** | Admin Web | **MENUNGGU SCRUM-101 (QA-02: key localStorage token/user vs auth_token/auth_user)** | Pengecekan origin/dev per 16 Oktober 2026 menunjukkan inkonsistensi key LocalStorage (QA-02 / SCRUM-101) belum diperbaiki di dev. QA-01 sudah diperbaiki di dev via commit 5c3c991 (SCRUM-60), dan aktivasi CI admin-web (QA-07 / SCRUM-100) tidak memblokir retest manual. Pengujian alur admin-web ditunda sampai perbaikan SCRUM-101 tersedia di dev. |
 | **Butir 6** | CI (Continuous Integration) | **SELESAI** | Verifikasi merge PR dan status pipeline checks via GitHub CLI terbukti hijau pada `ci-api` dan `ci-member-app`. |
 | **Butir 7** | Kebersihan Repo | **SELESAI** | Secret Scanning dan Push Protection telah aktif di repositori GitHub; kebocoran password staging di deskripsi PR lama (Orls967/Revira-gym-project#18) telah dibersihkan; file terlacak bebas rahasia dan identitas commit bersih. |
 
@@ -28,15 +28,20 @@
 - **Mayor**: 5 temuan (QA-03, QA-05b, QA-06, QA-07, QA-09)
 - **Minor**: 2 temuan (QA-04, QA-05a)
 
-Semua blocker sudah bertiket (SCRUM-100, SCRUM-101, SCRUM-102). Temuan mitigasi keamanan dan pemeliharaan data staging (QA-03 reseed staging, QA-08 pembersihan kredensial PR & rotasi, dan QA-09 secret scanning) telah diselesaikan melalui tindakan manual yang dicakup dalam SCRUM-102.
+Status penanganan temuan:
+- **QA-01** (Blocker): Sudah diperbaiki di dev via commit 5c3c991 (SCRUM-60).
+- **QA-02** (Blocker): Menunggu merge perbaikan tiket **SCRUM-101**.
+- **QA-07** (Mayor): Dicakup **SCRUM-100** (aktivasi CI admin-web; tidak memblokir retest manual).
+- **QA-08** (Blocker), **QA-03** (Mayor), **QA-09** (Mayor): Dicakup tiket **SCRUM-102** dengan tindakan mitigasi manual telah selesai (kredensial PR #18 dibersihkan, password dirotasi, reseed staging berhasil, secret scanning & push protection aktif).
 
-SCRUM-50 memenuhi syarat selesai karena seluruh butir 1-7 telah dijalankan dan diverifikasi (butir 5 berstatus menunggu SCRUM-100/SCRUM-101 dengan blocker yang telah bertiket).
+SCRUM-50 memenuhi syarat selesai karena seluruh butir 1-7 telah dijalankan dan diverifikasi (butir 5 berstatus MENUNGGU SCRUM-101 (QA-02: key localStorage token/user vs auth_token/auth_user); CI admin-web tidak memblokir retest manual).
 
-### Status Tiket Blocker
+### Status Tiket dan Perbaikan
 
-1. **QA-01**: Perbaikan sintaks JSX pada `admin-web/src/pages/Login.tsx` -> **SCRUM-100** (Status: Open)
+1. **QA-01**: Sintaks JSX pada `admin-web/src/pages/Login.tsx` -> **Sudah diperbaiki di dev via commit 5c3c991 (SCRUM-60)**
 2. **QA-02**: Sinkronisasi key LocalStorage auth token di `admin-web` -> **SCRUM-101** (Status: Open)
-3. **QA-08**: Pembersihan kebocoran password staging di deskripsi PR dan rotasi `SEED_PASSWORD` (mencakup QA-03 reseed dan QA-09 secret scanning) -> **SCRUM-102** (Status: Open; Tindakan mitigasi manual selesai)
+3. **QA-07**: Aktivasi workflow CI admin-web -> **Dicakup SCRUM-100 (aktivasi CI admin-web)** (Status: Open)
+4. **QA-08**: Pembersihan kebocoran password staging di deskripsi PR dan rotasi `SEED_PASSWORD` (mencakup QA-03 reseed dan QA-09 secret scanning) -> **SCRUM-102** (Status: Open; Tindakan mitigasi manual selesai)
 
 ---
 
@@ -110,10 +115,10 @@ Pemetaan endpoint mengacu pada `api/routes/api.php` dan `api/bootstrap/app.php` 
 | **2. Token Member ke /admin/membership-plans/999999** | 403 Forbidden (bukan 404) | 403 Forbidden (`"Anda tidak memiliki akses ke sumber daya ini."`) | **LULUS** |
 | **2. Tanpa Token ke /admin/ping** | 401 Unauthorized | 401 Unauthorized (`{"message":"Unauthenticated."}`) | **LULUS** |
 | **2. Tanpa Token ke /member/ping** | 401 Unauthorized | 401 Unauthorized (`{"message":"Unauthenticated."}`) | **LULUS** |
-| **5. admin-web: `npm run lint`** | Lulus linting tanpa error | Menunggu integrasi perbaikan SCRUM-100 dan SCRUM-101 di dev (dicek per 16 Okt 2026) | **MENUNGGU SCRUM-100/SCRUM-101** |
-| **5. admin-web: `npm run build`** | Berhasil mem-build bundel produksi | Menunggu integrasi perbaikan SCRUM-100 dan SCRUM-101 di dev (dicek per 16 Okt 2026) | **MENUNGGU SCRUM-100/SCRUM-101** |
-| **5. admin-web: Runtime Dev Server** | Halaman login tampil di browser | Menunggu integrasi perbaikan SCRUM-100 dan SCRUM-101 di dev (dicek per 16 Okt 2026) | **MENUNGGU SCRUM-100/SCRUM-101** |
-| **5. admin-web: Alur Login & Sesi** | Admin login, simpan sesi, proteksi rute | Menunggu integrasi perbaikan SCRUM-100 dan SCRUM-101 di dev (dicek per 16 Okt 2026) | **MENUNGGU SCRUM-100/SCRUM-101** |
+| **5. admin-web: `npm run lint`** | Lulus linting tanpa error | Menunggu perbaikan SCRUM-101 di dev (QA-01 sudah diperbaiki di dev via commit 5c3c991; CI admin-web tidak memblokir retest manual) | **MENUNGGU SCRUM-101 (QA-02: key localStorage token/user vs auth_token/auth_user)** |
+| **5. admin-web: `npm run build`** | Berhasil mem-build bundel produksi | Menunggu perbaikan SCRUM-101 di dev (QA-01 sudah diperbaiki di dev via commit 5c3c991; CI admin-web tidak memblokir retest manual) | **MENUNGGU SCRUM-101 (QA-02: key localStorage token/user vs auth_token/auth_user)** |
+| **5. admin-web: Runtime Dev Server** | Halaman login tampil di browser | Menunggu perbaikan SCRUM-101 di dev (QA-01 sudah diperbaiki di dev via commit 5c3c991; CI admin-web tidak memblokir retest manual) | **MENUNGGU SCRUM-101 (QA-02: key localStorage token/user vs auth_token/auth_user)** |
+| **5. admin-web: Alur Login & Sesi** | Admin login, simpan sesi, proteksi rute | Menunggu perbaikan SCRUM-101 di dev (QA-01 sudah diperbaiki di dev via commit 5c3c991; CI admin-web tidak memblokir retest manual) | **MENUNGGU SCRUM-101 (QA-02: key localStorage token/user vs auth_token/auth_user)** |
 
 ---
 
@@ -183,40 +188,43 @@ Pemetaan endpoint mengacu pada `api/routes/api.php` dan `api/bootstrap/app.php` 
 
 | ID | Platform | Severity | Ringkasan | Langkah Reproduksi | Diharapkan vs Aktual | Bukti | Tiket |
 |---|---|---|---|---|---|---|---|
-| **QA-01** | Admin Web | **Blocker** | Sintaks JSX rusak pada `Login.tsx` (kelebihan tag penutup `</div>`) | 1. `cd admin-web`<br>2. Jalankan `npm run build` | **Diharapkan**: Aplikasi berhasil di-build.<br>**Aktual**: Kompilasi gagal dengan `error TS1005: ')' expected`. | `admin-web/src/pages/Login.tsx:93`<br>Commit: `083b8d3`<br>PR: `#19` | SCRUM-100 (Open) |
+| **QA-01** | Admin Web | **Blocker** | Sintaks JSX rusak pada `Login.tsx` (kelebihan tag penutup `</div>`) | 1. `cd admin-web`<br>2. Jalankan `npm run build` | **Diharapkan**: Aplikasi berhasil di-build.<br>**Aktual**: Sebelumnya gagal kompilasi `error TS1005`; sudah diperbaiki di dev via commit 5c3c991 (SCRUM-60). | `admin-web/src/pages/Login.tsx:93`<br>Commit perbaikan: `5c3c991` | Sudah diperbaiki di dev via commit 5c3c991 (SCRUM-60) |
 | **QA-02** | Admin Web | **Blocker** | Inkonsistensi nama key LocalStorage token auth antara `auth.ts` dan `api.ts` | 1. Buka `admin-web/src/lib/auth.ts`<br>2. Buka `admin-web/src/lib/api.ts` | **Diharapkan**: Interceptor membaca token yang disimpan saat login.<br>**Aktual**: `auth.ts` menyimpan di key `'token'`, `api.ts` membaca `'auth_token'`. Request berikutnya tanpa token dan redirect loop ke `/login`. | `admin-web/src/lib/auth.ts:1` vs `admin-web/src/lib/api.ts:13`<br>Commit: `f67b37d`<br>PR: `#20` | SCRUM-101 (Open) |
 | **QA-03** | Staging | **Mayor** | Data seeder keanggotaan staging belum di-reseed | 1. Login sebagai `member1@revira.test`<br>2. Panggil `GET /api/v1/me` | **Diharapkan**: Membership `member1` aktif (`is_active: true`).<br>**Aktual**: Sebelumnya `expired`, kini telah aktif kembali setelah reseed pasca-rotasi kredensial. | Respons staging `/me`: `status: "active"`. | SCRUM-102 (Selesai) |
 | **QA-04** | Admin Web | **Minor** | Penggunaan tipe `any` melanggar aturan linter ESLint | 1. `cd admin-web`<br>2. Jalankan `npm run lint` | **Diharapkan**: Linting bersih tanpa error.<br>**Aktual**: 2 error `@typescript-eslint/no-explicit-any`. | `admin-web/src/hooks/useFetch.ts:15`<br>`admin-web/src/lib/auth.ts:3` | Draf Tiket |
 | **QA-05a** | Dokumentasi | **Minor** | Pernyataan status folder pada README.md usang | Baca README.md baris 35, 47, 340-344 | **Diharapkan**: Dokumentasi sesuai kondisi branch `dev`.<br>**Aktual**: Menyebut `api/` belum dibuat, `admin-web/` belum tersedia, dan CI masih template. | `README.md:35, 47, 340-344` | - |
 | **QA-05b** | Dokumentasi | **Mayor** | Instruksi `php artisan storage:link` untuk bukti transfer menyesatkan | Baca README.md baris 271-272 | **Diharapkan**: Menjelaskan akses bukti transfer lewat disk privat terproteksi.<br>**Aktual**: Menyuruh membuat symlink public web. | `README.md:271-272` | Draf Tiket 5 |
 | **QA-06** | API | **Mayor** | Rate limiting login berbasis IP mengunci seluruh user dari IP yang sama | 1. Kirim 5 request login gagal berturut-turut<br>2. Coba login dengan akun valid lain dari IP sama | **Diharapkan**: Throttle mengunci akun spesifik atau membatasi per user + IP.<br>**Aktual**: HTTP 429 mengunci IP global (termasuk login akun lain) selama ~56 detik. | Respons HTTP 429 pada percobaan ke-6, header `retry-after: 53`. | Draf Tiket 6 |
-| **QA-07** | Repo / CI | **Mayor** | Tidak ada workflow CI untuk `admin-web`, menyebabkan bug build lolos ke `dev` | Periksa `.github/workflows/` | **Diharapkan**: PR `admin-web` divalidasi CI otomatis.<br>**Aktual**: Workflow `ci-admin-web.yml.example` belum aktif sehingga bug QA-01 lolos merge. | `.github/workflows/ci-admin-web.yml.example` | Draf Tiket 7 |
+| **QA-07** | Repo / CI | **Mayor** | Tidak ada workflow CI untuk `admin-web`, menyebabkan bug build lolos ke `dev` | Periksa `.github/workflows/` | **Diharapkan**: PR `admin-web` divalidasi CI otomatis.<br>**Aktual**: Workflow `ci-admin-web.yml.example` belum aktif sehingga bug QA-01 lolos merge. | `.github/workflows/ci-admin-web.yml.example` | Dicakup SCRUM-100 (aktivasi CI admin-web) |
 | **QA-08** | Repo / Keamanan | **Blocker** | Kebocoran password staging pada deskripsi PR SCRUM-44 | Buka deskripsi PR #18 di repositori `Orls967/Revira-gym-project` | **Diharapkan**: Bagian Cara Uji bebas dari kredensial rahasia staging.<br>**Aktual**: Password seeder staging sempat tertulis gamblang pada teks PR. Kredensial telah dibersihkan dan password dirotasi. | PR `Orls967/Revira-gym-project#18` baris Cara Uji | SCRUM-102 (Selesai) |
 | **QA-09** | Repo / Keamanan | **Mayor** | GitHub Secret Scanning dan Push Protection belum diaktifkan | Jalankan `gh api repos/Orls967/Revira-gym-project-v2 --jq '.security_and_analysis'` | **Diharapkan**: Secret scanning aktif.<br>**Aktual**: Fitur secret scanning dan push protection telah diaktifkan pada repositori. | Pengaturan GitHub Security & Analysis | SCRUM-102 (Selesai) |
 
 ---
 
-## Status Tiket Blocker
+## Status Tiket dan Perbaikan
 
-### Tiket 1 (QA-01) -> SCRUM-100
-* **Kunci Jira**: SCRUM-100
-* **Status**: Open
-* **Judul**: Perbaikan: Sintaks JSX rusak pada Login.tsx (kelebihan tag penutup div)
-* **Platform**: Admin Web
-* **Keterkaitan**: SCRUM-50
-* **Deskripsi**:
-  File `admin-web/src/pages/Login.tsx` memiliki kelebihan tag penutup `</div>` pada baris 93. Hal ini menyebabkan `npm run build` gagal dengan `error TS1005: ')' expected` dan Vite dev server melempar parse error overlay, sehingga antarmuka login admin tidak dapat diakses sama sekali.
-* **Langkah Reproduksi**:
-  1. `cd admin-web`
-  2. Jalankan `npm run build`
-* **Kriteria Selesai**:
-  1. Hapus tag `</div>` penutup berlebih pada baris 93 `admin-web/src/pages/Login.tsx`.
-  2. `npm run build` berjalan sukses tanpa error kompilasi.
-  3. Workflow CI untuk `admin-web` diaktifkan dan berstatus hijau pada PR.
+### Perbaikan QA-01 (Admin Web JSX Syntax)
+* **Status**: Sudah diperbaiki di dev via commit 5c3c991 (SCRUM-60)
+* **Deskripsi**: Tag penutup `</div>` berlebih pada `admin-web/src/pages/Login.tsx` telah teratasi dengan penambahan wrapper container `min-h-screen` pada commit `5c3c991`. Tidak lagi membutuhkan tiket blocker terpisah.
 
 ---
 
-### Tiket 2 (QA-02) -> SCRUM-101
+### Tiket SCRUM-100 (QA-07)
+* **Kunci Jira**: SCRUM-100
+* **Status**: Open
+* **Judul**: CI: Aktivasi workflow CI admin-web (`ci-admin-web.yml`)
+* **Platform**: Repo / CI
+* **Keterkaitan**: SCRUM-50
+* **Deskripsi**:
+  Workflow CI untuk `admin-web` saat ini masih berupa berkas contoh (`.github/workflows/ci-admin-web.yml.example`) sehingga build dan linting frontend admin belum divalidasi secara otomatis pada setiap PR ke branch `dev`.
+* **Kriteria Selesai**:
+  1. Ubah nama `.github/workflows/ci-admin-web.yml.example` menjadi `ci-admin-web.yml`.
+  2. Pastikan workflow tereksekusi pada PR yang menyentuh `admin-web/**`.
+  3. Lolos pemeriksaan linting dan build produksi di pipeline GitHub Actions.
+
+---
+
+### Tiket SCRUM-101 (QA-02)
 * **Kunci Jira**: SCRUM-101
 * **Status**: Open
 * **Judul**: Perbaikan: Sinkronisasi nama key LocalStorage token otentikasi admin-web
@@ -234,7 +242,7 @@ Pemetaan endpoint mengacu pada `api/routes/api.php` dan `api/bootstrap/app.php` 
 
 ---
 
-### Tiket 3 (QA-08, QA-03, QA-09) -> SCRUM-102
+### Tiket SCRUM-102 (QA-08, QA-03, QA-09)
 * **Kunci Jira**: SCRUM-102
 * **Status**: Open (Tindakan mitigasi manual selesai)
 * **Judul**: Keamanan & Staging: Rotasi password seeder, pembersihan kebocoran deskripsi PR, reseed staging, dan pengaktifan secret scanning
@@ -299,9 +307,9 @@ App\Models\User::where('email', 'like', 'qa-s1-%@revira.test')->delete();
 ## Tindak Lanjut
 
 1. **Uji Ulang Butir 5 (Admin Web)**:
-   - Jalankan uji ulang butir 5 (admin-web) setelah perbaikan SCRUM-100 dan SCRUM-101 selesai di-review dan di-merge ke branch `dev`.
-2. **Pengaktifan Pipeline CI Admin-Web (QA-07)**:
-   - Ubah nama `.github/workflows/ci-admin-web.yml.example` menjadi `ci-admin-web.yml` agar pemeriksaan build dan linting frontend admin berjalan otomatis di setiap PR.
+   - Jalankan uji ulang butir 5 (admin-web) setelah perbaikan SCRUM-101 (sinkronisasi key LocalStorage token/user) selesai di-review dan di-merge ke branch `dev`. Catatan: CI admin-web (SCRUM-100) tidak memblokir retest manual.
+2. **Pengaktifan Pipeline CI Admin-Web (QA-07 / SCRUM-100)**:
+   - Aktifkan `ci-admin-web.yml` melalui tiket SCRUM-100 agar pemeriksaan build dan linting frontend admin berjalan otomatis di setiap PR.
 3. **Penyempurnaan Rate Limiter Login (QA-06)**:
    - Terapkan rate limiter kustom berbasis kombinasi email dan IP (misalnya `RateLimiter::for('login', ...)`), bukan IP global tunggal, agar brute force terhadap satu akun tidak memblokir pengguna sah lain dari IP bersama.
 4. **Pembaruan Dokumentasi README (QA-05a & QA-05b)**:
