@@ -1,0 +1,69 @@
+me:
+  get:
+    operationId: getMe
+    tags: [Me]
+    summary: Profil dan status membership
+    description: Khusus role `member`. Dipakai app untuk mengaktifkan tombol booking (`data.membership.is_active`).
+    responses:
+      '200':
+        description: Profil member.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MeResponse
+            examples:
+              active:
+                summary: Membership aktif
+                value:
+                  data:
+                    id: 2
+                    name: Member Contoh
+                    email: member1@revira.test
+                    phone_number: '081234567890'
+                    profile_photo: null
+                    role: member
+                    membership:
+                      is_active: true
+                      status: active
+                      plan:
+                        id: 1
+                        name: Bulanan
+                        duration_days: 30
+                      start_date: '2026-09-20'
+                      end_date: '2026-10-20'
+              none:
+                summary: Belum punya membership
+                value:
+                  data:
+                    id: 7
+                    name: Member Baru
+                    email: baru@example.com
+                    phone_number: '081234567890'
+                    profile_photo: null
+                    role: member
+                    membership:
+                      is_active: false
+                      status: none
+                      plan: null
+                      start_date: null
+                      end_date: null
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+user:
+  get:
+    operationId: getUser
+    tags: [Me]
+    deprecated: true
+    summary: User saat ini (deprecated)
+    description: Gunakan `/me`. Mengembalikan model User apa adanya untuk semua peran. Dipertimbangkan untuk dihapus nanti.
+    responses:
+      '200':
+        description: Model User milik token.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/UserModel
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized

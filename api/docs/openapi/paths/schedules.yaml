@@ -1,0 +1,248 @@
+adminSchedules:
+  get:
+    operationId: listClassSchedules
+    tags: [Schedules, Sprint 2]
+    x-status: planned
+    summary: Daftar jadwal kelas (admin)
+    description: SCRUM-55. Role admin. Filter `date_from`, `date_to`, `class_id`, `status`, dengan paginasi. Item memuat `participants_count` dan `min_participants`.
+    parameters:
+      - $ref: ../components/parameters.yaml#/DateFrom
+      - $ref: ../components/parameters.yaml#/DateTo
+      - $ref: ../components/parameters.yaml#/ClassIdFilter
+      - $ref: ../components/parameters.yaml#/ScheduleStatusFilter
+      - $ref: ../components/parameters.yaml#/Page
+      - $ref: ../components/parameters.yaml#/PerPage
+    responses:
+      '200':
+        description: Halaman jadwal.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ClassSchedulePage
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+  post:
+    operationId: createClassSchedule
+    tags: [Schedules, Sprint 2]
+    x-status: planned
+    summary: Buat jadwal kelas (admin)
+    description: SCRUM-55. Jadwal yang tumpang tindih dengan jadwal lain milik instruktur yang sama ditolak dengan 422.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/ClassScheduleInput
+          example:
+            class_id: 1
+            instructor_id: 1
+            schedule_date: '2026-10-12'
+            start_time: '07:00'
+            end_time: '08:00'
+    responses:
+      '201':
+        description: Dibuat dengan status `scheduled`.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ClassScheduleMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+adminScheduleById:
+  parameters:
+    - $ref: ../components/parameters.yaml#/Id
+  get:
+    operationId: getClassSchedule
+    tags: [Schedules, Sprint 2]
+    x-status: planned
+    summary: Detail jadwal (admin)
+    description: SCRUM-55. Role admin.
+    responses:
+      '200':
+        description: Detail jadwal.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ClassScheduleResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+  put:
+    operationId: updateClassSchedule
+    tags: [Schedules, Sprint 2]
+    x-status: planned
+    summary: Ubah jadwal (admin)
+    description: SCRUM-55. Aturan tumpang tindih sama dengan POST (jadwal itu sendiri dikecualikan).
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/ClassScheduleInput
+    responses:
+      '200':
+        description: Diubah.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ClassScheduleMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+  delete:
+    operationId: deleteClassSchedule
+    tags: [Schedules, Sprint 2]
+    x-status: planned
+    summary: Hapus jadwal (admin)
+    description: SCRUM-55. Role admin. Hapus hanya bila belum ada peserta. Bila sudah memiliki peserta → 409.
+    responses:
+      '200':
+        description: Dihapus.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MessageResponse
+            example:
+              message: Jadwal berhasil dihapus
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '409':
+        description: Jadwal sudah memiliki peserta.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Jadwal sudah memiliki peserta. Batalkan jadwal lewat PATCH /admin/class-schedules/{id}/status dengan status cancelled.
+adminScheduleStatus:
+  parameters:
+    - $ref: ../components/parameters.yaml#/Id
+  patch:
+    operationId: updateClassScheduleStatus
+    tags: [Schedules, Sprint 2]
+    x-status: planned
+    summary: Ubah status jadwal (admin)
+    description: SCRUM-55. Status `cancelled` wajib menyertakan `cancel_reason`.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/ClassScheduleStatusInput
+          example:
+            status: cancelled
+            cancel_reason: Instruktur berhalangan hadir
+    responses:
+      '200':
+        description: Status diubah.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ClassScheduleMutationResponse
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+publicSchedules:
+  get:
+    operationId: listPublicClassSchedules
+    tags: [Schedules, Public, Sprint 2]
+    x-status: planned
+    summary: Jadwal kelas (publik)
+    description: SCRUM-56. Tanpa autentikasi dan tanpa data pribadi. Bila `date_from`/`date_to` kosong, default 7 hari ke depan. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
+    security: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/DateFrom
+      - $ref: ../components/parameters.yaml#/DateTo
+    responses:
+      '200':
+        description: Jadwal dalam rentang tanggal.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/PublicClassScheduleList
+            example:
+              data:
+                - id: 10
+                  class_id: 1
+                  class_name: Yoga Pagi
+                  instructor_name: Budi Santoso
+                  schedule_date: '2026-10-12'
+                  start_time: '07:00'
+                  end_time: '08:00'
+                  status: scheduled
+                  cancel_reason: null
+                  participants_count: 4
+                  min_participants: 3
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests
+publicScheduleStatus:
+  get:
+    operationId: listClassScheduleStatus
+    tags: [Schedules, Public, Sprint 2]
+    x-status: planned
+    summary: Status jadwal ringkas untuk polling (publik)
+    description: |
+      SCRUM-56. Tanpa autentikasi. Mendukung `ETag`/`If-None-Match`: bila data tidak berubah, server membalas 304 tanpa body. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
+    security: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/UpdatedSince
+      - $ref: ../components/parameters.yaml#/DateFrom
+      - $ref: ../components/parameters.yaml#/DateTo
+      - name: If-None-Match
+        in: header
+        required: false
+        description: Nilai `ETag` dari respons sebelumnya.
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Status jadwal.
+        headers:
+          ETag:
+            description: Validator untuk `If-None-Match` pada request berikutnya.
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ScheduleStatusList
+            example:
+              data:
+                - id: 10
+                  status: scheduled
+                  participants_count: 4
+                  min_participants: 3
+                  updated_at: '2026-10-10T08:00:00+08:00'
+      '304':
+        description: Tidak ada perubahan sejak `ETag` yang dikirim. Tanpa body.
+      '422':
+        $ref: ../components/responses.yaml#/ValidationError
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests

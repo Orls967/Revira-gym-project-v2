@@ -1,0 +1,187 @@
+adminHours:
+  get:
+    operationId: listOperationalHours
+    tags: [Operational Hours]
+    summary: Daftar jam operasional (admin)
+    description: SCRUM-51. Role admin. Maksimal satu baris per `day_of_week`, terurut Senin sampai Minggu (bukan urutan alfabet).
+    responses:
+      '200':
+        description: Jam operasional, terurut Senin sampai Minggu. Array kosong bila belum ada data.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourList
+            example:
+              data:
+                - id: 1
+                  day_of_week: Senin
+                  open_time: '06:00'
+                  close_time: '21:00'
+                  is_closed: false
+                  created_at: '2026-10-10T08:00:00+08:00'
+                  updated_at: '2026-10-10T08:00:00+08:00'
+                - id: 7
+                  day_of_week: Minggu
+                  open_time: null
+                  close_time: null
+                  is_closed: true
+                  created_at: '2026-10-10T08:00:00+08:00'
+                  updated_at: '2026-10-10T08:00:00+08:00'
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+  post:
+    operationId: createOperationalHour
+    tags: [Operational Hours]
+    summary: Tambah jam operasional (admin)
+    description: |
+      SCRUM-51. Satu baris per `day_of_week` (duplikat 422).
+      Bila `is_closed` true (libur), `open_time` dan `close_time` boleh kosong; nilai yang dikirim diabaikan dan disimpan null.
+      Bila `is_closed` false, keduanya wajib `HH:MM` dan jam tutup harus lebih besar dari jam buka (sama dengan jam buka juga ditolak).
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/OperationalHourInput
+          examples:
+            open:
+              summary: Hari buka
+              value:
+                day_of_week: Senin
+                open_time: '06:00'
+                close_time: '21:00'
+                is_closed: false
+            closed:
+              summary: Hari libur (tanpa jam)
+              value:
+                day_of_week: Minggu
+                is_closed: true
+    responses:
+      '201':
+        description: Dibuat.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourMutationResponse
+            examples:
+              open:
+                summary: Hari buka
+                value:
+                  message: Jam operasional berhasil dibuat.
+                  data:
+                    id: 1
+                    day_of_week: Senin
+                    open_time: '06:00'
+                    close_time: '21:00'
+                    is_closed: false
+                    created_at: '2026-10-10T08:00:00+08:00'
+                    updated_at: '2026-10-10T08:00:00+08:00'
+              closed:
+                summary: Hari libur
+                value:
+                  message: Jam operasional berhasil dibuat.
+                  data:
+                    id: 7
+                    day_of_week: Minggu
+                    open_time: null
+                    close_time: null
+                    is_closed: true
+                    created_at: '2026-10-10T08:00:00+08:00'
+                    updated_at: '2026-10-10T08:00:00+08:00'
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/OperationalHourValidationError
+adminHourById:
+  parameters:
+    - $ref: ../components/parameters.yaml#/Id
+  get:
+    operationId: getOperationalHour
+    tags: [Operational Hours]
+    summary: Detail jam operasional (admin)
+    description: SCRUM-51. Role admin.
+    responses:
+      '200':
+        description: Detail.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourResponse
+            example:
+              data:
+                id: 1
+                day_of_week: Senin
+                open_time: '06:00'
+                close_time: '21:00'
+                is_closed: false
+                created_at: '2026-10-10T08:00:00+08:00'
+                updated_at: '2026-10-10T08:00:00+08:00'
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+  put:
+    operationId: updateOperationalHour
+    tags: [Operational Hours]
+    summary: Ubah jam operasional (admin)
+    description: SCRUM-51. Mengganti seluruh field; aturan validasi sama dengan POST. Hari milik baris itu sendiri bukan duplikat.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/OperationalHourInput
+          example:
+            day_of_week: Senin
+            is_closed: true
+    responses:
+      '200':
+        description: Diubah.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OperationalHourMutationResponse
+            example:
+              message: Jam operasional berhasil diperbarui.
+              data:
+                id: 1
+                day_of_week: Senin
+                open_time: null
+                close_time: null
+                is_closed: true
+                created_at: '2026-10-10T08:00:00+08:00'
+                updated_at: '2026-10-12T09:30:00+08:00'
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '422':
+        $ref: ../components/responses.yaml#/OperationalHourValidationError
+  delete:
+    operationId: deleteOperationalHour
+    tags: [Operational Hours]
+    summary: Hapus jam operasional (admin)
+    description: SCRUM-51. Role admin.
+    responses:
+      '200':
+        description: Dihapus.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MessageResponse
+            example:
+              message: Jam operasional berhasil dihapus.
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound

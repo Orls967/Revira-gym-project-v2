@@ -1,0 +1,171 @@
+register:
+  post:
+    operationId: register
+    tags: [Auth]
+    summary: Registrasi member
+    description: |
+      Membuat akun member baru dan langsung login (token dikirim balik). Field `role` pada input diabaikan; akun selalu `member`.
+      Dibatasi 5 percobaan per menit per IP (kuota terpisah dari login).
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/RegisterRequest
+          example:
+            name: Member Baru
+            email: baru@example.com
+            phone_number: '081234567890'
+            password: rahasia123
+            password_confirmation: rahasia123
+            device_name: mobile
+    responses:
+      '201':
+        description: Akun dibuat.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AuthResponse
+            example:
+              message: Registrasi berhasil
+              data:
+                token: 1|AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd
+                token_type: Bearer
+                user:
+                  id: 7
+                  name: Member Baru
+                  email: baru@example.com
+                  role: member
+      '422':
+        description: Validasi gagal (field wajib, email sudah terdaftar, format nomor HP, password min 8 dan konfirmasi, `device_name` selain `mobile`).
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            examples:
+              empty:
+                summary: Body kosong (semua field wajib)
+                value:
+                  message: The name field is required. (and 4 more errors)
+                  errors:
+                    name:
+                      - The name field is required.
+                    email:
+                      - The email field is required.
+                    phone_number:
+                      - The phone number field is required.
+                    password:
+                      - The password field is required.
+                    device_name:
+                      - The device name field is required.
+              duplicateEmail:
+                summary: Email sudah terdaftar
+                value:
+                  message: The email has already been taken.
+                  errors:
+                    email:
+                      - The email has already been taken.
+              invalidFields:
+                summary: Nomor HP salah, password pendek dan tidak cocok, device_name bukan mobile
+                value:
+                  message: Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62. (and 3 more errors)
+                  errors:
+                    phone_number:
+                      - Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
+                    password:
+                      - The password field confirmation does not match.
+                      - The password field must be at least 8 characters.
+                    device_name:
+                      - The selected device name is invalid.
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests
+login:
+  post:
+    operationId: login
+    tags: [Auth]
+    summary: Login admin atau member
+    description: |
+      Berlaku untuk admin dan member; klien menentukan layar tujuan dari field `role`.
+      `device_name` menjadi nama token (`mobile` untuk aplikasi member, `admin-web` untuk Admin Web).
+      Dibatasi 5 percobaan per menit per IP.
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/LoginRequest
+          example:
+            email: member1@revira.test
+            password: password
+            device_name: mobile
+    responses:
+      '200':
+        description: Login berhasil.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AuthResponse
+            example:
+              message: Login berhasil
+              data:
+                token: 1|AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd
+                token_type: Bearer
+                user:
+                  id: 1
+                  name: Member Contoh
+                  email: member1@revira.test
+                  role: member
+      '401':
+        description: Email atau password salah (pesan sama untuk email tidak terdaftar).
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Email atau password salah.
+      '422':
+        description: Validasi gagal (field wajib, `device_name` bukan `mobile`/`admin-web`).
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            examples:
+              empty:
+                summary: Body kosong (email, password, device_name wajib)
+                value:
+                  message: The email field is required. (and 2 more errors)
+                  errors:
+                    email:
+                      - The email field is required.
+                    password:
+                      - The password field is required.
+                    device_name:
+                      - The device name field is required.
+              unknownDevice:
+                summary: device_name bukan mobile atau admin-web
+                value:
+                  message: The selected device name is invalid.
+                  errors:
+                    device_name:
+                      - The selected device name is invalid.
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests
+logout:
+  post:
+    operationId: logout
+    tags: [Auth]
+    summary: Logout perangkat ini
+    description: Mencabut token yang dipakai pada request ini saja; token perangkat lain tetap berlaku.
+    responses:
+      '200':
+        description: Token dicabut.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MessageResponse
+            example:
+              message: Logout berhasil
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized

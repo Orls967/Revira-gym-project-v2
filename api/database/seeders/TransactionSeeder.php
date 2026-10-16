@@ -129,7 +129,7 @@ class TransactionSeeder extends Seeder
             );
         }
 
-        // Salin dummy asset receipt ke public disk bila belum ada
+        // Salin dummy asset receipt ke disk receipts (privat) bila belum ada
         $assetSource = database_path('seeders/assets/dummy_transfer_pending.jpg');
         if (file_exists($assetSource)) {
             $pathsToEnsure = [
@@ -146,9 +146,12 @@ class TransactionSeeder extends Seeder
                 $pathsToEnsure[] = 'receipts/transfer_'.$m5->id.'.jpg';
             }
 
+            $receiptDisk = config('filesystems.receipts_disk', 'receipts');
+            $assetContent = file_get_contents($assetSource);
+
             foreach ($pathsToEnsure as $relativePath) {
-                if (! Storage::disk('public')->exists($relativePath)) {
-                    Storage::disk('public')->put($relativePath, file_get_contents($assetSource));
+                if (! Storage::disk($receiptDisk)->exists($relativePath)) {
+                    Storage::disk($receiptDisk)->put($relativePath, $assetContent);
                 }
             }
         }
