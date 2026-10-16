@@ -1,10 +1,13 @@
 adminSchedules:
   get:
     operationId: listClassSchedules
-    tags: [Schedules, Sprint 2]
-    x-status: planned
+    tags: [Schedules]
     summary: Daftar jadwal kelas (admin)
-    description: SCRUM-55. Role admin. Filter `date_from`, `date_to`, `class_id`, `status`, dengan paginasi. Item memuat `participants_count` dan `min_participants`.
+    description: |
+      SCRUM-55. Role admin. Filter `date_from` dan `date_to` (inklusif, `YYYY-MM-DD`), `class_id`, `status`, dengan paginasi.
+      Terurut berdasarkan `schedule_date`, lalu `start_time`. Tanpa filter tanggal, semua jadwal tampil.
+      Item memuat `participants_count` (peserta yang tidak membatalkan booking) dan `min_participants` dari kelas.
+      Link paginasi membawa query filter yang dikirim.
     parameters:
       - $ref: ../components/parameters.yaml#/DateFrom
       - $ref: ../components/parameters.yaml#/DateTo
@@ -19,18 +22,70 @@ adminSchedules:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/ClassSchedulePage
+            example:
+              data:
+                - id: 10
+                  class_id: 1
+                  class_name: Yoga Pagi
+                  instructor_id: 1
+                  instructor_name: Budi Santoso
+                  schedule_date: '2026-10-17'
+                  start_time: '07:00'
+                  end_time: '08:00'
+                  status: scheduled
+                  cancel_reason: null
+                  participants_count: 4
+                  min_participants: 3
+                  created_at: '2026-10-16T10:00:00+08:00'
+                  updated_at: '2026-10-16T10:00:00+08:00'
+              links:
+                first: http://localhost:8000/api/v1/admin/class-schedules?date_from=2026-10-17&date_to=2026-10-23&page=1
+                last: http://localhost:8000/api/v1/admin/class-schedules?date_from=2026-10-17&date_to=2026-10-23&page=1
+                prev: null
+                next: null
+              meta:
+                current_page: 1
+                from: 1
+                last_page: 1
+                links:
+                  - url: null
+                    label: '&laquo; Previous'
+                    active: false
+                  - url: http://localhost:8000/api/v1/admin/class-schedules?date_from=2026-10-17&date_to=2026-10-23&page=1
+                    label: '1'
+                    active: true
+                  - url: null
+                    label: Next &raquo;
+                    active: false
+                path: http://localhost:8000/api/v1/admin/class-schedules
+                per_page: 15
+                to: 1
+                total: 1
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
         $ref: ../components/responses.yaml#/Forbidden
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        description: Query string tidak valid (tanggal bukan `YYYY-MM-DD`, `date_to` sebelum `date_from`, `class_id` < 1, `status` tidak dikenal, `page` < 1, `per_page` di luar 1-100).
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Tanggal akhir tidak boleh sebelum tanggal awal.
+              errors:
+                date_to:
+                  - Tanggal akhir tidak boleh sebelum tanggal awal.
   post:
     operationId: createClassSchedule
-    tags: [Schedules, Sprint 2]
-    x-status: planned
+    tags: [Schedules]
     summary: Buat jadwal kelas (admin)
-    description: SCRUM-55. Jadwal yang tumpang tindih dengan jadwal lain milik instruktur yang sama ditolak dengan 422.
+    description: |
+      SCRUM-55. Role admin. Jadwal baru selalu berstatus `scheduled` (field `status` di body diabaikan).
+      Aturan: kelas dan instruktur harus aktif; `schedule_date` tidak di masa lalu dan, untuk hari ini, `start_time` belum lewat (WITA);
+      `end_time` setelah `start_time` (sesi tidak boleh melewati tengah malam).
+      Jadwal yang tumpang tindih dengan jadwal lain milik instruktur yang sama di tanggal yang sama ditolak 422 pada field `instructor_id`.
+      Jadwal yang dibatalkan tidak dihitung, dan jam yang hanya bersentuhan (selesai 08:00, mulai 08:00) tidak dianggap bertumpuk.
     requestBody:
       required: true
       content:
@@ -40,7 +95,7 @@ adminSchedules:
           example:
             class_id: 1
             instructor_id: 1
-            schedule_date: '2026-10-12'
+            schedule_date: '2026-10-17'
             start_time: '07:00'
             end_time: '08:00'
     responses:
@@ -50,19 +105,35 @@ adminSchedules:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/ClassScheduleMutationResponse
+            example:
+              message: Jadwal berhasil dibuat.
+              data:
+                id: 10
+                class_id: 1
+                class_name: Yoga Pagi
+                instructor_id: 1
+                instructor_name: Budi Santoso
+                schedule_date: '2026-10-17'
+                start_time: '07:00'
+                end_time: '08:00'
+                status: scheduled
+                cancel_reason: null
+                participants_count: 0
+                min_participants: 3
+                created_at: '2026-10-16T10:00:00+08:00'
+                updated_at: '2026-10-16T10:00:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
         $ref: ../components/responses.yaml#/Forbidden
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        $ref: ../components/responses.yaml#/ClassScheduleValidationError
 adminScheduleById:
   parameters:
     - $ref: ../components/parameters.yaml#/Id
   get:
     operationId: getClassSchedule
-    tags: [Schedules, Sprint 2]
-    x-status: planned
+    tags: [Schedules]
     summary: Detail jadwal (admin)
     description: SCRUM-55. Role admin.
     responses:
@@ -72,6 +143,22 @@ adminScheduleById:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/ClassScheduleResponse
+            example:
+              data:
+                id: 10
+                class_id: 1
+                class_name: Yoga Pagi
+                instructor_id: 1
+                instructor_name: Budi Santoso
+                schedule_date: '2026-10-17'
+                start_time: '07:00'
+                end_time: '08:00'
+                status: scheduled
+                cancel_reason: null
+                participants_count: 4
+                min_participants: 3
+                created_at: '2026-10-16T10:00:00+08:00'
+                updated_at: '2026-10-16T10:00:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -80,16 +167,26 @@ adminScheduleById:
         $ref: ../components/responses.yaml#/NotFound
   put:
     operationId: updateClassSchedule
-    tags: [Schedules, Sprint 2]
-    x-status: planned
+    tags: [Schedules]
     summary: Ubah jadwal (admin)
-    description: SCRUM-55. Aturan tumpang tindih sama dengan POST (jadwal itu sendiri dikecualikan).
+    description: |
+      SCRUM-55. Role admin. Aturan validasi dan tumpang tindih sama dengan POST (jadwal itu sendiri dikecualikan).
+      Hanya jadwal berstatus `scheduled` yang dapat diubah (selain itu 409); status diubah lewat `PATCH /admin/class-schedules/{id}/status`.
+      Kelas atau instruktur yang sudah terpasang boleh dikirim ulang walau kini nonaktif; mengganti ke yang lain wajib yang aktif.
+      Jadwal yang sudah punya peserta (termasuk yang membatalkan booking) tidak bisa diganti `class_id`-nya (422 di `class_id`);
+      tanggal, jam, dan instruktur tetap boleh digeser.
     requestBody:
       required: true
       content:
         application/json:
           schema:
             $ref: ../components/schemas.yaml#/ClassScheduleInput
+          example:
+            class_id: 1
+            instructor_id: 2
+            schedule_date: '2026-10-19'
+            start_time: '18:00'
+            end_time: '19:30'
     responses:
       '200':
         description: Diubah.
@@ -97,20 +194,46 @@ adminScheduleById:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/ClassScheduleMutationResponse
+            example:
+              message: Jadwal berhasil diperbarui.
+              data:
+                id: 10
+                class_id: 1
+                class_name: Yoga Pagi
+                instructor_id: 2
+                instructor_name: Siti Rahma
+                schedule_date: '2026-10-19'
+                start_time: '18:00'
+                end_time: '19:30'
+                status: scheduled
+                cancel_reason: null
+                participants_count: 4
+                min_participants: 3
+                created_at: '2026-10-16T10:00:00+08:00'
+                updated_at: '2026-10-16T11:15:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
         $ref: ../components/responses.yaml#/Forbidden
       '404':
         $ref: ../components/responses.yaml#/NotFound
+      '409':
+        description: Jadwal tidak berstatus `scheduled`.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Jadwal berstatus cancelled tidak dapat diubah. Hanya jadwal berstatus scheduled yang dapat diubah.
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        $ref: ../components/responses.yaml#/ClassScheduleValidationError
   delete:
     operationId: deleteClassSchedule
-    tags: [Schedules, Sprint 2]
-    x-status: planned
+    tags: [Schedules]
     summary: Hapus jadwal (admin)
-    description: SCRUM-55. Role admin. Hapus hanya bila belum ada peserta. Bila sudah memiliki peserta → 409.
+    description: |
+      SCRUM-55. Role admin. Hapus hanya bila belum ada peserta sama sekali, termasuk peserta yang sudah membatalkan booking (FK restrict).
+      Bila sudah memiliki peserta → 409; batalkan jadwal lewat PATCH status `cancelled`.
     responses:
       '200':
         description: Dihapus.
@@ -119,7 +242,7 @@ adminScheduleById:
             schema:
               $ref: ../components/schemas.yaml#/MessageResponse
             example:
-              message: Jadwal berhasil dihapus
+              message: Jadwal berhasil dihapus.
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -133,16 +256,26 @@ adminScheduleById:
             schema:
               $ref: ../components/schemas.yaml#/Error
             example:
-              message: Jadwal sudah memiliki peserta. Batalkan jadwal lewat PATCH /admin/class-schedules/{id}/status dengan status cancelled.
+              message: Jadwal tidak dapat dihapus karena sudah memiliki peserta. Batalkan jadwal lewat PATCH /admin/class-schedules/{id}/status dengan status cancelled.
 adminScheduleStatus:
   parameters:
     - $ref: ../components/parameters.yaml#/Id
   patch:
     operationId: updateClassScheduleStatus
-    tags: [Schedules, Sprint 2]
-    x-status: planned
+    tags: [Schedules]
     summary: Ubah status jadwal (admin)
-    description: SCRUM-55. Status `cancelled` wajib menyertakan `cancel_reason`.
+    description: |
+      SCRUM-55. Role admin. Transisi yang diizinkan (selain ini, dan status yang sama, ditolak 422 pada field `status`):
+
+      | Dari | Ke | Syarat |
+      |------|----|--------|
+      | `scheduled` | `cancelled` | `cancel_reason` wajib (maks 255) |
+      | `scheduled` | `ongoing`, `completed` | waktu mulai sudah lewat |
+      | `ongoing` | `completed` | - |
+      | `ongoing` | `cancelled` | `cancel_reason` wajib |
+      | `cancelled` | `scheduled` | waktu mulai belum lewat, kelas dan instruktur masih aktif, dan tidak bertumpuk dengan jadwal lain instruktur itu |
+
+      `completed` adalah status akhir. `cancel_reason` hanya disimpan untuk `cancelled`; status lain mengosongkannya (`null`).
     requestBody:
       required: true
       content:
@@ -159,6 +292,23 @@ adminScheduleStatus:
           application/json:
             schema:
               $ref: ../components/schemas.yaml#/ClassScheduleMutationResponse
+            example:
+              message: Status jadwal berhasil diperbarui.
+              data:
+                id: 10
+                class_id: 1
+                class_name: Yoga Pagi
+                instructor_id: 1
+                instructor_name: Budi Santoso
+                schedule_date: '2026-10-17'
+                start_time: '07:00'
+                end_time: '08:00'
+                status: cancelled
+                cancel_reason: Instruktur berhalangan hadir
+                participants_count: 4
+                min_participants: 3
+                created_at: '2026-10-16T10:00:00+08:00'
+                updated_at: '2026-10-16T11:20:00+08:00'
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':
@@ -166,14 +316,21 @@ adminScheduleStatus:
       '404':
         $ref: ../components/responses.yaml#/NotFound
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        $ref: ../components/responses.yaml#/ClassScheduleStatusError
 publicSchedules:
   get:
     operationId: listPublicClassSchedules
-    tags: [Schedules, Public, Sprint 2]
-    x-status: planned
+    tags: [Schedules, Public]
     summary: Jadwal kelas (publik)
-    description: SCRUM-56. Tanpa autentikasi dan tanpa data pribadi. Bila `date_from`/`date_to` kosong, default 7 hari ke depan. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
+    description: |
+      SCRUM-56. Tanpa autentikasi dan tanpa data pribadi (instruktur hanya nama, tanpa kontak; tanpa daftar peserta).
+      Semua status ikut tampil, termasuk `cancelled` beserta `cancel_reason`. Terurut `schedule_date`, lalu `start_time`. Tanpa paginasi.
+
+      **Rentang tanggal** (inklusif, `YYYY-MM-DD`, WITA): tanpa keduanya, hari ini sampai 6 hari ke depan (7 hari).
+      Bila hanya `date_from`, sampai 6 hari setelahnya; bila hanya `date_to`, mulai 6 hari sebelumnya. Rentang maksimal 31 hari (422).
+
+      `participants_count` = peserta yang tidak membatalkan booking. `updated_at` dipakai sebagai titik awal `updated_since`
+      untuk `GET /class-schedules/status`. Rate limiter public-api (120 request/menit per IP, berbagi kuota dengan endpoint publik lain).
     security: []
     parameters:
       - $ref: ../components/parameters.yaml#/DateFrom
@@ -191,25 +348,57 @@ publicSchedules:
                   class_id: 1
                   class_name: Yoga Pagi
                   instructor_name: Budi Santoso
-                  schedule_date: '2026-10-12'
+                  schedule_date: '2026-10-17'
                   start_time: '07:00'
                   end_time: '08:00'
                   status: scheduled
                   cancel_reason: null
                   participants_count: 4
                   min_participants: 3
+                  updated_at: '2026-10-16T10:00:00+08:00'
+                - id: 11
+                  class_id: 2
+                  class_name: Zumba Sore
+                  instructor_name: Siti Rahma
+                  schedule_date: '2026-10-17'
+                  start_time: '17:00'
+                  end_time: '18:00'
+                  status: cancelled
+                  cancel_reason: Instruktur berhalangan hadir
+                  participants_count: 2
+                  min_participants: 5
+                  updated_at: '2026-10-16T11:20:00+08:00'
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        $ref: ../components/responses.yaml#/PublicScheduleRangeError
       '429':
         $ref: ../components/responses.yaml#/TooManyRequests
 publicScheduleStatus:
   get:
     operationId: listClassScheduleStatus
-    tags: [Schedules, Public, Sprint 2]
-    x-status: planned
+    tags: [Schedules, Public]
     summary: Status jadwal ringkas untuk polling (publik)
     description: |
-      SCRUM-56. Tanpa autentikasi. Mendukung `ETag`/`If-None-Match`: bila data tidak berubah, server membalas 304 tanpa body. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
+      SCRUM-56. Tanpa autentikasi. Pengganti WebSocket untuk memantau status dan jumlah peserta. Rentang tanggal sama dengan
+      `GET /class-schedules` (default 7 hari, maksimal 31 hari).
+
+      **`updated_since`** (opsional): hanya jadwal dengan `updated_at` >= waktu ini. Inklusif karena `updated_at` presisi detik,
+      jadi item terakhir bisa muncul lagi; timpa item dengan `id` yang sama. Kirim `updated_at` terbesar yang sudah diterima.
+      Tanpa `updated_since`, semua jadwal dalam rentang tampil. Format ISO 8601 dengan offset (`+08:00` atau `Z`); encode `+`
+      sebagai `%2B` (bila tidak di-encode, server tetap membacanya sebagai `+`).
+
+      **Yang memperbarui `updated_at`**: perubahan jadwal oleh admin (termasuk pembatalan), setiap booking/pembatalan booking
+      peserta, dan perubahan `min_participants` kelas (untuk jadwal hari ini dan setelahnya).
+      Jadwal yang **dihapus** admin tidak muncul di polling; muat ulang `GET /class-schedules` saat layar dibuka.
+
+      **ETag**: setiap respons 200 membawa header `ETag`. Kirim balik lewat `If-None-Match` dengan URL yang sama;
+      bila isinya tidak berubah, server membalas **304 tanpa body**. `Cache-Control: no-cache` (selalu divalidasi ulang).
+      Untuk klien browser, `ETag` diekspos lewat CORS (`Access-Control-Expose-Headers: ETag`).
+
+      **Panduan klien**
+      - Polling hanya saat layar jadwal aktif (foreground), interval 15-30 detik.
+      - Hentikan polling saat app ke latar belakang atau layar ditutup; saat kembali, muat ulang daftar lalu lanjutkan polling.
+      - Bila error (5xx, jaringan, 429), mundur bertahap (mis. 30 s, 60 s, 120 s, maks 5 menit) lalu kembali ke interval normal setelah berhasil.
+      - Rate limiter public-api 120 request/menit per IP, berbagi kuota dengan endpoint publik lain.
     security: []
     parameters:
       - $ref: ../components/parameters.yaml#/UpdatedSince
@@ -218,15 +407,19 @@ publicScheduleStatus:
       - name: If-None-Match
         in: header
         required: false
-        description: Nilai `ETag` dari respons sebelumnya.
+        description: Nilai `ETag` dari respons sebelumnya untuk URL yang sama.
         schema:
           type: string
     responses:
       '200':
-        description: Status jadwal.
+        description: Status jadwal (bisa kosong bila tidak ada yang berubah sejak `updated_since`).
         headers:
           ETag:
             description: Validator untuk `If-None-Match` pada request berikutnya.
+            schema:
+              type: string
+          Cache-Control:
+            description: '`no-cache, private`.'
             schema:
               type: string
         content:
@@ -236,13 +429,27 @@ publicScheduleStatus:
             example:
               data:
                 - id: 10
-                  status: scheduled
+                  status: cancelled
                   participants_count: 4
                   min_participants: 3
-                  updated_at: '2026-10-10T08:00:00+08:00'
+                  updated_at: '2026-10-16T11:20:00+08:00'
       '304':
         description: Tidak ada perubahan sejak `ETag` yang dikirim. Tanpa body.
+        headers:
+          ETag:
+            description: ETag yang sama dengan `If-None-Match`.
+            schema:
+              type: string
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        description: Rentang tanggal tidak valid atau `updated_since` bukan ISO 8601 dengan offset.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: updated_since harus berformat ISO 8601 dengan offset, mis. 2026-10-16T10:00:00+08:00.
+              errors:
+                updated_since:
+                  - updated_since harus berformat ISO 8601 dengan offset, mis. 2026-10-16T10:00:00+08:00.
       '429':
         $ref: ../components/responses.yaml#/TooManyRequests

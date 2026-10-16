@@ -606,14 +606,20 @@ InstructorPage:
 
 ClassSchedule:
   type: object
-  required: [id, class_id, instructor_id, schedule_date, start_time, end_time, status, cancel_reason, participants_count, min_participants, created_at, updated_at]
+  required: [id, class_id, class_name, instructor_id, instructor_name, schedule_date, start_time, end_time, status, cancel_reason, participants_count, min_participants, created_at, updated_at]
   properties:
     id:
       type: integer
     class_id:
       type: integer
+    class_name:
+      type: string
+      description: Nama kelas terkait.
     instructor_id:
       type: integer
+    instructor_name:
+      type: string
+      description: Nama instruktur terkait.
     schedule_date:
       type: string
       format: date
@@ -643,14 +649,17 @@ ClassScheduleInput:
   properties:
     class_id:
       type: integer
+      description: Kelas aktif.
     instructor_id:
       type: integer
-      description: Jadwal instruktur yang sama tidak boleh tumpang tindih (422).
+      description: Instruktur aktif. Jadwal instruktur yang sama tidak boleh tumpang tindih di tanggal yang sama (422).
     schedule_date:
       type: string
       format: date
+      description: Tidak boleh di masa lalu (WITA).
     start_time:
       $ref: '#/ClockTime'
+      description: Untuk jadwal hari ini, tidak boleh sudah lewat.
     end_time:
       $ref: '#/ClockTime'
       description: Harus lebih besar dari `start_time`.
@@ -693,7 +702,7 @@ ClassSchedulePage:
 PublicClassSchedule:
   type: object
   description: Jadwal publik tanpa data pribadi (hanya nama instruktur tanpa kontak, dan tanpa daftar peserta).
-  required: [id, class_id, class_name, instructor_name, schedule_date, start_time, end_time, status, participants_count, min_participants]
+  required: [id, class_id, class_name, instructor_name, schedule_date, start_time, end_time, status, cancel_reason, participants_count, min_participants, updated_at]
   properties:
     id:
       type: integer
@@ -718,8 +727,14 @@ PublicClassSchedule:
       description: Alasan pembatalan (hanya terisi bila status cancelled).
     participants_count:
       type: integer
+      minimum: 0
+      description: Jumlah peserta aktif (status bukan `cancelled`).
     min_participants:
       type: integer
+      description: Diambil dari kelas terkait.
+    updated_at:
+      $ref: '#/Timestamp'
+      description: Titik awal `updated_since` untuk polling `GET /class-schedules/status`.
 PublicClassScheduleList:
   type: object
   required: [data]
@@ -738,10 +753,13 @@ ScheduleStatusItem:
       $ref: '#/ScheduleStatus'
     participants_count:
       type: integer
+      minimum: 0
+      description: Jumlah peserta aktif (status bukan `cancelled`).
     min_participants:
       type: integer
     updated_at:
       $ref: '#/Timestamp'
+      description: Ikut berubah saat jadwal diubah admin, peserta booking/membatalkan, atau `min_participants` kelas berubah.
 ScheduleStatusList:
   type: object
   required: [data]

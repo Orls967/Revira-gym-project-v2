@@ -22,6 +22,14 @@ class ClassParticipant extends Model
     ];
 
     /**
+     * Setiap booking, pembatalan, atau perubahan peserta memperbarui updated_at jadwal, agar perubahan
+     * participants_count terdeteksi oleh polling GET /class-schedules/status (SCRUM-56).
+     * Hanya berlaku lewat model Eloquent (create/save/delete); update massal lewat query builder
+     * (mis. ClassParticipant::where(...)->update()) harus memperbarui jadwal terkait secara manual.
+     */
+    protected $touches = ['classSchedule'];
+
+    /**
      * Get the schedule for this participant.
      */
     public function classSchedule(): BelongsTo

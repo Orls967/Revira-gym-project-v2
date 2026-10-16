@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\ClassScheduleController;
 use App\Http\Controllers\Api\V1\Admin\GymClassController;
 use App\Http\Controllers\Api\V1\Admin\InstructorController;
 use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PublicClassController;
+use App\Http\Controllers\Api\V1\PublicClassScheduleController;
 use App\Http\Controllers\Api\V1\PublicOperationalHourController;
 use App\Http\Controllers\Api\V1\PublicPlanController;
 use App\Http\Controllers\Api\V1\TransactionReceiptController;
@@ -43,6 +45,12 @@ Route::middleware('throttle:public-api')->group(function () {
     Route::get('/membership-plans', PublicPlanController::class);
     Route::get('/operational-hours', PublicOperationalHourController::class);
     Route::get('/classes', PublicClassController::class);
+
+    // Jadwal publik + polling status ringan dengan ETag/304 (SCRUM-56)
+    Route::controller(PublicClassScheduleController::class)->prefix('class-schedules')->group(function () {
+        Route::get('/', 'index');
+        Route::get('/status', 'status')->middleware('cache.headers:no_cache;etag');
+    });
 });
 
 // Penyajian bukti transfer terautentikasi (admin atau pemilik transaksi)
@@ -98,6 +106,19 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
             Route::get('/{instructor}', 'show');
             Route::put('/{instructor}', 'update');
             Route::delete('/{instructor}', 'destroy');
+        });
+
+    // Jadwal sesi kelas; status diubah lewat PATCH .../status, bukan PUT (SCRUM-55)
+    Route::controller(ClassScheduleController::class)
+        ->prefix('class-schedules')
+        ->whereNumber('classSchedule')
+        ->group(function () {
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('/{classSchedule}', 'show');
+            Route::put('/{classSchedule}', 'update');
+            Route::patch('/{classSchedule}/status', 'updateStatus');
+            Route::delete('/{classSchedule}', 'destroy');
         });
 });
 

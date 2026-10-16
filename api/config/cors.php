@@ -25,7 +25,8 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    // ETag dibaca klien browser (Admin Web) untuk If-None-Match pada polling GET /class-schedules/status (SCRUM-56)
+    'exposed_headers' => ['ETag'],
 
     'max_age' => 0,
 

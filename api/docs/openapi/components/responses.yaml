@@ -41,6 +41,17 @@ ValidationError:
         errors:
           name:
             - The name field is required.
+PublicScheduleRangeError:
+  description: Rentang tanggal jadwal publik tidak valid (format bukan `YYYY-MM-DD`, `date_to` sebelum `date_from`, atau lebih dari 31 hari) (SCRUM-56).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Rentang tanggal maksimal 31 hari.
+        errors:
+          date_to:
+            - Rentang tanggal maksimal 31 hari.
 TooManyRequests:
   description: Terlalu banyak percobaan (rate limit).
   content:
@@ -175,3 +186,101 @@ InstructorValidationError:
             errors:
               phone_number:
                 - Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
+ClassScheduleValidationError:
+  description: Validasi jadwal gagal (SCRUM-55).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        overlap:
+          summary: Jadwal instruktur bertumpuk
+          value:
+            message: Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:00-08:00 yang bertumpuk dengan jadwal ini.
+            errors:
+              instructor_id:
+                - Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:00-08:00 yang bertumpuk dengan jadwal ini.
+        inactiveClass:
+          summary: Kelas tidak ada atau nonaktif
+          value:
+            message: Kelas tidak ditemukan atau tidak aktif.
+            errors:
+              class_id:
+                - Kelas tidak ditemukan atau tidak aktif.
+        classChangeWithParticipants:
+          summary: Ganti kelas pada jadwal berpeserta (hanya PUT)
+          value:
+            message: Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.
+            errors:
+              class_id:
+                - Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.
+        inactiveInstructor:
+          summary: Instruktur tidak ada atau nonaktif
+          value:
+            message: Instruktur tidak ditemukan atau tidak aktif.
+            errors:
+              instructor_id:
+                - Instruktur tidak ditemukan atau tidak aktif.
+        pastDate:
+          summary: Tanggal di masa lalu
+          value:
+            message: Tanggal jadwal tidak boleh di masa lalu.
+            errors:
+              schedule_date:
+                - Tanggal jadwal tidak boleh di masa lalu.
+        startPassed:
+          summary: Jam mulai hari ini sudah lewat
+          value:
+            message: Jam mulai sudah lewat.
+            errors:
+              start_time:
+                - Jam mulai sudah lewat.
+        endBeforeStart:
+          summary: Jam selesai tidak setelah jam mulai
+          value:
+            message: Jam selesai harus setelah jam mulai.
+            errors:
+              end_time:
+                - Jam selesai harus setelah jam mulai.
+ClassScheduleStatusError:
+  description: Perubahan status jadwal tidak valid (SCRUM-55).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        reasonRequired:
+          summary: Batal tanpa alasan
+          value:
+            message: Alasan pembatalan wajib diisi bila jadwal dibatalkan.
+            errors:
+              cancel_reason:
+                - Alasan pembatalan wajib diisi bila jadwal dibatalkan.
+        forbiddenTransition:
+          summary: Transisi tidak diizinkan
+          value:
+            message: Status jadwal tidak dapat diubah dari completed ke scheduled.
+            errors:
+              status:
+                - Status jadwal tidak dapat diubah dari completed ke scheduled.
+        rescheduleAfterStart:
+          summary: Mengaktifkan kembali jadwal batal setelah waktu mulai
+          value:
+            message: Jadwal yang dibatalkan hanya dapat diaktifkan kembali sebelum waktu mulai.
+            errors:
+              status:
+                - Jadwal yang dibatalkan hanya dapat diaktifkan kembali sebelum waktu mulai.
+        notStarted:
+          summary: Menandai ongoing/completed sebelum waktu mulai
+          value:
+            message: Jadwal belum dimulai, sehingga belum dapat diubah ke completed.
+            errors:
+              status:
+                - Jadwal belum dimulai, sehingga belum dapat diubah ke completed.
+        rescheduleOverlap:
+          summary: Mengaktifkan kembali jadwal batal yang kini bertumpuk
+          value:
+            message: Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:30-08:30 yang bertumpuk dengan jadwal ini.
+            errors:
+              status:
+                - Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:30-08:30 yang bertumpuk dengan jadwal ini.

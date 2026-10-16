@@ -62,9 +62,20 @@ class GymClassController extends Controller
 
     /**
      * PUT /api/v1/admin/classes/{gymClass}
+     *
+     * Sama seperti instruktur: menonaktifkan kelas ditolak selama masih ada jadwal mendatang,
+     * agar jadwal itu tidak tercatat dengan kelas nonaktif. Kelas yang sudah nonaktif tetap bisa diubah.
      */
     public function update(UpdateGymClassRequest $request, GymClass $gymClass): JsonResponse
     {
+        $deactivating = $gymClass->is_active && $request->has('is_active') && ! $request->boolean('is_active');
+
+        if ($deactivating && $gymClass->classSchedules()->upcoming()->exists()) {
+            return response()->json([
+                'message' => 'Kelas tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan batalkan jadwal tersebut lebih dulu.',
+            ], 409);
+        }
+
         $gymClass->update($request->validated());
 
         return response()->json([
