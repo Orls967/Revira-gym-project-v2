@@ -103,3 +103,75 @@ OperationalHourValidationError:
                 - Jam buka harus berformat HH:MM.
               close_time:
                 - Jam tutup harus berformat HH:MM.
+GymClassValidationError:
+  description: Validasi kelas gagal (SCRUM-52).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        empty:
+          summary: Body kosong
+          value:
+            message: The name field is required. (and 1 more error)
+            errors:
+              name:
+                - The name field is required.
+              min_participants:
+                - The min participants field is required.
+        minParticipantsZero:
+          summary: min_participants 0 atau negatif
+          value:
+            message: Jumlah peserta minimum harus minimal 1.
+            errors:
+              min_participants:
+                - Jumlah peserta minimum harus minimal 1.
+        minParticipantsTooLarge:
+          summary: min_participants lebih dari 1000
+          value:
+            message: Jumlah peserta minimum tidak boleh lebih dari 1000.
+            errors:
+              min_participants:
+                - Jumlah peserta minimum tidak boleh lebih dari 1000.
+        minParticipantsNotInteger:
+          summary: min_participants pecahan atau bukan angka
+          value:
+            message: The min participants field must be an integer.
+            errors:
+              min_participants:
+                - The min participants field must be an integer.
+        instructorNotFound:
+          summary: Instruktur tidak ada atau nonaktif
+          value:
+            message: Instruktur tidak ditemukan atau tidak aktif.
+            errors:
+              default_instructor_id:
+                - Instruktur tidak ditemukan atau tidak aktif.
+InstructorValidationError:
+  description: Validasi instruktur gagal (SCRUM-54).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        nameRequired:
+          summary: Nama kosong
+          value:
+            message: Nama instruktur wajib diisi.
+            errors:
+              name:
+                - Nama instruktur wajib diisi.
+        nameTooLong:
+          summary: Nama lebih dari 100 karakter
+          value:
+            message: Nama instruktur maksimal 100 karakter.
+            errors:
+              name:
+                - Nama instruktur maksimal 100 karakter.
+        phoneInvalid:
+          summary: Nomor HP bukan nomor Indonesia
+          value:
+            message: Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
+            errors:
+              phone_number:
+                - Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
