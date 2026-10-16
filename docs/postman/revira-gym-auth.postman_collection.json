@@ -1848,7 +1848,7 @@
       "name": "Sprint 2 - Jadwal (SCRUM-55, SCRUM-56)",
       "item": [
         {
-          "name": "Admin - daftar jadwal",
+          "name": "Admin - daftar jadwal (filter tanggal, kelas, status)",
           "request": {
             "method": "GET",
             "header": [
@@ -1867,9 +1867,63 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/class-schedules?date_from=2026-10-12&date_to=2026-10-18&status=scheduled&page=1",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/class-schedules?date_from=2026-10-17&date_to=2026-10-23&page=1",
+            "description": "Filter opsional: `date_from`, `date_to` (inklusif, YYYY-MM-DD), `class_id`, `status`, `page`, `per_page` (maks 100). Terurut tanggal lalu jam mulai."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 10,\n      \"class_id\": 1,\n      \"class_name\": \"Yoga Pagi\",\n      \"instructor_id\": 1,\n      \"instructor_name\": \"Budi Santoso\",\n      \"schedule_date\": \"2026-10-17\",\n      \"start_time\": \"07:00\",\n      \"end_time\": \"08:00\",\n      \"status\": \"scheduled\",\n      \"cancel_reason\": null,\n      \"participants_count\": 4,\n      \"min_participants\": 3,\n      \"created_at\": \"2026-10-16T10:00:00+08:00\",\n      \"updated_at\": \"2026-10-16T10:00:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/class-schedules?date_from=2026-10-17&date_to=2026-10-23&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/class-schedules?date_from=2026-10-17&date_to=2026-10-23&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/class-schedules?date_from=2026-10-17&date_to=2026-10-23&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/class-schedules\",\n    \"per_page\": 15,\n    \"to\": 1,\n    \"total\": 1\n  }\n}"
+            },
+            {
+              "name": "422 date_to sebelum date_from",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Tanggal akhir tidak boleh sebelum tanggal awal.\",\n  \"errors\": {\n    \"date_to\": [\n      \"Tanggal akhir tidak boleh sebelum tanggal awal.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - buat jadwal (tumpang tindih 422)",
@@ -1897,11 +1951,104 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"class_id\": 1,\n  \"instructor_id\": 1,\n  \"schedule_date\": \"2026-10-12\",\n  \"start_time\": \"07:00\",\n  \"end_time\": \"08:00\"\n}"
+              "raw": "{\n  \"class_id\": 1,\n  \"instructor_id\": 1,\n  \"schedule_date\": \"2026-10-17\",\n  \"start_time\": \"07:00\",\n  \"end_time\": \"08:00\"\n}"
             },
             "url": "{{baseUrl}}/admin/class-schedules",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "description": "Ganti `schedule_date` dengan tanggal hari ini atau setelahnya. Kirim ulang request yang sama untuk melihat 422 tumpang tindih instruktur."
+          },
+          "response": [
+            {
+              "name": "201 Dibuat",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jadwal berhasil dibuat.\",\n  \"data\": {\n    \"id\": 10,\n    \"class_id\": 1,\n    \"class_name\": \"Yoga Pagi\",\n    \"instructor_id\": 1,\n    \"instructor_name\": \"Budi Santoso\",\n    \"schedule_date\": \"2026-10-17\",\n    \"start_time\": \"07:00\",\n    \"end_time\": \"08:00\",\n    \"status\": \"scheduled\",\n    \"cancel_reason\": null,\n    \"participants_count\": 0,\n    \"min_participants\": 3,\n    \"created_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T10:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "422 Instruktur bertumpuk",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:00-08:00 yang bertumpuk dengan jadwal ini.\",\n  \"errors\": {\n    \"instructor_id\": [\n      \"Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:00-08:00 yang bertumpuk dengan jadwal ini.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Tanggal di masa lalu",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Tanggal jadwal tidak boleh di masa lalu.\",\n  \"errors\": {\n    \"schedule_date\": [\n      \"Tanggal jadwal tidak boleh di masa lalu.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Kelas nonaktif",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas tidak ditemukan atau tidak aktif.\",\n  \"errors\": {\n    \"class_id\": [\n      \"Kelas tidak ditemukan atau tidak aktif.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Jam selesai tidak setelah jam mulai",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jam selesai harus setelah jam mulai.\",\n  \"errors\": {\n    \"end_time\": [\n      \"Jam selesai harus setelah jam mulai.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - detail jadwal",
@@ -1923,9 +2070,62 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/class-schedules/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/class-schedules/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": {\n    \"id\": 10,\n    \"class_id\": 1,\n    \"class_name\": \"Yoga Pagi\",\n    \"instructor_id\": 1,\n    \"instructor_name\": \"Budi Santoso\",\n    \"schedule_date\": \"2026-10-17\",\n    \"start_time\": \"07:00\",\n    \"end_time\": \"08:00\",\n    \"status\": \"scheduled\",\n    \"cancel_reason\": null,\n    \"participants_count\": 4,\n    \"min_participants\": 3,\n    \"created_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T10:00:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - ubah jadwal",
@@ -1953,11 +2153,91 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"class_id\": 1,\n  \"instructor_id\": 1,\n  \"schedule_date\": \"2026-10-12\",\n  \"start_time\": \"07:00\",\n  \"end_time\": \"08:00\"\n}"
+              "raw": "{\n  \"class_id\": 1,\n  \"instructor_id\": 2,\n  \"schedule_date\": \"2026-10-19\",\n  \"start_time\": \"18:00\",\n  \"end_time\": \"19:30\"\n}"
             },
             "url": "{{baseUrl}}/admin/class-schedules/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "description": "Hanya jadwal berstatus scheduled. Aturan sama dengan buat jadwal; jadwal ini sendiri dikecualikan dari cek tumpang tindih."
+          },
+          "response": [
+            {
+              "name": "200 Diubah",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jadwal berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 10,\n    \"class_id\": 1,\n    \"class_name\": \"Yoga Pagi\",\n    \"instructor_id\": 2,\n    \"instructor_name\": \"Siti Rahma\",\n    \"schedule_date\": \"2026-10-19\",\n    \"start_time\": \"18:00\",\n    \"end_time\": \"19:30\",\n    \"status\": \"scheduled\",\n    \"cancel_reason\": null,\n    \"participants_count\": 4,\n    \"min_participants\": 3,\n    \"created_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T11:15:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "409 Jadwal bukan scheduled",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jadwal berstatus cancelled tidak dapat diubah. Hanya jadwal berstatus scheduled yang dapat diubah.\"\n}"
+            },
+            {
+              "name": "422 Instruktur bertumpuk",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:00-08:00 yang bertumpuk dengan jadwal ini.\",\n  \"errors\": {\n    \"instructor_id\": [\n      \"Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:00-08:00 yang bertumpuk dengan jadwal ini.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
           "name": "Admin - ubah status jadwal (cancelled wajib alasan)",
@@ -1988,11 +2268,104 @@
               "raw": "{\n  \"status\": \"cancelled\",\n  \"cancel_reason\": \"Instruktur berhalangan hadir\"\n}"
             },
             "url": "{{baseUrl}}/admin/class-schedules/{{id}}/status",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "description": "Transisi: scheduled -> cancelled (alasan wajib) / ongoing / completed (setelah waktu mulai); ongoing -> completed / cancelled; cancelled -> scheduled (sebelum waktu mulai, tidak bertumpuk). completed adalah status akhir."
+          },
+          "response": [
+            {
+              "name": "200 Dibatalkan",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Status jadwal berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 10,\n    \"class_id\": 1,\n    \"class_name\": \"Yoga Pagi\",\n    \"instructor_id\": 1,\n    \"instructor_name\": \"Budi Santoso\",\n    \"schedule_date\": \"2026-10-17\",\n    \"start_time\": \"07:00\",\n    \"end_time\": \"08:00\",\n    \"status\": \"cancelled\",\n    \"cancel_reason\": \"Instruktur berhalangan hadir\",\n    \"participants_count\": 4,\n    \"min_participants\": 3,\n    \"created_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T11:20:00+08:00\"\n  }\n}"
+            },
+            {
+              "name": "422 Batal tanpa alasan",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Alasan pembatalan wajib diisi bila jadwal dibatalkan.\",\n  \"errors\": {\n    \"cancel_reason\": [\n      \"Alasan pembatalan wajib diisi bila jadwal dibatalkan.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Aktifkan kembali setelah waktu mulai",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jadwal yang dibatalkan hanya dapat diaktifkan kembali sebelum waktu mulai.\",\n  \"errors\": {\n    \"status\": [\n      \"Jadwal yang dibatalkan hanya dapat diaktifkan kembali sebelum waktu mulai.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Transisi tidak diizinkan",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Status jadwal tidak dapat diubah dari completed ke scheduled.\",\n  \"errors\": {\n    \"status\": [\n      \"Status jadwal tidak dapat diubah dari completed ke scheduled.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
-          "name": "Admin - hapus jadwal",
+          "name": "Admin - hapus jadwal (409 bila berpeserta)",
           "request": {
             "method": "DELETE",
             "header": [
@@ -2011,9 +2384,75 @@
                 }
               ]
             },
-            "url": "{{baseUrl}}/admin/class-schedules/{{id}}",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). "
-          }
+            "url": "{{baseUrl}}/admin/class-schedules/{{id}}"
+          },
+          "response": [
+            {
+              "name": "200 Dihapus",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jadwal berhasil dihapus.\"\n}"
+            },
+            {
+              "name": "409 Jadwal sudah memiliki peserta",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jadwal tidak dapat dihapus karena sudah memiliki peserta. Batalkan jadwal lewat PATCH /admin/class-schedules/{id}/status dengan status cancelled.\"\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "404 Tidak ditemukan",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            }
+          ]
         },
         {
           "name": "Jadwal publik (default 7 hari)",
@@ -2058,7 +2497,8 @@
             "description": "PLANNED (Sprint 2, belum diimplementasikan). Kirim header If-None-Match dengan ETag respons sebelumnya untuk mendapat 304."
           }
         }
-      ]
+      ],
+      "description": "Jadwal admin (SCRUM-55), role:admin; login dulu lewat \"Login (admin-web)\". Jadwal publik (SCRUM-56) tanpa token. Admin: tumpang tindih jadwal instruktur di tanggal yang sama ditolak 422; hanya jadwal scheduled yang bisa diubah (409); jadwal berpeserta tidak bisa dihapus (409), batalkan lewat PATCH status."
     },
     {
       "name": "Sprint 2 - Bukti transfer (SCRUM-48)",

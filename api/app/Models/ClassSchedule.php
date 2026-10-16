@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,22 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ClassSchedule extends Model
 {
     use HasFactory;
+
+    public const STATUS_SCHEDULED = 'scheduled';
+
+    public const STATUS_ONGOING = 'ongoing';
+
+    public const STATUS_COMPLETED = 'completed';
+
+    public const STATUS_CANCELLED = 'cancelled';
+
+    /** Urutan sesuai enum kolom status di migration. */
+    public const STATUSES = [
+        self::STATUS_SCHEDULED,
+        self::STATUS_ONGOING,
+        self::STATUS_COMPLETED,
+        self::STATUS_CANCELLED,
+    ];
 
     protected $fillable = [
         'class_id',
@@ -33,7 +50,55 @@ class ClassSchedule extends Model
     {
         return $query
             ->whereDate('schedule_date', '>=', today())
-            ->whereIn('status', ['scheduled', 'ongoing']);
+            ->whereIn('status', [self::STATUS_SCHEDULED, self::STATUS_ONGOING]);
+    }
+
+    /**
+     * Jadwal instruktur yang bertumpuk dengan rentang jam pada tanggal itu. Jadwal yang dibatalkan tidak dihitung.
+     * Jam yang hanya bersentuhan (selesai 08:00, mulai 08:00) tidak dianggap bertumpuk.
+     * Jam dibandingkan sebagai teks HH:MM:SS, jadi keduanya harus disimpan dengan detik.
+     */
+    public function scopeOverlapping(Builder $query, int $instructorId, string $date, string $startTime, string $endTime): Builder
+    {
+        return $query
+            ->where('instructor_id', $instructorId)
+            ->whereDate('schedule_date', $date)
+            ->where('status', '!=', self::STATUS_CANCELLED)
+            ->where('start_time', '<', $endTime)
+            ->where('end_time', '>', $startTime);
+    }
+
+    /**
+     * Relasi dan hitungan yang dibutuhkan ClassScheduleResource.
+     * participants_count hanya menghitung peserta yang tidak membatalkan booking.
+     */
+    public function scopeWithDetails(Builder $query): Builder
+    {
+        return $query->with(['gymClass', 'instructor'])->withCount(self::participantsCountDefinition());
+    }
+
+    /**
+     * Versi scopeWithDetails() untuk model yang sudah diambil (mis. setelah dibuat atau diubah).
+     */
+    public function loadDetails(): static
+    {
+        return $this->load(['gymClass', 'instructor'])->loadCount(self::participantsCountDefinition());
+    }
+
+    /**
+     * @return array<string, \Closure>
+     */
+    private static function participantsCountDefinition(): array
+    {
+        return ['participants as participants_count' => fn (Builder $query) => $query->where('status', '!=', 'cancelled')];
+    }
+
+    /**
+     * Waktu mulai sesi dalam zona waktu aplikasi (WITA).
+     */
+    public function startsAt(): CarbonImmutable
+    {
+        return CarbonImmutable::parse($this->schedule_date->format('Y-m-d').' '.$this->start_time);
     }
 
     /**
