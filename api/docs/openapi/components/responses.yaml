@@ -147,3 +147,31 @@ GymClassValidationError:
             errors:
               default_instructor_id:
                 - Instruktur tidak ditemukan atau tidak aktif.
+InstructorValidationError:
+  description: Validasi instruktur gagal (SCRUM-54).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        nameRequired:
+          summary: Nama kosong
+          value:
+            message: Nama instruktur wajib diisi.
+            errors:
+              name:
+                - Nama instruktur wajib diisi.
+        nameTooLong:
+          summary: Nama lebih dari 100 karakter
+          value:
+            message: Nama instruktur maksimal 100 karakter.
+            errors:
+              name:
+                - Nama instruktur maksimal 100 karakter.
+        phoneInvalid:
+          summary: Nomor HP bukan nomor Indonesia
+          value:
+            message: Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
+            errors:
+              phone_number:
+                - Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
