@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      member-app: ${{ steps.filter.outputs['member-app'] }}
+      admin-web: ${{ steps.filter.outputs['admin-web'] }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # dorny/paths-filter v3.0.2 pinned to commit SHA
+      - name: Check paths filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'api/**'
+              - '.github/workflows/**'
+            member-app:
+              - 'member-app/**'
+              - '.github/workflows/**'
+            admin-web:
+              - 'admin-web/**'
+              - '.github/workflows/**'
+
+  api:
+    name: API
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    uses: ./.github/workflows/ci-api.yml
+
+  member-app:
+    name: Member App
+    needs: changes
+    if: needs.changes.outputs['member-app'] == 'true'
+    uses: ./.github/workflows/ci-member-app.yml
+
+  admin-web:
+    name: Admin Web
+    needs: changes
+    if: needs.changes.outputs['admin-web'] == 'true'
+    uses: ./.github/workflows/ci-admin-web.yml
+
+  ci-gate:
+    name: ci-gate
+    if: always()
+    needs: [changes, api, member-app, admin-web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate CI Gate Results
+        run: |
+          changes="${{ needs.changes.result }}"
+          api="${{ needs.api.result }}"
+          member_app="${{ needs['member-app'].result }}"
+          admin_web="${{ needs['admin-web'].result }}"
+
+          echo "================ CI GATE EVALUATION ================"
+          echo "Changes Job Result    : $changes"
+          echo "API Lane Result       : $api"
+          echo "Member App Lane Result: $member_app"
+          echo "Admin Web Lane Result : $admin_web"
+          echo "===================================================="
+
+          if [ "$changes" != "success" ]; then
+            echo "CI Gate FAILED: 'changes' job did not succeed (result: $changes)."
+            exit 1
+          fi
+
+          failed=0
+          for lane_entry in "api:$api" "member-app:$member_app" "admin-web:$admin_web"; do
+            lane_name="${lane_entry%%:*}"
+            lane_result="${lane_entry##*:}"
+            if [ "$lane_result" = "failure" ] || [ "$lane_result" = "cancelled" ]; then
+              echo "CI Gate FAILED: lane '$lane_name' finished with result '$lane_result'."
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+
+          echo "CI Gate PASSED: All lanes either succeeded or were safely skipped."
