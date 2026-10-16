@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/common/PageHeader';
 import Modal from '../components/common/Modal';
-import api from '../lib/api';
+// Buka komentar import api di bawah ini saat mengaktifkan integrasi backend SCRUM-54
+// import api from '../lib/api';
 
 interface Instructor {
   id: number;
@@ -54,7 +55,7 @@ export default function Instruktur() {
       // Buka komentar di bawah jika backend SCRUM-54 sudah siap
       // const response = await api.get('/instructors');
       // setInstructors(response.data.data);
-    } catch (err: any) {
+    } catch {
       setFetchError('Gagal memuat data instruktur.');
     } finally {
       setIsLoading(false);
@@ -72,7 +73,18 @@ export default function Instruktur() {
   );
   
   const totalPages = Math.ceil(filteredInstructors.length / itemsPerPage);
-  const currentData = filteredInstructors.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Penyesuaian otomatis currentPage jika item terakhir pada halaman terakhir dihapus
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    } else if (totalPages === 0 && currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  const safeCurrentPage = totalPages > 0 ? Math.min(currentPage, totalPages) : 1;
+  const currentData = filteredInstructors.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
 
   const openModal = (instructor?: Instructor) => {
     if (instructor) {
@@ -222,17 +234,17 @@ export default function Instruktur() {
           {/* Paginasi */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-3 border-t border-zinc-800 bg-zinc-950/30">
-              <span className="text-sm text-zinc-400">Halaman {currentPage} dari {totalPages}</span>
+              <span className="text-sm text-zinc-400">Halaman {safeCurrentPage} dari {totalPages}</span>
               <div className="space-x-2">
                 <button 
-                  disabled={currentPage === 1} 
+                  disabled={safeCurrentPage === 1} 
                   onClick={() => setCurrentPage(prev => prev - 1)}
                   className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 disabled:opacity-50"
                 >
                   Sebelumnya
                 </button>
                 <button 
-                  disabled={currentPage === totalPages} 
+                  disabled={safeCurrentPage === totalPages} 
                   onClick={() => setCurrentPage(prev => prev + 1)}
                   className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 disabled:opacity-50"
                 >
