@@ -1,38 +1,36 @@
-import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Platform } from 'react-native';
 
 export default function AppLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#fbbf24", // Warna kuning amber saat aktif
-        tabBarInactiveTintColor: "#71717a", // Warna abu-abu saat tidak aktif
         tabBarStyle: {
-          backgroundColor: "#09090b", // Dark background (zinc-950)
-          borderTopColor: "#27272a", // Border atas (zinc-800)
-          paddingBottom: 6,
-          paddingTop: 6,
-          height: 60,
+          backgroundColor: '#18181b', // zinc-900
+          borderTopColor: '#27272a', // zinc-800
+          // Menambahkan inset bawah HP ke tinggi tab bar
+          height: Platform.OS === 'ios' ? 60 + insets.bottom : 65 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+          paddingTop: 8,
         },
+        tabBarActiveTintColor: '#f59e0b', // amber-500 (Emas)
+        tabBarInactiveTintColor: '#71717a', // zinc-500
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Beranda",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
+          title: 'Beranda',
         }}
       />
       <Tabs.Screen
-        name="schedules"
+        name="schedule"
         options={{
-          title: "Jadwal",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
+          title: 'Jadwal',
         }}
       />
     </Tabs>

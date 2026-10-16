@@ -24,22 +24,24 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  // Fungsi muat data dengan parameter isSilent agar polling tidak membuat UI flicker
+  const loadData = async (isSilent = false) => {
     try {
-      setError(null);
+      if (!isSilent) setError(null);
 
       let fetchedPlans = MOCK_PLANS;
       let fetchedHours = MOCK_HOURS;
 
-      // 1. Coba panggil API /membership-plans (SCRUM-93)
+      // 1. Coba panggil API /membership-plans
       try {
         const plansRes = await api.get('/membership-plans');
         if (plansRes.data?.data) {
           fetchedPlans = plansRes.data.data;
         }
       } catch (err) {
-        // Jika endpoint belum di-merge / 404, otomatis gunakan MOCK_PLANS
-        console.log('Endpoint plans belum siap, menggunakan Mock Data');
+        if (!isSilent) {
+          console.log('Endpoint plans belum siap, menggunakan Mock Data');
+        }
       }
 
       // 2. Coba panggil API /operational-hours
@@ -49,31 +51,39 @@ export default function HomeScreen() {
           fetchedHours = hoursRes.data.data;
         }
       } catch (err) {
-        // Fallback ke MOCK_HOURS
-        console.log('Endpoint operational-hours belum siap, menggunakan Mock Data');
+        if (!isSilent) {
+          console.log('Endpoint operational-hours belum siap, menggunakan Mock Data');
+        }
       }
 
       // Filter hanya paket yang aktif
       setPlans(fetchedPlans.filter((p) => p.is_active));
       setHours(fetchedHours);
     } catch (err) {
-      setError('Gagal memuat data Beranda.');
+      if (!isSilent) setError('Gagal memuat data Beranda.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
+  // Effect untuk Panggilan Pertama & Polling 15 Detik (SCRUM-58)
   useEffect(() => {
     loadData();
+
+    // Set interval 15 detik untuk auto-update data di latar belakang
+    const intervalId = setInterval(() => {
+      loadData(true);
+    }, 15000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadData();
+    loadData(true);
   }, []);
 
-  // Handler Tombol Pilih Paket (Placeholder sampai SCRUM-74 Sprint 3)
   const handleSelectPlan = (plan: MembershipPlan) => {
     Alert.alert(
       'Pilih Paket',
@@ -82,7 +92,7 @@ export default function HomeScreen() {
     );
   };
 
-  // State Loading (Skeleton Placeholder)
+  // State Loading Awal (Skeleton/ActivityIndicator)
   if (loading) {
     return (
       <View className="flex-1 bg-zinc-950 justify-center items-center">
@@ -117,7 +127,7 @@ export default function HomeScreen() {
     <ScrollView
       className="flex-1 bg-zinc-950"
       contentContainerStyle={{
-        paddingTop: insets.top + 24,
+        paddingTop: insets.top + 20,
         paddingBottom: insets.bottom + 40,
         paddingHorizontal: 20,
       }}
@@ -127,6 +137,7 @@ export default function HomeScreen() {
           refreshing={refreshing}
           onRefresh={onRefresh}
           tintColor="#f59e0b"
+          colors={['#f59e0b']}
           progressViewOffset={insets.top}
         />
       }
@@ -146,7 +157,6 @@ export default function HomeScreen() {
         <Text className="text-white text-xl font-bold mb-5">Pilihan Paket Member</Text>
 
         {plans.length === 0 ? (
-          /* Tampilan Kosong (Empty State) */
           <View className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 items-center">
             <Text className="text-zinc-400 text-base text-center">
               Belum ada paket keanggotaan aktif saat ini.
@@ -171,7 +181,6 @@ export default function HomeScreen() {
                 {formatRupiah(plan.price)}
               </Text>
 
-              {/* Tombol Ajakan Mendaftar (Point 4 Jira) */}
               <TouchableOpacity
                 onPress={() => handleSelectPlan(plan)}
                 activeOpacity={0.8}
