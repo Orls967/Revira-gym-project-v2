@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~57.0.22",
     "@expo/vector-icons": "^15.0.2",
+    "eslint-config-expo": "~57.0.2",
     "expo": "~57.0.27",
     "expo-constants": "~57.0.20",
     "expo-device": "~57.0.2",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint": "^9.39.5",
     "typescript": "~6.0.3"
   },
   "scripts": {
