@@ -358,6 +358,7 @@ Aturan:
 - `specialization` opsional (boleh `null`), maks 100 karakter.
 - `phone_number` opsional (boleh `null`); bila diisi harus nomor Indonesia `08` + 8-11 digit. Format `+62`/`62`, spasi, dan tanda hubung diterima lalu disimpan sebagai `08xxx` (422 `Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.`).
 - `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
+- Instruktur **tidak bisa dinonaktifkan** (PUT `is_active: false` pada instruktur aktif) selama masih punya jadwal mendatang, yaitu `schedule_date` hari ini atau setelahnya dengan status `scheduled`/`ongoing`. Dibalas 409 `Instruktur tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan pindahkan jadwal ke instruktur lain atau batalkan jadwal tersebut lebih dulu.` dan tidak ada field yang berubah. Jadwal yang sudah lewat, selesai, atau dibatalkan tidak menghalangi. Instruktur yang sudah nonaktif tetap bisa diubah.
 - Instruktur **tidak bisa dihapus** bila sudah dipakai (FK `restrict`), dan dibalas 409:
   - punya jadwal, termasuk jadwal yang dibatalkan: `Instruktur tidak dapat dihapus karena sudah memiliki jadwal. Silakan pindahkan jadwal ke instruktur lain lebih dulu, atau nonaktifkan instruktur (is_active = false) sebagai alternatif.`
   - masih menjadi `default_instructor_id` suatu kelas: `Instruktur tidak dapat dihapus karena masih menjadi instruktur default kelas. Silakan ganti instruktur default kelas tersebut lebih dulu, atau nonaktifkan instruktur (is_active = false) sebagai alternatif.`

@@ -142,7 +142,11 @@ adminInstructorById:
     operationId: updateInstructor
     tags: [Instructors]
     summary: Ubah instruktur (admin)
-    description: SCRUM-54. Role admin. Aturan validasi sama dengan POST. Bila `is_active` tidak dikirim, status aktif tidak berubah.
+    description: |
+      SCRUM-54. Role admin. Aturan validasi sama dengan POST. Bila `is_active` tidak dikirim, status aktif tidak berubah.
+      Menonaktifkan instruktur (`is_active` dari true ke false) ditolak 409 selama masih ada jadwal mendatang
+      (`schedule_date` hari ini atau setelahnya dengan status `scheduled`/`ongoing`); pindahkan atau batalkan jadwalnya lebih dulu.
+      Instruktur yang sudah nonaktif tetap bisa diubah.
     requestBody:
       required: true
       content:
@@ -177,6 +181,14 @@ adminInstructorById:
         $ref: ../components/responses.yaml#/Forbidden
       '404':
         $ref: ../components/responses.yaml#/NotFound
+      '409':
+        description: Instruktur masih memiliki jadwal mendatang sehingga tidak dapat dinonaktifkan.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Instruktur tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan pindahkan jadwal ke instruktur lain atau batalkan jadwal tersebut lebih dulu.
       '422':
         $ref: ../components/responses.yaml#/InstructorValidationError
   delete:

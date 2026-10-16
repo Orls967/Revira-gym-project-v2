@@ -274,6 +274,96 @@ class AdminInstructorTest extends TestCase
             ->assertJsonPath('data.is_active', false);
     }
 
+    /**
+     * Instruktur yang masih punya jadwal mendatang (hari ini atau setelahnya) tidak bisa dinonaktifkan.
+     *
+     * @return array<string, array{0: int, 1: string}>
+     */
+    public static function upcomingScheduleProvider(): array
+    {
+        return [
+            'terjadwal besok' => [1, 'scheduled'],
+            'terjadwal hari ini' => [0, 'scheduled'],
+            'sedang berjalan hari ini' => [0, 'ongoing'],
+        ];
+    }
+
+    #[DataProvider('upcomingScheduleProvider')]
+    public function test_deactivating_instructor_with_upcoming_schedule_returns_409(int $daysFromToday, string $status): void
+    {
+        $schedule = ClassSchedule::factory()->create([
+            'schedule_date' => today()->addDays($daysFromToday)->toDateString(),
+            'status' => $status,
+        ]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->instructor_id}", $this->validPayload(['name' => 'Nama Baru', 'is_active' => false]))
+            ->assertStatus(409)
+            ->assertExactJson([
+                'message' => 'Instruktur tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan pindahkan jadwal ke instruktur lain atau batalkan jadwal tersebut lebih dulu.',
+            ]);
+
+        $instructor = Instructor::find($schedule->instructor_id);
+        $this->assertTrue($instructor->is_active);
+        $this->assertNotSame('Nama Baru', $instructor->name);
+    }
+
+    /**
+     * Jadwal yang sudah lewat, selesai, atau dibatalkan tidak menghalangi penonaktifan.
+     *
+     * @return array<string, array{0: int, 1: string}>
+     */
+    public static function nonBlockingScheduleProvider(): array
+    {
+        return [
+            'dibatalkan besok' => [1, 'cancelled'],
+            'selesai hari ini' => [0, 'completed'],
+            'terjadwal kemarin' => [-1, 'scheduled'],
+        ];
+    }
+
+    #[DataProvider('nonBlockingScheduleProvider')]
+    public function test_deactivating_instructor_without_upcoming_schedule_returns_200(int $daysFromToday, string $status): void
+    {
+        $schedule = ClassSchedule::factory()->create([
+            'schedule_date' => today()->addDays($daysFromToday)->toDateString(),
+            'status' => $status,
+            'cancel_reason' => $status === 'cancelled' ? 'Instruktur sakit' : null,
+        ]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->instructor_id}", $this->validPayload(['is_active' => false]))
+            ->assertOk()
+            ->assertJsonPath('data.is_active', false);
+    }
+
+    /**
+     * Instruktur yang sudah nonaktif tetap bisa diubah (mis. ganti nama) walau masih tercatat di jadwal mendatang.
+     */
+    public function test_updating_already_inactive_instructor_with_upcoming_schedule_returns_200(): void
+    {
+        $schedule = ClassSchedule::factory()->create();
+        Instructor::whereKey($schedule->instructor_id)->update(['is_active' => false]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->instructor_id}", $this->validPayload(['name' => 'Nama Baru', 'is_active' => false]))
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Nama Baru');
+    }
+
+    /**
+     * Mengubah data lain tanpa menonaktifkan tetap boleh walau instruktur punya jadwal mendatang.
+     */
+    public function test_updating_active_instructor_with_upcoming_schedule_returns_200(): void
+    {
+        $schedule = ClassSchedule::factory()->create();
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->instructor_id}", ['name' => 'Nama Baru'])
+            ->assertOk()
+            ->assertJsonPath('data.is_active', true);
+    }
+
     public function test_admin_can_delete_unused_instructor(): void
     {
         $instructor = Instructor::factory()->create();

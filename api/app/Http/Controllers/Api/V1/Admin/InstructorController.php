@@ -62,9 +62,20 @@ class InstructorController extends Controller
 
     /**
      * PUT /api/v1/admin/instructors/{instructor}
+     *
+     * Menonaktifkan instruktur ditolak selama masih ada jadwal mendatang, agar jadwal itu
+     * tidak tercatat dengan instruktur nonaktif. Instruktur yang sudah nonaktif tetap bisa diubah.
      */
     public function update(UpdateInstructorRequest $request, Instructor $instructor): JsonResponse
     {
+        $deactivating = $instructor->is_active && $request->has('is_active') && ! $request->boolean('is_active');
+
+        if ($deactivating && $instructor->classSchedules()->upcoming()->exists()) {
+            return response()->json([
+                'message' => 'Instruktur tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan pindahkan jadwal ke instruktur lain atau batalkan jadwal tersebut lebih dulu.',
+            ], 409);
+        }
+
         $instructor->update($request->validated());
 
         return response()->json([
