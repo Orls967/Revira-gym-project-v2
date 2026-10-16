@@ -392,6 +392,7 @@ publicScheduleStatus:
 
       **ETag**: setiap respons 200 membawa header `ETag`. Kirim balik lewat `If-None-Match` dengan URL yang sama;
       bila isinya tidak berubah, server membalas **304 tanpa body**. `Cache-Control: no-cache` (selalu divalidasi ulang).
+      Untuk klien browser, `ETag` diekspos lewat CORS (`Access-Control-Expose-Headers: ETag`).
 
       **Panduan klien**
       - Polling hanya saat layar jadwal aktif (foreground), interval 15-30 detik.

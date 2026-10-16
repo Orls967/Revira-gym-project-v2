@@ -208,14 +208,17 @@ class PublicClassScheduleTest extends TestCase
     }
 
     /**
-     * Jumlah query tetap walau jadwal bertambah (tanpa N+1).
+     * Jumlah query tetap walau jadwal bertambah (tanpa N+1). Jadwal tambahan berada di dalam jendela default
+     * 7 hari (17-21 Oktober) sehingga benar-benar diambil endpoint; nama kelas, nama instruktur, min_participants,
+     * dan participants_count tiap jadwal juga dicek agar tes gagal bila eager load atau withCount dihapus.
      */
     public function test_public_endpoints_do_not_run_queries_per_schedule(): void
     {
-        $count = function (string $url): int {
+        $responses = [];
+        $count = function (string $url) use (&$responses): int {
             DB::flushQueryLog();
             DB::enableQueryLog();
-            $this->getJson($url)->assertOk();
+            $responses[$url] = $this->getJson($url)->assertOk();
             DB::disableQueryLog();
 
             return count(DB::getQueryLog());
@@ -226,13 +229,42 @@ class PublicClassScheduleTest extends TestCase
         $statusOne = $count(self::STATUS_URL);
 
         foreach (range(1, 5) as $day) {
-            $other = GymClass::factory()->create(['default_instructor_id' => Instructor::factory()->create()->id]);
-            $schedule = $this->schedule(['class_id' => $other->id, 'instructor_id' => $other->default_instructor_id, 'schedule_date' => "2026-10-1{$day}"]);
-            ClassParticipant::factory()->create(['class_schedule_id' => $schedule->id]);
+            $other = GymClass::factory()->create([
+                'name' => "Kelas {$day}",
+                'min_participants' => 10 + $day,
+                'default_instructor_id' => Instructor::factory()->create(['name' => "Instruktur {$day}"])->id,
+            ]);
+            $schedule = $this->schedule([
+                'class_id' => $other->id,
+                'instructor_id' => $other->default_instructor_id,
+                'schedule_date' => sprintf('2026-10-%02d', 16 + $day),
+                'start_time' => '12:00:00',
+                'end_time' => '13:00:00',
+            ]);
+            ClassParticipant::factory()->count($day)->create(['class_schedule_id' => $schedule->id]);
         }
 
         $this->assertSame($listOne, $count(self::URL));
         $this->assertSame($statusOne, $count(self::STATUS_URL));
+
+        $expected = [
+            ['Yoga Pagi', 'Budi Santoso', 3, 0],
+            ['Kelas 1', 'Instruktur 1', 11, 1],
+            ['Kelas 2', 'Instruktur 2', 12, 2],
+            ['Kelas 3', 'Instruktur 3', 13, 3],
+            ['Kelas 4', 'Instruktur 4', 14, 4],
+            ['Kelas 5', 'Instruktur 5', 15, 5],
+        ];
+        $list = $responses[self::URL]->json('data');
+        $status = $responses[self::STATUS_URL]->json('data');
+        $this->assertCount(6, $list);
+        $this->assertCount(6, $status);
+        $this->assertSame($expected, array_map(
+            fn (array $item) => [$item['class_name'], $item['instructor_name'], $item['min_participants'], $item['participants_count']],
+            $list,
+        ));
+        $this->assertSame(array_column($expected, 2), array_column($status, 'min_participants'));
+        $this->assertSame(array_column($expected, 3), array_column($status, 'participants_count'));
     }
 
     /**
@@ -386,6 +418,20 @@ class PublicClassScheduleTest extends TestCase
         $changed = $this->getJson(self::STATUS_URL, ['If-None-Match' => $etag]);
         $changed->assertOk()->assertJsonPath('data.0.status', 'ongoing');
         $this->assertNotSame($etag, $changed->headers->get('ETag'));
+    }
+
+    /**
+     * Request lintas origin dari origin yang diizinkan dapat membaca header ETag (CORS Access-Control-Expose-Headers).
+     */
+    public function test_status_exposes_etag_header_to_cors_clients(): void
+    {
+        config(['cors.allowed_origins' => ['http://localhost:5173']]);
+        $this->schedule();
+
+        $this->getJson(self::STATUS_URL, ['Origin' => 'http://localhost:5173'])
+            ->assertOk()
+            ->assertHeader('Access-Control-Allow-Origin', 'http://localhost:5173')
+            ->assertHeader('Access-Control-Expose-Headers', 'ETag');
     }
 
     /**

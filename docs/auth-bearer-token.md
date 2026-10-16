@@ -485,7 +485,7 @@ Aturan polling:
 - Filter **inklusif** (`updated_at >= updated_since`) karena `updated_at` presisi detik. Item terakhir bisa muncul lagi; klien menimpa item dengan `id` yang sama. Kirim `updated_at` terbesar yang sudah diterima (dari daftar publik atau polling sebelumnya).
 - `updated_at` jadwal ikut berubah saat admin mengubah jadwal/status, saat peserta booking/membatalkan/dihapus (`$touches` di model `ClassParticipant`), dan saat `min_participants` kelas berubah (hanya jadwal hari ini dan setelahnya).
 - Jadwal yang dihapus admin tidak terlihat di polling; muat ulang daftar publik saat layar dibuka.
-- ETag dihitung dari isi respons. Kirim `If-None-Match: <ETag>` dengan URL yang sama; bila tidak berubah, server membalas 304 tanpa body. `Cache-Control: no-cache, private`.
+- ETag dihitung dari isi respons. Kirim `If-None-Match: <ETag>` dengan URL yang sama; bila tidak berubah, server membalas 304 tanpa body. `Cache-Control: no-cache, private`. Header `ETag` ikut diekspos lewat CORS (`exposed_headers` di `config/cors.php`), jadi klien browser dari origin yang diizinkan bisa membacanya.
 - Panduan klien: polling hanya saat layar jadwal aktif, tiap 15-30 detik; berhenti saat app di latar belakang; bila error (5xx/jaringan/429) mundur bertahap (30 s, 60 s, 120 s, maks 5 menit).
 
 Untuk backend Sprint 3 (booking): ubah peserta lewat model Eloquent (`create`/`save`/`delete`) agar `touches` berjalan. Update massal lewat query builder (`ClassParticipant::where(...)->update()`) tidak memperbarui jadwal; panggil `ClassSchedule::whereKey(...)->touch()` secara manual.
