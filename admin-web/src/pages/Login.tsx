@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import api from '../lib/api';
 import { setAuth } from '../lib/auth';
 
@@ -33,14 +32,10 @@ export default function Login() {
 
       setAuth(token, user);
       navigate('/');
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        setError(
-          err.response?.data?.message || 'Email atau password salah. Gagal terhubung ke server.'
-        );
-      } else {
-        setError('Email atau password salah. Gagal terhubung ke server.');
-      }
+    } catch (err: any) {
+      setError(
+        err.response?.data?.message || 'Email atau password salah. Gagal terhubung ke server.'
+      );
     } finally {
       setIsLoading(false);
     }

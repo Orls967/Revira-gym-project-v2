@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import api from '../lib/api';
 
 export function useFetch<T>(url: string) {
@@ -13,14 +12,8 @@ export function useFetch<T>(url: string) {
         setIsLoading(true);
         const response = await api.get(url);
         setData(response.data.data); // Menyesuaikan dengan standar Laravel API Anda
-      } catch (err: unknown) {
-        if (axios.isAxiosError(err)) {
-          setError(err.response?.data?.message || 'Terjadi kesalahan saat memuat data');
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError('Terjadi kesalahan saat memuat data');
-        }
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Terjadi kesalahan saat memuat data');
       } finally {
         setIsLoading(false);
       }

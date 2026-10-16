@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import PageHeader from '../components/common/PageHeader';
 import Modal from '../components/common/Modal';
 // Buka komentar import api di bawah ini saat mengaktifkan integrasi backend SCRUM-54
@@ -129,12 +128,8 @@ export default function Instruktur() {
       // fetchInstructors();
 
       setIsModalOpen(false);
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        setFormError(err.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
-      } else {
-        setFormError('Terjadi kesalahan saat menyimpan data.');
-      }
+    } catch (err: any) {
+      setFormError(err.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
     } finally {
       setIsSubmitting(false);
     }
@@ -156,10 +151,9 @@ export default function Instruktur() {
       // Buka komentar di bawah jika backend siap
       // await api.delete(`/instructors/${id}`);
       // fetchInstructors();
-    } catch (err: unknown) {
-      const apiErr = err as { response?: { status?: number; data?: { message?: string } } };
-      if (apiErr.response?.status === 409) {
-        alert(`Gagal Menghapus (Error 409):\n${apiErr.response.data?.message || 'Konflik jadwal.'}`);
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        alert(`Gagal Menghapus (Error 409):\n${err.response.data.message}`);
       } else {
         alert('Gagal menghapus instruktur.');
       }

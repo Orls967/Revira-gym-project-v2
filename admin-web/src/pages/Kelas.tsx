@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/common/PageHeader';
 import Modal from '../components/common/Modal';
 // Buka komentar import api di bawah ini saat mengaktifkan integrasi backend SCRUM-52 & SCRUM-55
@@ -31,18 +31,13 @@ export default function Kelas() {
   const [isLoading, setIsLoading] = useState(false);
 
   // --- STATE KELAS ---
-  const [classes, setClasses] = useState<GymClass[]>([
-    { id: 1, name: 'Yoga Pemula', min_participants: 5, is_active: true },
-    { id: 2, name: 'HIIT Cardio', min_participants: 10, is_active: true },
-  ]);
+  const [classes, setClasses] = useState<GymClass[]>([]);
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [classForm, setClassForm] = useState<Partial<GymClass>>({ name: '', min_participants: 5, is_active: true });
   const [classError, setClassError] = useState('');
 
   // --- STATE JADWAL ---
-  const [schedules, setSchedules] = useState<Schedule[]>([
-    { id: 1, class_id: 1, class_name: 'Yoga Pemula', instructor_id: 1, instructor_name: 'Budi Santoso', date: '2026-10-20', time: '08:00', participants_count: 3, min_participants: 5, status: 'scheduled' }
-  ]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState<Partial<Schedule>>({ class_id: 0, instructor_id: 0, date: '', time: '' });
   const [scheduleError, setScheduleError] = useState('');
@@ -57,6 +52,17 @@ export default function Kelas() {
     { id: 1, name: 'Budi Santoso' },
     { id: 2, name: 'Siti Aminah' }
   ];
+
+  // --- INISIALISASI MOCK DATA ---
+  useEffect(() => {
+    setClasses([
+      { id: 1, name: 'Yoga Pemula', min_participants: 5, is_active: true },
+      { id: 2, name: 'HIIT Cardio', min_participants: 10, is_active: true },
+    ]);
+    setSchedules([
+      { id: 1, class_id: 1, class_name: 'Yoga Pemula', instructor_id: 1, instructor_name: 'Budi Santoso', date: '2026-10-20', time: '08:00', participants_count: 3, min_participants: 5, status: 'scheduled' }
+    ]);
+  }, []);
 
   // --- HANDLER KELAS ---
   const handleSaveClass = async (e: React.FormEvent) => {
