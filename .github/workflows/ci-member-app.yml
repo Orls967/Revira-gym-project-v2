@@ -1,20 +1,11 @@
 name: Member App CI
 
 on:
-  pull_request:
-    branches:
-      - dev
-    paths:
-      - 'member-app/**'
-      - '.github/workflows/ci-member-app.yml'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
 
 jobs:
   typecheck:
-    name: Typecheck (member-app)
+    name: Typecheck & Lint (Member App)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,3 +26,6 @@ jobs:
 
       - name: Run TypeScript typecheck
         run: npx tsc --noEmit
+
+      - name: Run ESLint
+        run: npm run lint
