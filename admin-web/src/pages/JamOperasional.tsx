@@ -4,7 +4,7 @@ import Modal from '../components/common/Modal';
 import api from '../lib/api';
 
 interface OperationalHour {
-  id?: number; // Opsional karena backend belum mengirimkan ID
+  id?: number;
   day_of_week: string;
   open_time: string | null;
   close_time: string | null;
@@ -16,10 +16,16 @@ export default function JamOperasional() {
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   
+  // State Modal Form Tambah/Ubah
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDay, setEditingDay] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // State Modal Konfirmasi Hapus
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingDay, setDeletingDay] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const [formData, setFormData] = useState({
     day: 'Senin',
@@ -68,35 +74,45 @@ export default function JamOperasional() {
     e.preventDefault();
     setFormError('');
     
+    // Validasi jam buka & tutup
     if (!formData.is_holiday && formData.close_time <= formData.open_time) {
       setFormError('Jam tutup harus lebih dari jam buka.');
       return;
     }
 
+    // Validasi hari duplikat saat tambah baru
+    if (!editingDay && hours.some(h => h.day_of_week === formData.day)) {
+      setFormError(`Jadwal untuk hari ${formData.day} sudah ada.`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const payload = {
+      const payload: OperationalHour = {
         day_of_week: formData.day,
         open_time: formData.is_holiday ? null : formData.open_time,
         close_time: formData.is_holiday ? null : formData.close_time,
         is_closed: formData.is_holiday
       };
 
-      // --- MOCK SIMULASI UNTUK SEMENTARA WAKTU ---
+      // --- MOCK SIMULASI (Delay 1 Detik & Update Tabel Lokal) ---
       await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log("Data berhasil dikirim (Mock):", payload);
+      
+      if (editingDay) {
+        setHours(prev => prev.map(h => h.day_of_week === editingDay ? { ...h, ...payload } : h));
+      } else {
+        setHours(prev => [...prev, { id: Date.now(), ...payload }]);
+      }
 
       // =====================================================================
       // HAPUS MOCK DI ATAS & BUKA KOMENTAR DI BAWAH JIKA BACKEND SUDAH SIAP:
       // =====================================================================
       // if (editingDay) {
-      //   // Catatan: Jika backend nanti sudah menambahkan 'id', ganti endpoint ini jadi berdasar ID
       //   await api.put(`/operational-hours/${editingDay}`, payload);
       // } else {
       //   await api.post('/operational-hours', payload);
       // }
-      // 
-      // fetchHours(); // Refresh tabel setelah simpan berhasil
+      // fetchHours();
       // =====================================================================
       
       setIsModalOpen(false);
@@ -107,18 +123,36 @@ export default function JamOperasional() {
     }
   };
 
-  const handleDelete = async (day_of_week: string) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus jadwal ini?')) return;
-    
-    // Buka komentar di bawah jika rute DELETE sudah siap di backend
-    // try {
-    //   await api.delete(`/operational-hours/${day_of_week}`);
-    //   fetchHours();
-    // } catch (err) {
-    //   alert('Gagal menghapus jadwal.');
-    // }
-    
-    console.log("Hapus (Mock):", day_of_week);
+  // Buka Modal Konfirmasi Hapus
+  const confirmDelete = (day_of_week: string) => {
+    setDeletingDay(day_of_week);
+    setIsDeleteModalOpen(true);
+  };
+
+  // Eksekusi Hapus dengan Simulasi Delay 1 Detik
+  const handleDelete = async () => {
+    if (!deletingDay) return;
+    setIsDeleting(true);
+
+    try {
+      // --- MOCK SIMULASI DELETE (Delay 1 Detik & Update Tabel Lokal) ---
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setHours(prev => prev.filter(h => h.day_of_week !== deletingDay));
+
+      // =====================================================================
+      // HAPUS MOCK DI ATAS & BUKA KOMENTAR DI BAWAH JIKA BACKEND SUDAH SIAP:
+      // =====================================================================
+      // await api.delete(`/operational-hours/${deletingDay}`);
+      // fetchHours();
+      // =====================================================================
+
+      setIsDeleteModalOpen(false);
+      setDeletingDay(null);
+    } catch (err) {
+      alert('Gagal menghapus jadwal.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -164,7 +198,7 @@ export default function JamOperasional() {
                 </tr>
               ) : (
                 hours.map((h, index) => (
-                  <tr key={h.id || index} className="hover:bg-zinc-800/50 transition-colors">
+                  <tr key={h.id || h.day_of_week || index} className="hover:bg-zinc-800/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-white">{h.day_of_week}</td>
                     <td className="px-6 py-4">{h.is_closed ? '-' : h.open_time?.substring(0, 5)}</td>
                     <td className="px-6 py-4">{h.is_closed ? '-' : h.close_time?.substring(0, 5)}</td>
@@ -176,7 +210,7 @@ export default function JamOperasional() {
                     </td>
                     <td className="px-6 py-4 text-right space-x-3">
                       <button onClick={() => openModal(h)} className="text-amber-400 hover:text-amber-300 font-medium">Edit</button>
-                      <button onClick={() => handleDelete(h.day_of_week)} className="text-red-400 hover:text-red-300 font-medium">Hapus</button>
+                      <button onClick={() => confirmDelete(h.day_of_week)} className="text-red-400 hover:text-red-300 font-medium">Hapus</button>
                     </td>
                   </tr>
                 ))
@@ -186,6 +220,7 @@ export default function JamOperasional() {
         </div>
       )}
 
+      {/* Modal Form Tambah/Ubah */}
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => !isSubmitting && setIsModalOpen(false)} 
@@ -202,11 +237,17 @@ export default function JamOperasional() {
             <label className="block text-sm font-medium text-zinc-300 mb-1">Hari</label>
             <select 
               value={formData.day}
+              disabled={!!editingDay}
               onChange={(e) => setFormData({...formData, day: e.target.value})}
-              className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400 focus:border-amber-400"
+              className={`w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400 focus:border-amber-400 ${
+                editingDay ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               {daysOption.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
+            {editingDay && (
+              <p className="text-xs text-zinc-500 mt-1">Hari tidak dapat diubah pada mode edit.</p>
+            )}
           </div>
 
           <div className="flex items-center mt-4 mb-4">
@@ -248,8 +289,9 @@ export default function JamOperasional() {
           <div className="pt-4 flex justify-end space-x-3">
             <button 
               type="button" 
+              disabled={isSubmitting}
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors"
+              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors disabled:opacity-50"
             >
               Batal
             </button>
@@ -264,6 +306,39 @@ export default function JamOperasional() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Konfirmasi Hapus */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => !isDeleting && setIsDeleteModalOpen(false)}
+        title="Konfirmasi Hapus Jadwal"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-300">
+            Apakah Anda yakin ingin menghapus jadwal operasional untuk hari <span className="font-semibold text-white">{deletingDay}</span>?
+          </p>
+          <div className="pt-4 flex justify-end space-x-3">
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => setIsDeleteModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors disabled:opacity-50"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={handleDelete}
+              className={`px-4 py-2 text-sm font-bold rounded-md transition-colors ${
+                isDeleting ? 'bg-red-700 text-zinc-300 cursor-not-allowed' : 'bg-red-500 text-white hover:bg-red-600'
+              }`}
+            >
+              {isDeleting ? 'Menghapus...' : 'Ya, Hapus'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
