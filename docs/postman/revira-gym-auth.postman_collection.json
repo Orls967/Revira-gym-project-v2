@@ -1265,6 +1265,19 @@
               "body": "{\n  \"message\": \"Kelas berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Yoga Pagi\",\n    \"description\": \"Yoga untuk pemula\",\n    \"min_participants\": 3,\n    \"default_instructor_id\": 1,\n    \"is_active\": false,\n    \"created_at\": \"2026-10-10T08:00:00+08:00\",\n    \"updated_at\": \"2026-10-10T08:00:00+08:00\"\n  }\n}"
             },
             {
+              "name": "409 Masih punya jadwal mendatang",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan batalkan jadwal tersebut lebih dulu.\"\n}"
+            },
+            {
               "name": "401 Tanpa token",
               "status": "Unauthorized",
               "code": 401,
@@ -2184,6 +2197,19 @@
               ],
               "_postman_previewlanguage": "json",
               "body": "{\n  \"message\": \"Jadwal berstatus cancelled tidak dapat diubah. Hanya jadwal berstatus scheduled yang dapat diubah.\"\n}"
+            },
+            {
+              "name": "422 Ganti kelas pada jadwal berpeserta",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.\",\n  \"errors\": {\n    \"class_id\": [\n      \"Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.\"\n    ]\n  }\n}"
             },
             {
               "name": "422 Instruktur bertumpuk",

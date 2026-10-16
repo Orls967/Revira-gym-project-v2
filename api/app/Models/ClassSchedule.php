@@ -44,13 +44,21 @@ class ClassSchedule extends Model
     ];
 
     /**
-     * Jadwal yang belum lewat dan masih akan berjalan (hari ini atau setelahnya, belum selesai/dibatalkan).
+     * Jadwal yang masih akan berjalan atau sedang berjalan: status scheduled/ongoing dan jam selesainya belum lewat
+     * (tanggal setelah hari ini, atau hari ini dengan end_time setelah jam sekarang, WITA).
+     * Sesi hari ini yang jam selesainya sudah lewat tidak dihitung walau statusnya belum diubah ke completed.
      */
     public function scopeUpcoming(Builder $query): Builder
     {
+        $now = now();
+
         return $query
-            ->whereDate('schedule_date', '>=', today())
-            ->whereIn('status', [self::STATUS_SCHEDULED, self::STATUS_ONGOING]);
+            ->whereIn('status', [self::STATUS_SCHEDULED, self::STATUS_ONGOING])
+            ->where(fn (Builder $query) => $query
+                ->whereDate('schedule_date', '>', $now->toDateString())
+                ->orWhere(fn (Builder $query) => $query
+                    ->whereDate('schedule_date', $now->toDateString())
+                    ->where('end_time', '>', $now->format('H:i:s'))));
     }
 
     /**

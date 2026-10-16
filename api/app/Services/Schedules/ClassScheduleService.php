@@ -60,6 +60,14 @@ class ClassScheduleService
         return DB::transaction(function () use ($schedule, $data) {
             $schedule->fill($this->normalizeTimes($data));
 
+            // Peserta mem-booking kelas tertentu; mengganti kelas akan memindahkan mereka ke kelas lain.
+            // Termasuk peserta yang sudah membatalkan booking, agar riwayatnya tetap menunjuk kelas yang benar.
+            if ($schedule->isDirty('class_id') && $schedule->participants()->exists()) {
+                throw ValidationException::withMessages([
+                    'class_id' => 'Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.',
+                ]);
+            }
+
             $this->ensureNoOverlap($schedule, 'instructor_id');
             $schedule->save();
 

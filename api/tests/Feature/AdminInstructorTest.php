@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ClassSchedule;
 use App\Models\GymClass;
 use App\Models\Instructor;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\InteractsWithApiAuth;
@@ -16,6 +17,16 @@ class AdminInstructorTest extends TestCase
     use RefreshDatabase;
 
     private const URL = '/api/v1/admin/instructors';
+
+    /** Waktu "sekarang" di semua tes (WITA), agar tes jadwal mendatang tidak bergantung jam saat tes dijalankan. */
+    private const NOW = '2026-10-16 10:00:00';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->travelTo(CarbonImmutable::parse(self::NOW));
+    }
 
     /**
      * @return array<string, mixed>
@@ -275,24 +286,28 @@ class AdminInstructorTest extends TestCase
     }
 
     /**
-     * Instruktur yang masih punya jadwal mendatang (hari ini atau setelahnya) tidak bisa dinonaktifkan.
+     * Instruktur yang masih punya jadwal mendatang (jam selesainya belum lewat) tidak bisa dinonaktifkan.
+     * Sekarang 2026-10-16 10:00 WITA.
      *
-     * @return array<string, array{0: int, 1: string}>
+     * @return array<string, array{0: int, 1: string, 2: string, 3: string}>
      */
     public static function upcomingScheduleProvider(): array
     {
         return [
-            'terjadwal besok' => [1, 'scheduled'],
-            'terjadwal hari ini' => [0, 'scheduled'],
-            'sedang berjalan hari ini' => [0, 'ongoing'],
+            'terjadwal besok' => [1, 'scheduled', '08:00:00', '09:00:00'],
+            'terjadwal hari ini, belum mulai' => [0, 'scheduled', '11:00:00', '12:00:00'],
+            'sedang berjalan hari ini' => [0, 'ongoing', '09:30:00', '10:30:00'],
+            'terjadwal hari ini, sudah mulai belum selesai' => [0, 'scheduled', '09:30:00', '10:01:00'],
         ];
     }
 
     #[DataProvider('upcomingScheduleProvider')]
-    public function test_deactivating_instructor_with_upcoming_schedule_returns_409(int $daysFromToday, string $status): void
+    public function test_deactivating_instructor_with_upcoming_schedule_returns_409(int $daysFromToday, string $status, string $start, string $end): void
     {
         $schedule = ClassSchedule::factory()->create([
             'schedule_date' => today()->addDays($daysFromToday)->toDateString(),
+            'start_time' => $start,
+            'end_time' => $end,
             'status' => $status,
         ]);
         $this->actingAsAdmin();
@@ -309,24 +324,29 @@ class AdminInstructorTest extends TestCase
     }
 
     /**
-     * Jadwal yang sudah lewat, selesai, atau dibatalkan tidak menghalangi penonaktifan.
+     * Jadwal yang sudah lewat, selesai, atau dibatalkan tidak menghalangi penonaktifan. Sesi hari ini yang
+     * jam selesainya sudah lewat juga tidak, walau statusnya belum diubah ke completed.
      *
-     * @return array<string, array{0: int, 1: string}>
+     * @return array<string, array{0: int, 1: string, 2: string, 3: string}>
      */
     public static function nonBlockingScheduleProvider(): array
     {
         return [
-            'dibatalkan besok' => [1, 'cancelled'],
-            'selesai hari ini' => [0, 'completed'],
-            'terjadwal kemarin' => [-1, 'scheduled'],
+            'dibatalkan besok' => [1, 'cancelled', '08:00:00', '09:00:00'],
+            'selesai hari ini' => [0, 'completed', '11:00:00', '12:00:00'],
+            'terjadwal kemarin' => [-1, 'scheduled', '08:00:00', '09:00:00'],
+            'terjadwal hari ini, jam selesai sudah lewat' => [0, 'scheduled', '08:00:00', '09:00:00'],
+            'berjalan hari ini, selesai tepat sekarang' => [0, 'ongoing', '09:00:00', '10:00:00'],
         ];
     }
 
     #[DataProvider('nonBlockingScheduleProvider')]
-    public function test_deactivating_instructor_without_upcoming_schedule_returns_200(int $daysFromToday, string $status): void
+    public function test_deactivating_instructor_without_upcoming_schedule_returns_200(int $daysFromToday, string $status, string $start, string $end): void
     {
         $schedule = ClassSchedule::factory()->create([
             'schedule_date' => today()->addDays($daysFromToday)->toDateString(),
+            'start_time' => $start,
+            'end_time' => $end,
             'status' => $status,
             'cancel_reason' => $status === 'cancelled' ? 'Instruktur sakit' : null,
         ]);

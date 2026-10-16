@@ -492,6 +492,85 @@ class AdminClassScheduleTest extends TestCase
     }
 
     /**
+     * Jadwal yang sudah punya peserta (termasuk yang membatalkan booking) tidak boleh diganti kelasnya,
+     * agar peserta yang booking kelas A tidak berpindah ke kelas B. Tidak ada field yang berubah.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function anyParticipantStatusProvider(): array
+    {
+        return [
+            'booked' => ['booked'],
+            'attended' => ['attended'],
+            'cancelled' => ['cancelled'],
+        ];
+    }
+
+    #[DataProvider('anyParticipantStatusProvider')]
+    public function test_update_changing_class_of_schedule_with_participants_returns_422(string $participantStatus): void
+    {
+        $schedule = $this->schedule();
+        ClassParticipant::factory()->create(['class_schedule_id' => $schedule->id, 'status' => $participantStatus]);
+        $otherClass = GymClass::factory()->create(['default_instructor_id' => $this->instructor->id]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->id}", $this->validPayload([
+            'class_id' => $otherClass->id,
+            'start_time' => '09:00',
+            'end_time' => '10:00',
+        ]))
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['class_id' => 'Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.']);
+
+        $fresh = $schedule->fresh();
+        $this->assertSame($this->class->id, $fresh->class_id);
+        $this->assertSame('07:00:00', $fresh->start_time);
+    }
+
+    /**
+     * Jadwal berpeserta tetap bisa digeser tanggal, jam, dan instrukturnya selama kelasnya sama.
+     */
+    public function test_update_schedule_with_participants_can_move_date_time_and_instructor(): void
+    {
+        $schedule = $this->schedule();
+        ClassParticipant::factory()->create(['class_schedule_id' => $schedule->id]);
+        $otherInstructor = Instructor::factory()->create(['name' => 'Siti Rahma']);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->id}", $this->validPayload([
+            'instructor_id' => $otherInstructor->id,
+            'schedule_date' => '2026-10-19',
+            'start_time' => '18:00',
+            'end_time' => '19:30',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('data.class_id', $this->class->id)
+            ->assertJsonPath('data.instructor_name', 'Siti Rahma')
+            ->assertJsonPath('data.schedule_date', '2026-10-19')
+            ->assertJsonPath('data.participants_count', 1);
+    }
+
+    /**
+     * Jadwal tanpa peserta tetap boleh diganti kelasnya; class_id dikirim sebagai string pun tidak dianggap berganti.
+     */
+    public function test_update_changing_class_of_schedule_without_participants_is_allowed(): void
+    {
+        $schedule = $this->schedule();
+        $otherClass = GymClass::factory()->create(['name' => 'Zumba Sore', 'default_instructor_id' => $this->instructor->id]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->id}", $this->validPayload(['class_id' => $otherClass->id]))
+            ->assertOk()
+            ->assertJsonPath('data.class_name', 'Zumba Sore');
+
+        ClassParticipant::factory()->create(['class_schedule_id' => $schedule->id]);
+
+        $this->putJson(self::URL."/{$schedule->id}", $this->validPayload(['class_id' => (string) $otherClass->id, 'start_time' => '09:00', 'end_time' => '10:00']))
+            ->assertOk()
+            ->assertJsonPath('data.start_time', '09:00');
+    }
+
+    /**
      * Kelas/instruktur yang sudah terpasang boleh dipertahankan walau kini nonaktif; mengganti ke yang nonaktif ditolak.
      */
     public function test_update_keeping_inactive_class_and_instructor_is_allowed(): void
