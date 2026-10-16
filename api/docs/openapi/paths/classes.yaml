@@ -153,6 +153,8 @@ adminClassById:
     description: |
       SCRUM-52. Role admin. Aturan validasi sama dengan POST. Bila `is_active` tidak dikirim, status aktif tidak berubah.
       `default_instructor_id` yang sama dengan instruktur kelas saat ini tetap diterima walau instruktur itu sudah nonaktif; mengganti ke instruktur lain wajib yang aktif.
+      Menonaktifkan kelas (`is_active` dari true ke false) ditolak 409 selama masih ada jadwal mendatang (definisi sama dengan instruktur:
+      status `scheduled`/`ongoing` yang jam selesainya belum lewat); batalkan jadwalnya lebih dulu. Kelas yang sudah nonaktif tetap bisa diubah.
     requestBody:
       required: true
       content:
@@ -189,6 +191,14 @@ adminClassById:
         $ref: ../components/responses.yaml#/Forbidden
       '404':
         $ref: ../components/responses.yaml#/NotFound
+      '409':
+        description: Kelas masih memiliki jadwal mendatang sehingga tidak dapat dinonaktifkan.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Kelas tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan batalkan jadwal tersebut lebih dulu.
       '422':
         $ref: ../components/responses.yaml#/GymClassValidationError
   delete:

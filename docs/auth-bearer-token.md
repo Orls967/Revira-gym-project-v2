@@ -314,6 +314,7 @@ Aturan:
 - `min_participants` wajib, bilangan bulat **1-1000** (0, negatif, pecahan, dan nilai di atas 1000 ditolak 422).
 - `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang **aktif** (422 `Instruktur tidak ditemukan atau tidak aktif.`). Pada PUT, instruktur yang sudah terpasang boleh dikirim ulang walau kini nonaktif, agar kelas tetap bisa diubah; mengganti ke instruktur lain tetap wajib yang aktif.
 - `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
+- Kelas **tidak bisa dinonaktifkan** (PUT `is_active: false` pada kelas aktif) selama masih punya jadwal mendatang (definisi sama dengan instruktur, scope `ClassSchedule::upcoming()`). Dibalas 409 `Kelas tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan batalkan jadwal tersebut lebih dulu.` dan tidak ada field yang berubah. Kelas yang sudah nonaktif tetap bisa diubah.
 - Field lain seperti kapasitas maksimum diabaikan.
 - Kelas yang sudah punya jadwal **tidak bisa dihapus**: 409 `{ "message": "Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif." }`. Nonaktifkan lewat PUT dengan `is_active: false`.
 - `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
@@ -358,10 +359,93 @@ Aturan:
 - `specialization` opsional (boleh `null`), maks 100 karakter.
 - `phone_number` opsional (boleh `null`); bila diisi harus nomor Indonesia `08` + 8-11 digit. Format `+62`/`62`, spasi, dan tanda hubung diterima lalu disimpan sebagai `08xxx` (422 `Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.`).
 - `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
+- Instruktur **tidak bisa dinonaktifkan** (PUT `is_active: false` pada instruktur aktif) selama masih punya jadwal mendatang, yaitu jadwal berstatus `scheduled`/`ongoing` yang jam selesainya belum lewat (`schedule_date` setelah hari ini, atau hari ini dengan `end_time` setelah jam sekarang, WITA). Dibalas 409 `Instruktur tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan pindahkan jadwal ke instruktur lain atau batalkan jadwal tersebut lebih dulu.` dan tidak ada field yang berubah. Jadwal yang sudah lewat, selesai, atau dibatalkan tidak menghalangi, begitu juga sesi hari ini yang jam selesainya sudah lewat walau statusnya belum diubah ke `completed`. Instruktur yang sudah nonaktif tetap bisa diubah.
 - Instruktur **tidak bisa dihapus** bila sudah dipakai (FK `restrict`), dan dibalas 409:
   - punya jadwal, termasuk jadwal yang dibatalkan: `Instruktur tidak dapat dihapus karena sudah memiliki jadwal. Silakan pindahkan jadwal ke instruktur lain lebih dulu, atau nonaktifkan instruktur (is_active = false) sebagai alternatif.`
   - masih menjadi `default_instructor_id` suatu kelas: `Instruktur tidak dapat dihapus karena masih menjadi instruktur default kelas. Silakan ganti instruktur default kelas tersebut lebih dulu, atau nonaktifkan instruktur (is_active = false) sebagai alternatif.`
 - `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
+
+## Jadwal kelas (admin, SCRUM-55)
+
+CRUD jadwal sesi kelas beserta statusnya. Semua endpoint memakai `auth:sanctum` + `role:admin` (tamu 401, member 403). Semua tanggal dan jam dalam WITA (`Asia/Makassar`); timestamp dikirim dengan offset `+08:00`.
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/class-schedules` | 200, paginasi Laravel `{ "data": [...], "links": {...}, "meta": {...} }` |
+| POST   | `/api/v1/admin/class-schedules` | 201, `{ "message": "Jadwal berhasil dibuat.", "data": {...} }` |
+| GET    | `/api/v1/admin/class-schedules/{id}` | 200, `{ "data": {...} }` |
+| PUT    | `/api/v1/admin/class-schedules/{id}` | 200, `{ "message": "Jadwal berhasil diperbarui.", "data": {...} }` |
+| PATCH  | `/api/v1/admin/class-schedules/{id}/status` | 200, `{ "message": "Status jadwal berhasil diperbarui.", "data": {...} }` |
+| DELETE | `/api/v1/admin/class-schedules/{id}` | 200, `{ "message": "Jadwal berhasil dihapus." }` |
+
+Query string `GET /api/v1/admin/class-schedules` (semuanya opsional, nilai tidak valid mendapat 422). Hasil terurut berdasarkan tanggal lalu jam mulai.
+
+| Parameter | Keterangan |
+|-----------|------------|
+| `date_from` | Tanggal awal `YYYY-MM-DD`, inklusif. |
+| `date_to` | Tanggal akhir `YYYY-MM-DD`, inklusif; tidak boleh sebelum `date_from`. |
+| `class_id` | ID kelas. |
+| `status` | `scheduled`, `ongoing`, `completed`, atau `cancelled`. |
+| `page` | Nomor halaman, minimal 1. |
+| `per_page` | 1-100, default 15. |
+
+Contoh item `data`:
+
+```json
+{
+  "id": 10,
+  "class_id": 1,
+  "class_name": "Yoga Pagi",
+  "instructor_id": 1,
+  "instructor_name": "Budi Santoso",
+  "schedule_date": "2026-10-17",
+  "start_time": "07:00",
+  "end_time": "08:00",
+  "status": "scheduled",
+  "cancel_reason": null,
+  "participants_count": 4,
+  "min_participants": 3,
+  "created_at": "2026-10-16T10:00:00+08:00",
+  "updated_at": "2026-10-16T10:00:00+08:00"
+}
+```
+
+`participants_count` menghitung peserta yang tidak membatalkan booking (`booked` dan `attended`). `min_participants` diambil dari kelas.
+
+Body POST dan PUT:
+
+```json
+{ "class_id": 1, "instructor_id": 1, "schedule_date": "2026-10-17", "start_time": "07:00", "end_time": "08:00" }
+```
+
+Aturan buat/ubah (422 kecuali disebut lain):
+
+- `class_id` wajib, kelas **aktif** (`Kelas tidak ditemukan atau tidak aktif.`). `instructor_id` wajib, instruktur **aktif** (`Instruktur tidak ditemukan atau tidak aktif.`). Pada PUT, kelas/instruktur yang sudah terpasang boleh dikirim ulang walau kini nonaktif.
+- `schedule_date` `YYYY-MM-DD`, tidak di masa lalu (`Tanggal jadwal tidak boleh di masa lalu.`). Untuk hari ini, `start_time` belum boleh lewat (`Jam mulai sudah lewat.`).
+- `start_time` dan `end_time` `HH:MM`; jam selesai harus setelah jam mulai (`Jam selesai harus setelah jam mulai.`), jadi sesi tidak bisa melewati tengah malam.
+- **Tumpang tindih instruktur**: satu instruktur tidak boleh punya dua sesi yang jamnya bertumpuk di tanggal yang sama. Error di field `instructor_id`, contoh `Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:00-08:00 yang bertumpuk dengan jadwal ini.` Jadwal yang dibatalkan tidak dihitung; jam yang hanya bersentuhan (selesai 08:00, mulai 08:00) boleh. Pada PUT, jadwal itu sendiri dikecualikan.
+- Jadwal baru selalu `scheduled`; `status` di body diabaikan.
+- Jadwal yang **sudah punya peserta** (termasuk yang membatalkan booking) tidak bisa diganti kelasnya: 422 di field `class_id` `Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.` Tanggal, jam, dan instruktur tetap boleh digeser.
+- PUT hanya untuk jadwal berstatus `scheduled`. Selain itu 409 `Jadwal berstatus cancelled tidak dapat diubah. Hanya jadwal berstatus scheduled yang dapat diubah.`
+
+Status (`PATCH .../status`, body `{ "status": "cancelled", "cancel_reason": "Instruktur berhalangan hadir" }`). Transisi lain, atau status yang sama, ditolak 422 di field `status`:
+
+| Dari | Ke | Syarat |
+|------|----|--------|
+| `scheduled` | `cancelled` | `cancel_reason` wajib, maks 255 (`Alasan pembatalan wajib diisi bila jadwal dibatalkan.`) |
+| `scheduled` | `ongoing`, `completed` | waktu mulai sudah lewat |
+| `ongoing` | `completed` | - |
+| `ongoing` | `cancelled` | `cancel_reason` wajib |
+| `cancelled` | `scheduled` | waktu mulai belum lewat, kelas dan instruktur masih aktif, dan tidak bertumpuk dengan jadwal lain instruktur itu |
+
+`completed` adalah status akhir. `cancel_reason` dikosongkan (`null`) bila status bukan `cancelled`.
+
+Hapus:
+
+- Hanya jadwal yang **belum punya peserta sama sekali**, termasuk peserta yang sudah membatalkan booking (FK `restrict`). Selain itu 409 `Jadwal tidak dapat dihapus karena sudah memiliki peserta. Batalkan jadwal lewat PATCH /admin/class-schedules/{id}/status dengan status cancelled.`
+- `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
+
+Untuk backend lain: scope `ClassSchedule::upcoming()` (status `scheduled`/`ongoing` yang jam selesainya belum lewat) dan `ClassSchedule::overlapping()` tersedia di model.
 
 ## Helper untuk backend
 
