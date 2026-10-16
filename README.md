@@ -295,57 +295,48 @@ php artisan storage:link
 
 ## Continuous Integration (CI)
 
-Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo:
+Proyek ini menggunakan **GitHub Actions** untuk menjalankan pemeriksaan otomatis per folder monorepo dengan arsitektur **Lane + Gate**:
 
-### 1. Lane `api/` (`.github/workflows/ci-api.yml`)
-- **Pemicu (Trigger)**: Otomatis berjalan saat ada `pull_request` dengan target branch `dev` yang mengubah file di `api/**` atau file workflow itu sendiri. Dilengkapi `concurrency` (run lama otomatis dibatalkan jika ada push baru ke PR yang sama).
-- **Pemeriksaan yang Dijalankan**:
-  1. Setup environment PHP 8.4 dengan ekstensi yang dibutuhkan (`pdo_mysql`, `pdo_sqlite`, dll.) serta cache Composer.
-  2. `composer install` dependensi dari `composer.lock`.
-  3. Linter kode menggunakan **Laravel Pint** dalam mode verifikasi (`./vendor/bin/pint --test`).
-  4. Pengujian fitur/unit test menggunakan **PHPUnit** (`php artisan test`) dengan in-memory SQLite (`DB_CONNECTION=sqlite`, `DB_DATABASE=:memory:`).
+### Struktur Workflow Utama (`.github/workflows/ci.yml`)
+Workflow utama dieksekusi pada setiap `pull_request` dengan target branch `dev` tanpa path filter, dilengkapi mekanisme `concurrency` per PR (`cancel-in-progress: true` untuk membatalkan run usang otomatis saat ada commit baru pada PR yang sama).
 
-### 2. Lane `member-app/` (`.github/workflows/ci-member-app.yml`)
-- **Pemicu (Trigger)**: Otomatis berjalan saat ada `pull_request` dengan target branch `dev` yang mengubah file di `member-app/**` atau file workflow itu sendiri. Dilengkapi `concurrency` (run lama otomatis dibatalkan jika ada push baru ke PR yang sama).
-- **Pemeriksaan yang Dijalankan**:
-  1. Setup environment Node.js 24 sesuai `member-app/.nvmrc` dan cache dependensi npm (`member-app/package-lock.json`).
-  2. `npm ci` untuk instalasi dependensi secara bersih dan deterministik.
-  3. Validasi tipe data TypeScript menggunakan `npx tsc --noEmit`.
+Alur kerja CI terdiri dari:
+1. **Job `changes`**: Menggunakan `dorny/paths-filter` untuk mendeteksi perubahan pada subdirektori (`api/**`, `member-app/**`, `admin-web/**`) maupun perubahan konfigurasi CI (`.github/workflows/**`). Perubahan pada `.github/workflows/**` memicu seluruh lane.
+2. **Lane Jobs**: Setiap lane dieksekusi secara modular jika folder terkait atau konfigurasi CI mengalami perubahan:
+   - **Lane `api` (`.github/workflows/ci-api.yml`)**: Setup PHP 8.4, cache Composer, `composer install`, linter **Laravel Pint** (`./vendor/bin/pint --test`), dan pengujian unit/fitur **PHPUnit** (`php artisan test`) dengan in-memory SQLite.
+   - **Lane `member-app` (`.github/workflows/ci-member-app.yml`)**: Setup Node.js 24 sesuai `member-app/.nvmrc`, cache npm, `npm ci`, validasi tipe TypeScript (`npx tsc --noEmit`), dan linter **Expo ESLint** (`npm run lint`).
+   - **Lane `admin-web` (`.github/workflows/ci-admin-web.yml`)**: Setup Node.js 24 sesuai `admin-web/.nvmrc`, cache npm, `npm ci`, linter **ESLint** (`npm run lint`), dan kompilasi build produksi (`npm run build`).
+3. **Job `ci-gate`**: Job agregator tunggal dengan nama job persis dan unik `ci-gate`. Job ini mengevaluasi hasil akhir dari `changes` dan ketiga lane (`needs: [changes, api, member-app, admin-web]`). CI Gate akan gagal (exit code 1) jika job `changes` tidak sukses (`result != 'success'`), atau jika ada lane yang mengalami kegagalan (`failure`) maupun pembatalan (`cancelled`). Lane yang dilewati (`skipped`) karena foldernya tidak berubah dianggap sah/lulus.
 
-### 3. Cara Menjalankan Pemeriksaan di Lokal Sebelum Push
-Untuk memastikan pipeline CI selalu hijau, jalankan perintah berikut di direktori masing-masing sebelum push:
+### Cara Menjalankan Pemeriksaan di Lokal Sebelum Push
+Untuk memastikan pipeline CI selalu hijau, jalankan perintah verifikasi di direktori masing-masing sebelum push:
 
 **Backend (`api/`)**:
 ```bash
 cd api
-
-# Cek style kode (Pint mode test)
 ./vendor/bin/pint --test
-
-# Jalankan test suite
 php artisan test
 ```
 
 **Mobile App (`member-app/`)**:
 ```bash
 cd member-app
-
-# Sinkronisasi dependensi
 npm ci
-
-# Validasi tipe TypeScript
 npx tsc --noEmit
+npm run lint
 ```
 
-### 4. Lane Lain (`admin-web/`)
-Kerangka CI untuk frontend admin telah disiapkan dalam bentuk template:
-- `.github/workflows/ci-admin-web.yml.example`
-
-Workflow ini sengaja belum diaktifkan (ekstensi `.example`) karena foldernya masih kosong. Aktifkan dengan me-rename file (menghapus `.example`) saat SCRUM-45 (admin-web) dikerjakan.
+**Admin Web (`admin-web/`)**:
+```bash
+cd admin-web
+npm ci
+npm run lint
+npm run build
+```
 
 ## Aturan Kerja
 
 - **Branch**: Buat branch dari `dev`, dengan penamaan `feature/SCRUM-xx-deskripsi`.
-- **Pull Request (PR)**: PR diajukan ke `dev`, minimal 1 review. Branch `main` hanya untuk rilis.
-- **Commit**: Commit diawali kunci Jira, mis. `SCRUM-34: setup boilerplate`.
-- **Environment**: Jangan pernah commit `.env`.
+- **Pull Request (PR)**: PR diajukan ke `dev`. PR ke `dev` wajib lulus pemeriksaan status `ci-gate` dan mendapatkan minimal 1 approval review (berlaku setelah ruleset diaktifkan). Metode merge yang diizinkan hanya **Merge commit** (tanpa squash atau rebase). Branch `main` hanya untuk rilis.
+- **Commit**: Commit diawali kunci Jira, mis. `SCRUM-34: setup boilerplate`. Jangan menyertakan trailer Co-Authored-By atau trailer AI.
+- **Environment**: Jangan pernah commit berkas `.env`.
