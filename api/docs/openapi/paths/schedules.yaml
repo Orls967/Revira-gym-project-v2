@@ -320,10 +320,17 @@ adminScheduleStatus:
 publicSchedules:
   get:
     operationId: listPublicClassSchedules
-    tags: [Schedules, Public, Sprint 2]
-    x-status: planned
+    tags: [Schedules, Public]
     summary: Jadwal kelas (publik)
-    description: SCRUM-56. Tanpa autentikasi dan tanpa data pribadi. Bila `date_from`/`date_to` kosong, default 7 hari ke depan. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
+    description: |
+      SCRUM-56. Tanpa autentikasi dan tanpa data pribadi (instruktur hanya nama, tanpa kontak; tanpa daftar peserta).
+      Semua status ikut tampil, termasuk `cancelled` beserta `cancel_reason`. Terurut `schedule_date`, lalu `start_time`. Tanpa paginasi.
+
+      **Rentang tanggal** (inklusif, `YYYY-MM-DD`, WITA): tanpa keduanya, hari ini sampai 6 hari ke depan (7 hari).
+      Bila hanya `date_from`, sampai 6 hari setelahnya; bila hanya `date_to`, mulai 6 hari sebelumnya. Rentang maksimal 31 hari (422).
+
+      `participants_count` = peserta yang tidak membatalkan booking. `updated_at` dipakai sebagai titik awal `updated_since`
+      untuk `GET /class-schedules/status`. Rate limiter public-api (120 request/menit per IP, berbagi kuota dengan endpoint publik lain).
     security: []
     parameters:
       - $ref: ../components/parameters.yaml#/DateFrom
@@ -341,25 +348,57 @@ publicSchedules:
                   class_id: 1
                   class_name: Yoga Pagi
                   instructor_name: Budi Santoso
-                  schedule_date: '2026-10-12'
+                  schedule_date: '2026-10-17'
                   start_time: '07:00'
                   end_time: '08:00'
                   status: scheduled
                   cancel_reason: null
                   participants_count: 4
                   min_participants: 3
+                  updated_at: '2026-10-16T10:00:00+08:00'
+                - id: 11
+                  class_id: 2
+                  class_name: Zumba Sore
+                  instructor_name: Siti Rahma
+                  schedule_date: '2026-10-17'
+                  start_time: '17:00'
+                  end_time: '18:00'
+                  status: cancelled
+                  cancel_reason: Instruktur berhalangan hadir
+                  participants_count: 2
+                  min_participants: 5
+                  updated_at: '2026-10-16T11:20:00+08:00'
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        $ref: ../components/responses.yaml#/PublicScheduleRangeError
       '429':
         $ref: ../components/responses.yaml#/TooManyRequests
 publicScheduleStatus:
   get:
     operationId: listClassScheduleStatus
-    tags: [Schedules, Public, Sprint 2]
-    x-status: planned
+    tags: [Schedules, Public]
     summary: Status jadwal ringkas untuk polling (publik)
     description: |
-      SCRUM-56. Tanpa autentikasi. Mendukung `ETag`/`If-None-Match`: bila data tidak berubah, server membalas 304 tanpa body. Wajib memakai rate limiter public-api (120 request/menit per IP), sesuai SCRUM-93.
+      SCRUM-56. Tanpa autentikasi. Pengganti WebSocket untuk memantau status dan jumlah peserta. Rentang tanggal sama dengan
+      `GET /class-schedules` (default 7 hari, maksimal 31 hari).
+
+      **`updated_since`** (opsional): hanya jadwal dengan `updated_at` >= waktu ini. Inklusif karena `updated_at` presisi detik,
+      jadi item terakhir bisa muncul lagi; timpa item dengan `id` yang sama. Kirim `updated_at` terbesar yang sudah diterima.
+      Tanpa `updated_since`, semua jadwal dalam rentang tampil. Format ISO 8601 dengan offset (`+08:00` atau `Z`); encode `+`
+      sebagai `%2B` (bila tidak di-encode, server tetap membacanya sebagai `+`).
+
+      **Yang memperbarui `updated_at`**: perubahan jadwal oleh admin (termasuk pembatalan), setiap booking/pembatalan booking
+      peserta, dan perubahan `min_participants` kelas (untuk jadwal hari ini dan setelahnya).
+      Jadwal yang **dihapus** admin tidak muncul di polling; muat ulang `GET /class-schedules` saat layar dibuka.
+
+      **ETag**: setiap respons 200 membawa header `ETag`. Kirim balik lewat `If-None-Match` dengan URL yang sama;
+      bila isinya tidak berubah, server membalas **304 tanpa body**. `Cache-Control: no-cache` (selalu divalidasi ulang).
+      Untuk klien browser, `ETag` diekspos lewat CORS (`Access-Control-Expose-Headers: ETag`).
+
+      **Panduan klien**
+      - Polling hanya saat layar jadwal aktif (foreground), interval 15-30 detik.
+      - Hentikan polling saat app ke latar belakang atau layar ditutup; saat kembali, muat ulang daftar lalu lanjutkan polling.
+      - Bila error (5xx, jaringan, 429), mundur bertahap (mis. 30 s, 60 s, 120 s, maks 5 menit) lalu kembali ke interval normal setelah berhasil.
+      - Rate limiter public-api 120 request/menit per IP, berbagi kuota dengan endpoint publik lain.
     security: []
     parameters:
       - $ref: ../components/parameters.yaml#/UpdatedSince
@@ -368,15 +407,19 @@ publicScheduleStatus:
       - name: If-None-Match
         in: header
         required: false
-        description: Nilai `ETag` dari respons sebelumnya.
+        description: Nilai `ETag` dari respons sebelumnya untuk URL yang sama.
         schema:
           type: string
     responses:
       '200':
-        description: Status jadwal.
+        description: Status jadwal (bisa kosong bila tidak ada yang berubah sejak `updated_since`).
         headers:
           ETag:
             description: Validator untuk `If-None-Match` pada request berikutnya.
+            schema:
+              type: string
+          Cache-Control:
+            description: '`no-cache, private`.'
             schema:
               type: string
         content:
@@ -386,13 +429,27 @@ publicScheduleStatus:
             example:
               data:
                 - id: 10
-                  status: scheduled
+                  status: cancelled
                   participants_count: 4
                   min_participants: 3
-                  updated_at: '2026-10-10T08:00:00+08:00'
+                  updated_at: '2026-10-16T11:20:00+08:00'
       '304':
         description: Tidak ada perubahan sejak `ETag` yang dikirim. Tanpa body.
+        headers:
+          ETag:
+            description: ETag yang sama dengan `If-None-Match`.
+            schema:
+              type: string
       '422':
-        $ref: ../components/responses.yaml#/ValidationError
+        description: Rentang tanggal tidak valid atau `updated_since` bukan ISO 8601 dengan offset.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: updated_since harus berformat ISO 8601 dengan offset, mis. 2026-10-16T10:00:00+08:00.
+              errors:
+                updated_since:
+                  - updated_since harus berformat ISO 8601 dengan offset, mis. 2026-10-16T10:00:00+08:00.
       '429':
         $ref: ../components/responses.yaml#/TooManyRequests

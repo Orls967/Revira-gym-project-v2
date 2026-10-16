@@ -29,9 +29,7 @@ class ClassScheduleController extends Controller
             ->when($request->filled('date_to'), fn ($query) => $query->whereDate('schedule_date', '<=', $request->validated('date_to')))
             ->when($request->filled('class_id'), fn ($query) => $query->where('class_id', $request->integer('class_id')))
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->validated('status')))
-            ->orderBy('schedule_date')
-            ->orderBy('start_time')
-            ->orderBy('id')
+            ->chronological()
             ->paginate($request->integer('per_page', 15))
             ->withQueryString();
 

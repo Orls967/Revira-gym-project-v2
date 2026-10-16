@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -82,7 +83,33 @@ class ClassSchedule extends Model
      */
     public function scopeWithDetails(Builder $query): Builder
     {
-        return $query->with(['gymClass', 'instructor'])->withCount(self::participantsCountDefinition());
+        return $query->with(['gymClass', 'instructor'])->withParticipantsCount();
+    }
+
+    /**
+     * Hanya participants_count (peserta yang tidak membatalkan booking), dihitung lewat subquery tanpa N+1.
+     */
+    public function scopeWithParticipantsCount(Builder $query): Builder
+    {
+        return $query->withCount(self::participantsCountDefinition());
+    }
+
+    /**
+     * Jadwal dengan schedule_date di antara dua tanggal (inklusif).
+     */
+    public function scopeBetweenDates(Builder $query, CarbonInterface $from, CarbonInterface $to): Builder
+    {
+        return $query
+            ->whereDate('schedule_date', '>=', $from->toDateString())
+            ->whereDate('schedule_date', '<=', $to->toDateString());
+    }
+
+    /**
+     * Urutan tampil jadwal: tanggal, jam mulai, lalu id agar stabil.
+     */
+    public function scopeChronological(Builder $query): Builder
+    {
+        return $query->orderBy('schedule_date')->orderBy('start_time')->orderBy('id');
     }
 
     /**
