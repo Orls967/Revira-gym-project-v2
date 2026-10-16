@@ -41,6 +41,17 @@ ValidationError:
         errors:
           name:
             - The name field is required.
+PublicScheduleRangeError:
+  description: Rentang tanggal jadwal publik tidak valid (format bukan `YYYY-MM-DD`, `date_to` sebelum `date_from`, atau lebih dari 31 hari) (SCRUM-56).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Rentang tanggal maksimal 31 hari.
+        errors:
+          date_to:
+            - Rentang tanggal maksimal 31 hari.
 TooManyRequests:
   description: Terlalu banyak percobaan (rate limit).
   content:

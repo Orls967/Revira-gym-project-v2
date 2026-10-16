@@ -32,6 +32,19 @@ class GymClass extends Model
     ];
 
     /**
+     * min_participants ikut tampil di polling status jadwal (SCRUM-56), jadi perubahannya memperbarui
+     * updated_at jadwal kelas ini yang belum lewat agar terdeteksi lewat updated_since.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (GymClass $gymClass) {
+            if ($gymClass->wasChanged('min_participants')) {
+                $gymClass->classSchedules()->whereDate('schedule_date', '>=', today())->touch();
+            }
+        });
+    }
+
+    /**
      * Hanya kelas aktif. Kelas nonaktif tidak boleh dipilih untuk jadwal baru (SCRUM-55).
      */
     public function scopeActive(Builder $query): Builder

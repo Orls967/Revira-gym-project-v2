@@ -10,7 +10,9 @@
     { "key": "adminEmail", "value": "admin@revira.test" },
     { "key": "password", "value": "" },
     { "key": "token", "value": "" },
-    { "key": "id", "value": "1" }
+    { "key": "id", "value": "1" },
+    { "key": "scheduleCursor", "value": "" },
+    { "key": "scheduleEtag", "value": "" }
   ],  
   "item": [
     {
@@ -2456,7 +2458,24 @@
         },
         {
           "name": "Jadwal publik (default 7 hari)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.code === 200 ? pm.response.json().data : [];",
+                  "const latest = items.map(i => i.updated_at).sort().pop();",
+                  "if (latest) { pm.collectionVariables.set('scheduleCursor', latest); }"
+                ]
+              }
+            }
+          ],
           "request": {
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "header": [
               {
@@ -2464,8 +2483,8 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/class-schedules?date_from=2026-10-12&date_to=2026-10-18",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). Memuat instructor_name (nama saja) dan cancel_reason (nullable), tanpa data pribadi peserta."
+            "url": "{{baseUrl}}/class-schedules",
+            "description": "SCRUM-56. Tanpa token. Tanpa parameter: hari ini s.d. 6 hari ke depan. Opsional `date_from`/`date_to` (inklusif, YYYY-MM-DD, maks 31 hari); bila hanya satu sisi, sisi lain 7 hari dari sisi itu.\n\nSemua status tampil (cancelled beserta `cancel_reason`), tanpa kontak instruktur dan tanpa data peserta. `updated_at` terbesar disimpan ke variabel `scheduleCursor` untuk request polling."
           },
           "response": [
             {
@@ -2479,26 +2498,150 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"data\": [\n    {\n      \"id\": 10,\n      \"class_id\": 1,\n      \"class_name\": \"Yoga Pagi\",\n      \"instructor_name\": \"Budi Santoso\",\n      \"schedule_date\": \"2026-10-12\",\n      \"start_time\": \"07:00\",\n      \"end_time\": \"08:00\",\n      \"status\": \"scheduled\",\n      \"cancel_reason\": null,\n      \"participants_count\": 4,\n      \"min_participants\": 3\n    }\n  ]\n}"
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 10,\n      \"class_id\": 1,\n      \"class_name\": \"Yoga Pagi\",\n      \"instructor_name\": \"Budi Santoso\",\n      \"schedule_date\": \"2026-10-17\",\n      \"start_time\": \"07:00\",\n      \"end_time\": \"08:00\",\n      \"status\": \"scheduled\",\n      \"cancel_reason\": null,\n      \"participants_count\": 4,\n      \"min_participants\": 3,\n      \"updated_at\": \"2026-10-16T10:00:00+08:00\"\n    },\n    {\n      \"id\": 11,\n      \"class_id\": 2,\n      \"class_name\": \"Zumba Sore\",\n      \"instructor_name\": \"Siti Rahma\",\n      \"schedule_date\": \"2026-10-17\",\n      \"start_time\": \"17:00\",\n      \"end_time\": \"18:00\",\n      \"status\": \"cancelled\",\n      \"cancel_reason\": \"Instruktur berhalangan hadir\",\n      \"participants_count\": 2,\n      \"min_participants\": 5,\n      \"updated_at\": \"2026-10-16T11:20:00+08:00\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "422 Rentang lebih dari 31 hari",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Rentang tanggal maksimal 31 hari.\",\n  \"errors\": {\n    \"date_to\": [\n      \"Rentang tanggal maksimal 31 hari.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 date_to sebelum date_from",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Tanggal akhir tidak boleh sebelum tanggal awal.\",\n  \"errors\": {\n    \"date_to\": [\n      \"Tanggal akhir tidak boleh sebelum tanggal awal.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "429 Rate limit",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Too Many Attempts.\"\n}"
             }
           ]
         },
         {
-          "name": "Status jadwal publik (ETag / If-None-Match)",
+          "name": "Status jadwal publik (polling, ETag / If-None-Match)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 atau 304', () => pm.expect(pm.response.code).to.be.oneOf([200, 304]));",
+                  "const etag = pm.response.headers.get('ETag');",
+                  "if (etag) { pm.collectionVariables.set('scheduleEtag', etag); }",
+                  "const items = pm.response.code === 200 ? pm.response.json().data : [];",
+                  "const latest = items.map(i => i.updated_at).sort().pop();",
+                  "if (latest) { pm.collectionVariables.set('scheduleCursor', latest); }"
+                ]
+              }
+            }
+          ],
           "request": {
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "header": [
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "If-None-Match",
+                "value": "{{scheduleEtag}}"
               }
             ],
-            "url": "{{baseUrl}}/class-schedules/status?updated_since=2026-10-10T08:00:00%2B08:00",
-            "description": "PLANNED (Sprint 2, belum diimplementasikan). Kirim header If-None-Match dengan ETag respons sebelumnya untuk mendapat 304."
-          }
+            "url": "{{baseUrl}}/class-schedules/status?updated_since={{scheduleCursor}}",
+            "description": "SCRUM-56. Tanpa token. Jalankan \"Jadwal publik\" dulu agar `scheduleCursor` terisi (kosong = semua jadwal dalam rentang). Kirim dua kali tanpa perubahan: kali kedua 304 tanpa body karena `If-None-Match` = `ETag` sebelumnya. Batalkan jadwal lewat \"Admin - ubah status jadwal\" lalu kirim lagi: 200 dengan item yang berubah.\n\n`updated_since` inklusif (>=), ISO 8601 dengan offset; `+` yang tidak di-encode tetap dibaca benar. Rentang tanggal sama dengan daftar publik.\n\nPanduan klien: polling hanya saat layar aktif, tiap 15-30 detik, berhenti di latar belakang, mundur bertahap bila error."
+          },
+          "response": [
+            {
+              "name": "200 Ada perubahan",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "ETag",
+                  "value": "\"3f8a1c0d9b2e4f6a\""
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 11,\n      \"status\": \"cancelled\",\n      \"participants_count\": 2,\n      \"min_participants\": 5,\n      \"updated_at\": \"2026-10-16T11:20:00+08:00\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "304 Tidak berubah",
+              "status": "Not Modified",
+              "code": 304,
+              "header": [
+                {
+                  "key": "ETag",
+                  "value": "\"3f8a1c0d9b2e4f6a\""
+                }
+              ],
+              "_postman_previewlanguage": "text",
+              "body": ""
+            },
+            {
+              "name": "422 updated_since tidak valid",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"updated_since harus berformat ISO 8601 dengan offset, mis. 2026-10-16T10:00:00+08:00.\",\n  \"errors\": {\n    \"updated_since\": [\n      \"updated_since harus berformat ISO 8601 dengan offset, mis. 2026-10-16T10:00:00+08:00.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "429 Rate limit",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Too Many Attempts.\"\n}"
+            }
+          ]
         }
       ],
-      "description": "Jadwal admin (SCRUM-55), role:admin; login dulu lewat \"Login (admin-web)\". Jadwal publik (SCRUM-56) tanpa token. Admin: tumpang tindih jadwal instruktur di tanggal yang sama ditolak 422; hanya jadwal scheduled yang bisa diubah (409); jadwal berpeserta tidak bisa dihapus (409), batalkan lewat PATCH status."
+      "description": "Jadwal admin (SCRUM-55), role:admin; login dulu lewat \"Login (admin-web)\". Admin: tumpang tindih jadwal instruktur di tanggal yang sama ditolak 422; hanya jadwal scheduled yang bisa diubah (409); jadwal berpeserta tidak bisa dihapus (409), batalkan lewat PATCH status. Jadwal publik dan polling status (SCRUM-56) tanpa token, rate limit 120/menit per IP; polling memakai variabel scheduleCursor dan scheduleEtag."
     },
     {
       "name": "Sprint 2 - Bukti transfer (SCRUM-48)",

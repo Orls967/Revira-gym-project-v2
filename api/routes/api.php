@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PublicClassController;
+use App\Http\Controllers\Api\V1\PublicClassScheduleController;
 use App\Http\Controllers\Api\V1\PublicOperationalHourController;
 use App\Http\Controllers\Api\V1\PublicPlanController;
 use App\Http\Controllers\Api\V1\TransactionReceiptController;
@@ -44,6 +45,12 @@ Route::middleware('throttle:public-api')->group(function () {
     Route::get('/membership-plans', PublicPlanController::class);
     Route::get('/operational-hours', PublicOperationalHourController::class);
     Route::get('/classes', PublicClassController::class);
+
+    // Jadwal publik + polling status ringan dengan ETag/304 (SCRUM-56)
+    Route::controller(PublicClassScheduleController::class)->prefix('class-schedules')->group(function () {
+        Route::get('/', 'index');
+        Route::get('/status', 'status')->middleware('cache.headers:no_cache;etag');
+    });
 });
 
 // Penyajian bukti transfer terautentikasi (admin atau pemilik transaksi)

@@ -445,6 +445,49 @@ Hapus:
 
 Untuk backend lain: scope `ClassSchedule::upcoming()` (jadwal hari ini atau setelahnya dengan status `scheduled`/`ongoing`) dan `ClassSchedule::overlapping()` tersedia di model.
 
+## Jadwal kelas publik + polling status (SCRUM-56)
+
+Tanpa autentikasi (token boleh dikirim, hasilnya sama) dan memakai rate limiter `public-api` (120 request/menit per IP, berbagi kuota dengan endpoint publik lain; lewat batas 429).
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET | `/api/v1/class-schedules?date_from=&date_to=` | 200, `{ "data": [...] }` tanpa paginasi |
+| GET | `/api/v1/class-schedules/status?updated_since=&date_from=&date_to=` | 200 `{ "data": [...] }` dengan header `ETag`, atau 304 tanpa body |
+
+**Rentang tanggal** (keduanya, inklusif, `YYYY-MM-DD`, WITA): tanpa parameter, hari ini sampai 6 hari ke depan (7 hari). Bila hanya `date_from`, sampai 6 hari setelahnya; bila hanya `date_to`, mulai 6 hari sebelumnya. 422 bila format salah, `date_to` sebelum `date_from` (`Tanggal akhir tidak boleh sebelum tanggal awal.`), atau lebih dari 31 hari (`Rentang tanggal maksimal 31 hari.`).
+
+Item daftar publik (semua status ikut tampil, terurut tanggal lalu jam mulai; tanpa `instructor_id`, kontak instruktur, maupun data peserta):
+
+```json
+{
+  "id": 10,
+  "class_id": 1,
+  "class_name": "Yoga Pagi",
+  "instructor_name": "Budi Santoso",
+  "schedule_date": "2026-10-17",
+  "start_time": "07:00",
+  "end_time": "08:00",
+  "status": "cancelled",
+  "cancel_reason": "Instruktur berhalangan hadir",
+  "participants_count": 4,
+  "min_participants": 3,
+  "updated_at": "2026-10-16T11:20:00+08:00"
+}
+```
+
+Item polling: `{ "id": 10, "status": "cancelled", "participants_count": 4, "min_participants": 3, "updated_at": "2026-10-16T11:20:00+08:00" }`.
+
+Aturan polling:
+
+- `updated_since` opsional, ISO 8601 dengan offset (`2026-10-16T10:00:00+08:00` atau `...Z`, boleh pecahan detik). Encode `+` sebagai `%2B`; `+` yang tidak di-encode tetap dibaca benar. Format lain 422.
+- Filter **inklusif** (`updated_at >= updated_since`) karena `updated_at` presisi detik. Item terakhir bisa muncul lagi; klien menimpa item dengan `id` yang sama. Kirim `updated_at` terbesar yang sudah diterima (dari daftar publik atau polling sebelumnya).
+- `updated_at` jadwal ikut berubah saat admin mengubah jadwal/status, saat peserta booking/membatalkan/dihapus (`$touches` di model `ClassParticipant`), dan saat `min_participants` kelas berubah (hanya jadwal hari ini dan setelahnya).
+- Jadwal yang dihapus admin tidak terlihat di polling; muat ulang daftar publik saat layar dibuka.
+- ETag dihitung dari isi respons. Kirim `If-None-Match: <ETag>` dengan URL yang sama; bila tidak berubah, server membalas 304 tanpa body. `Cache-Control: no-cache, private`.
+- Panduan klien: polling hanya saat layar jadwal aktif, tiap 15-30 detik; berhenti saat app di latar belakang; bila error (5xx/jaringan/429) mundur bertahap (30 s, 60 s, 120 s, maks 5 menit).
+
+Untuk backend Sprint 3 (booking): ubah peserta lewat model Eloquent (`create`/`save`/`delete`) agar `touches` berjalan. Update massal lewat query builder (`ClassParticipant::where(...)->update()`) tidak memperbarui jadwal; panggil `ClassSchedule::whereKey(...)->touch()` secara manual.
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:
