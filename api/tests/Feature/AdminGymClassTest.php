@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ClassSchedule;
 use App\Models\GymClass;
 use App\Models\Instructor;
+use Carbon\CarbonImmutable;
 use Database\Seeders\ClassSeeder;
 use Database\Seeders\InstructorSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -286,6 +287,96 @@ class AdminGymClassTest extends TestCase
             ]);
 
         $this->assertFalse($class->fresh()->is_active);
+    }
+
+    /**
+     * Kelas yang masih punya jadwal mendatang (jam selesainya belum lewat) tidak bisa dinonaktifkan.
+     * Sekarang 2026-10-16 10:00 WITA; aturan "mendatang" sama dengan instruktur (ClassSchedule::upcoming()).
+     *
+     * @return array<string, array{0: string, 1: string, 2: string}>
+     */
+    public static function upcomingScheduleProvider(): array
+    {
+        return [
+            'terjadwal besok' => ['2026-10-17', 'scheduled', '08:00:00'],
+            'sedang berjalan hari ini' => ['2026-10-16', 'ongoing', '10:30:00'],
+        ];
+    }
+
+    #[DataProvider('upcomingScheduleProvider')]
+    public function test_deactivating_class_with_upcoming_schedule_returns_409(string $date, string $status, string $end): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-16 10:00:00'));
+        $schedule = ClassSchedule::factory()->create([
+            'schedule_date' => $date,
+            'start_time' => '07:00:00',
+            'end_time' => $end,
+            'status' => $status,
+        ]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->class_id}", $this->validPayload(['name' => 'Nama Baru', 'is_active' => false]))
+            ->assertStatus(409)
+            ->assertExactJson([
+                'message' => 'Kelas tidak dapat dinonaktifkan karena masih memiliki jadwal mendatang. Silakan batalkan jadwal tersebut lebih dulu.',
+            ]);
+
+        $class = GymClass::find($schedule->class_id);
+        $this->assertTrue($class->is_active);
+        $this->assertNotSame('Nama Baru', $class->name);
+    }
+
+    /**
+     * Jadwal yang sudah lewat, selesai, dibatalkan, atau jam selesainya sudah lewat hari ini tidak menghalangi.
+     *
+     * @return array<string, array{0: string, 1: string, 2: string}>
+     */
+    public static function nonBlockingScheduleProvider(): array
+    {
+        return [
+            'dibatalkan besok' => ['2026-10-17', 'cancelled', '08:00:00'],
+            'selesai besok (data lama)' => ['2026-10-17', 'completed', '08:00:00'],
+            'terjadwal kemarin' => ['2026-10-15', 'scheduled', '08:00:00'],
+            'terjadwal hari ini, jam selesai sudah lewat' => ['2026-10-16', 'scheduled', '09:00:00'],
+        ];
+    }
+
+    #[DataProvider('nonBlockingScheduleProvider')]
+    public function test_deactivating_class_without_upcoming_schedule_returns_200(string $date, string $status, string $end): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-16 10:00:00'));
+        $schedule = ClassSchedule::factory()->create([
+            'schedule_date' => $date,
+            'start_time' => '07:00:00',
+            'end_time' => $end,
+            'status' => $status,
+            'cancel_reason' => $status === 'cancelled' ? 'Instruktur sakit' : null,
+        ]);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->class_id}", $this->validPayload(['is_active' => false]))
+            ->assertOk()
+            ->assertJsonPath('data.is_active', false);
+    }
+
+    /**
+     * Kelas yang sudah nonaktif tetap bisa diubah, dan mengubah data lain tanpa menonaktifkan tetap boleh.
+     */
+    public function test_updating_class_with_upcoming_schedule_without_deactivating_returns_200(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-16 10:00:00'));
+        $schedule = ClassSchedule::factory()->create(['schedule_date' => '2026-10-17']);
+        $this->actingAsAdmin();
+
+        $this->putJson(self::URL."/{$schedule->class_id}", $this->validPayload(['name' => 'Nama Baru']))
+            ->assertOk()
+            ->assertJsonPath('data.is_active', true);
+
+        GymClass::whereKey($schedule->class_id)->update(['is_active' => false]);
+
+        $this->putJson(self::URL."/{$schedule->class_id}", $this->validPayload(['name' => 'Nama Lain', 'is_active' => false]))
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Nama Lain');
     }
 
     public function test_admin_can_delete_class_without_schedule(): void

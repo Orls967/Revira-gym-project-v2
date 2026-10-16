@@ -173,6 +173,8 @@ adminScheduleById:
       SCRUM-55. Role admin. Aturan validasi dan tumpang tindih sama dengan POST (jadwal itu sendiri dikecualikan).
       Hanya jadwal berstatus `scheduled` yang dapat diubah (selain itu 409); status diubah lewat `PATCH /admin/class-schedules/{id}/status`.
       Kelas atau instruktur yang sudah terpasang boleh dikirim ulang walau kini nonaktif; mengganti ke yang lain wajib yang aktif.
+      Jadwal yang sudah punya peserta (termasuk yang membatalkan booking) tidak bisa diganti `class_id`-nya (422 di `class_id`);
+      tanggal, jam, dan instruktur tetap boleh digeser.
     requestBody:
       required: true
       content:

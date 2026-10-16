@@ -207,6 +207,13 @@ ClassScheduleValidationError:
             errors:
               class_id:
                 - Kelas tidak ditemukan atau tidak aktif.
+        classChangeWithParticipants:
+          summary: Ganti kelas pada jadwal berpeserta (hanya PUT)
+          value:
+            message: Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.
+            errors:
+              class_id:
+                - Kelas jadwal tidak dapat diganti karena jadwal sudah memiliki peserta. Batalkan jadwal ini lalu buat jadwal baru untuk kelas lain.
         inactiveInstructor:
           summary: Instruktur tidak ada atau nonaktif
           value:

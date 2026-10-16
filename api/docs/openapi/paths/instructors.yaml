@@ -145,7 +145,8 @@ adminInstructorById:
     description: |
       SCRUM-54. Role admin. Aturan validasi sama dengan POST. Bila `is_active` tidak dikirim, status aktif tidak berubah.
       Menonaktifkan instruktur (`is_active` dari true ke false) ditolak 409 selama masih ada jadwal mendatang
-      (`schedule_date` hari ini atau setelahnya dengan status `scheduled`/`ongoing`); pindahkan atau batalkan jadwalnya lebih dulu.
+      (status `scheduled`/`ongoing` yang jam selesainya belum lewat: tanggal setelah hari ini, atau hari ini dengan `end_time` setelah jam sekarang, WITA);
+      pindahkan atau batalkan jadwalnya lebih dulu. Sesi hari ini yang jam selesainya sudah lewat tidak menghalangi walau belum ditandai `completed`.
       Instruktur yang sudah nonaktif tetap bisa diubah.
     requestBody:
       required: true
