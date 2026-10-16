@@ -1,6 +1,6 @@
 export const getAuthToken = () => localStorage.getItem('token');
 
-export const setAuth = (token: string, user: any) => {
+export const setAuth = (token: string, user: unknown) => {
   localStorage.setItem('token', token);
   localStorage.setItem('user', JSON.stringify(user));
 };

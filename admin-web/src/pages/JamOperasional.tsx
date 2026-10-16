@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import PageHeader from '../components/common/PageHeader';
 import Modal from '../components/common/Modal';
 import api from '../lib/api';
@@ -42,7 +43,7 @@ export default function JamOperasional() {
     try {
       const response = await api.get('/operational-hours');
       setHours(response.data.data);
-    } catch (err: any) {
+    } catch {
       setFetchError('Gagal memuat data jam operasional.');
     } finally {
       setIsLoading(false);
@@ -116,8 +117,12 @@ export default function JamOperasional() {
       // =====================================================================
       
       setIsModalOpen(false);
-    } catch (err: any) {
-      setFormError(err.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setFormError(err.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
+      } else {
+        setFormError('Terjadi kesalahan saat menyimpan data.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -148,7 +153,7 @@ export default function JamOperasional() {
 
       setIsDeleteModalOpen(false);
       setDeletingDay(null);
-    } catch (err) {
+    } catch {
       alert('Gagal menghapus jadwal.');
     } finally {
       setIsDeleting(false);
