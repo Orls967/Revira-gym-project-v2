@@ -15,12 +15,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center p-6 border-b border-zinc-800">
           <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <button 
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white transition-colors"
-          >
-            ✕
-          </button>
+          <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors">✕</button>
         </div>
         <div className="p-6">
           {children}
