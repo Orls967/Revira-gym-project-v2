@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/common/PageHeader';
 import Modal from '../components/common/Modal';
-import api from '../lib/api';
+// Buka komentar import api di bawah ini saat mengaktifkan integrasi backend SCRUM-52 & SCRUM-55
+// import api from '../lib/api';
 
 // --- TIPE DATA ---
 interface GymClass {
@@ -54,7 +55,6 @@ export default function Kelas() {
 
   // --- INISIALISASI MOCK DATA ---
   useEffect(() => {
-    // Simulasi fetch API
     setClasses([
       { id: 1, name: 'Yoga Pemula', min_participants: 5, is_active: true },
       { id: 2, name: 'HIIT Cardio', min_participants: 10, is_active: true },
@@ -73,11 +73,17 @@ export default function Kelas() {
       await new Promise(res => setTimeout(res, 800)); // Mock API delay
       if (classForm.id) {
         setClasses(prev => prev.map(c => c.id === classForm.id ? { ...c, ...classForm } as GymClass : c));
+        // Sinkronisasi nama kelas & min_participants di jadwal terkait jika kelas diedit
+        setSchedules(prev => prev.map(s => 
+          s.class_id === classForm.id 
+            ? { ...s, class_name: classForm.name || s.class_name, min_participants: classForm.min_participants ?? s.min_participants } 
+            : s
+        ));
       } else {
         setClasses(prev => [...prev, { ...classForm, id: Date.now() } as GymClass]);
       }
       setIsClassModalOpen(false);
-    } catch (err) {
+    } catch {
       setClassError('Gagal menyimpan kelas');
     } finally {
       setIsLoading(false);
@@ -105,26 +111,48 @@ export default function Kelas() {
       const selectedClass = classes.find(c => c.id === Number(scheduleForm.class_id));
       const selectedInstructor = mockInstructors.find(i => i.id === Number(scheduleForm.instructor_id));
       
-      const newSchedule: Schedule = {
-        id: scheduleForm.id || Date.now(),
-        class_id: selectedClass!.id,
-        class_name: selectedClass!.name,
-        instructor_id: selectedInstructor!.id,
-        instructor_name: selectedInstructor!.name,
-        date: scheduleForm.date!,
-        time: scheduleForm.time!,
-        participants_count: 0,
-        min_participants: selectedClass!.min_participants,
-        status: 'scheduled'
-      };
+      if (!selectedClass || !selectedInstructor) {
+        setScheduleError('Kelas atau instruktur tidak valid.');
+        setIsLoading(false);
+        return;
+      }
 
       if (scheduleForm.id) {
-        setSchedules(prev => prev.map(s => s.id === scheduleForm.id ? newSchedule : s));
+        // Mode Edit: Pertahankan participants_count, status, dan cancel_reason yang sudah ada
+        setSchedules(prev => prev.map(s => {
+          if (s.id !== scheduleForm.id) return s;
+          return {
+            ...s,
+            class_id: selectedClass.id,
+            class_name: selectedClass.name,
+            instructor_id: selectedInstructor.id,
+            instructor_name: selectedInstructor.name,
+            date: scheduleForm.date!,
+            time: scheduleForm.time!,
+            min_participants: selectedClass.min_participants,
+            participants_count: s.participants_count,
+            status: s.status,
+            cancel_reason: s.cancel_reason
+          };
+        }));
       } else {
+        // Mode Buat Baru: Set participants_count = 0 dan status = 'scheduled'
+        const newSchedule: Schedule = {
+          id: Date.now(),
+          class_id: selectedClass.id,
+          class_name: selectedClass.name,
+          instructor_id: selectedInstructor.id,
+          instructor_name: selectedInstructor.name,
+          date: scheduleForm.date!,
+          time: scheduleForm.time!,
+          participants_count: 0,
+          min_participants: selectedClass.min_participants,
+          status: 'scheduled'
+        };
         setSchedules(prev => [...prev, newSchedule]);
       }
       setIsScheduleModalOpen(false);
-    } catch (err) {
+    } catch {
       setScheduleError('Gagal menyimpan jadwal. Pastikan instruktur tidak bentrok.');
     } finally {
       setIsLoading(false);
@@ -145,15 +173,31 @@ export default function Kelas() {
     }
   };
 
+  // Opsi kelas untuk dropdown jadwal: tampilkan semua kelas aktif, 
+  // ATAU kelas nonaktif yang saat ini sedang dipakai oleh jadwal yang diedit
+  const availableClassesForSchedule = classes.filter(
+    c => c.is_active || (scheduleForm.id && c.id === Number(scheduleForm.class_id))
+  );
+
   return (
     <div>
       <PageHeader title="Kelas & Jadwal">
         {activeTab === 'kelas' ? (
-          <button onClick={() => { setClassForm({ name: '', min_participants: 5, is_active: true }); setIsClassModalOpen(true); }} className="bg-amber-400 hover:bg-amber-500 text-zinc-950 px-4 py-2 rounded-md font-bold text-sm transition-colors">
+          <button 
+            onClick={() => { setClassForm({ name: '', min_participants: 5, is_active: true }); setIsClassModalOpen(true); }} 
+            className="bg-amber-400 hover:bg-amber-500 text-zinc-950 px-4 py-2 rounded-md font-bold text-sm transition-colors"
+          >
             + Tambah Kelas
           </button>
         ) : (
-          <button onClick={() => { setScheduleForm({ class_id: classes[0]?.id || 0, instructor_id: mockInstructors[0].id, date: '', time: '' }); setIsScheduleModalOpen(true); }} className="bg-amber-400 hover:bg-amber-500 text-zinc-950 px-4 py-2 rounded-md font-bold text-sm transition-colors">
+          <button 
+            onClick={() => { 
+              const firstActiveClassId = classes.find(c => c.is_active)?.id || 0;
+              setScheduleForm({ class_id: firstActiveClassId, instructor_id: mockInstructors[0].id, date: '', time: '' }); 
+              setIsScheduleModalOpen(true); 
+            }} 
+            className="bg-amber-400 hover:bg-amber-500 text-zinc-950 px-4 py-2 rounded-md font-bold text-sm transition-colors"
+          >
             + Buat Jadwal
           </button>
         )}
@@ -243,14 +287,14 @@ export default function Kelas() {
           {classError && <div className="text-red-400 text-sm">{classError}</div>}
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-1">Nama Kelas</label>
-            <input type="text" required value={classForm.name} onChange={e => setClassForm({...classForm, name: e.target.value})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400 focus:border-amber-400" />
+            <input type="text" required value={classForm.name || ''} onChange={e => setClassForm({...classForm, name: e.target.value})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400 focus:border-amber-400" />
           </div>
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-1">Minimum Peserta</label>
-            <input type="number" min="1" required value={classForm.min_participants} onChange={e => setClassForm({...classForm, min_participants: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400 focus:border-amber-400" />
+            <input type="number" min="1" required value={classForm.min_participants ?? 5} onChange={e => setClassForm({...classForm, min_participants: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400 focus:border-amber-400" />
           </div>
           <div className="flex items-center">
-            <input type="checkbox" checked={classForm.is_active} onChange={e => setClassForm({...classForm, is_active: e.target.checked})} className="w-4 h-4 text-amber-500 bg-zinc-950 border-zinc-700 rounded focus:ring-amber-500" />
+            <input type="checkbox" checked={!!classForm.is_active} onChange={e => setClassForm({...classForm, is_active: e.target.checked})} className="w-4 h-4 text-amber-500 bg-zinc-950 border-zinc-700 rounded focus:ring-amber-500" />
             <label className="ml-2 text-sm text-zinc-300">Kelas Aktif</label>
           </div>
           <div className="pt-4 flex justify-end space-x-3">
@@ -266,14 +310,28 @@ export default function Kelas() {
           {scheduleError && <div className="text-red-400 text-sm">{scheduleError}</div>}
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-1">Pilih Kelas</label>
-            <select required value={scheduleForm.class_id} onChange={e => setScheduleForm({...scheduleForm, class_id: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400">
+            <select 
+              required 
+              value={scheduleForm.class_id || 0} 
+              onChange={e => setScheduleForm({...scheduleForm, class_id: Number(e.target.value)})} 
+              className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400"
+            >
               <option value={0} disabled>-- Pilih Kelas --</option>
-              {classes.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {availableClassesForSchedule.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {!c.is_active ? '(Nonaktif)' : ''}
+                </option>
+              ))}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-1">Instruktur</label>
-            <select required value={scheduleForm.instructor_id} onChange={e => setScheduleForm({...scheduleForm, instructor_id: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400">
+            <select 
+              required 
+              value={scheduleForm.instructor_id || 0} 
+              onChange={e => setScheduleForm({...scheduleForm, instructor_id: Number(e.target.value)})} 
+              className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400"
+            >
               <option value={0} disabled>-- Pilih Instruktur --</option>
               {mockInstructors.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
             </select>
@@ -281,11 +339,11 @@ export default function Kelas() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-1">Tanggal</label>
-              <input type="date" required value={scheduleForm.date} onChange={e => setScheduleForm({...scheduleForm, date: e.target.value})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white [color-scheme:dark]" />
+              <input type="date" required value={scheduleForm.date || ''} onChange={e => setScheduleForm({...scheduleForm, date: e.target.value})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white [color-scheme:dark]" />
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-1">Jam</label>
-              <input type="time" required value={scheduleForm.time} onChange={e => setScheduleForm({...scheduleForm, time: e.target.value})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white [color-scheme:dark]" />
+              <input type="time" required value={scheduleForm.time || ''} onChange={e => setScheduleForm({...scheduleForm, time: e.target.value})} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white [color-scheme:dark]" />
             </div>
           </div>
           <div className="pt-4 flex justify-end space-x-3">
