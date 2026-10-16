@@ -491,7 +491,7 @@ GymClassInput:
       maximum: 1000
     default_instructor_id:
       type: [integer, 'null']
-      description: ID instruktur yang ada, atau null.
+      description: ID instruktur aktif, atau null. Pada PUT, instruktur yang sudah terpasang boleh dipertahankan walau kini nonaktif.
     is_active:
       type: boolean
       default: true

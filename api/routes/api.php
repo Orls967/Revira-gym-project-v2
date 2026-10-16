@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\GymClassController;
+use App\Http\Controllers\Api\V1\Admin\InstructorController;
 use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
 use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -85,6 +86,18 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
             Route::get('/{gymClass}', 'show');
             Route::put('/{gymClass}', 'update');
             Route::delete('/{gymClass}', 'destroy');
+        });
+
+    // Instruktur; tidak di-hard delete bila sudah dipakai, cukup is_active=false (SCRUM-54)
+    Route::controller(InstructorController::class)
+        ->prefix('instructors')
+        ->whereNumber('instructor')
+        ->group(function () {
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('/{instructor}', 'show');
+            Route::put('/{instructor}', 'update');
+            Route::delete('/{instructor}', 'destroy');
         });
 });
 

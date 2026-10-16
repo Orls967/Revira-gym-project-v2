@@ -141,9 +141,37 @@ GymClassValidationError:
               min_participants:
                 - The min participants field must be an integer.
         instructorNotFound:
-          summary: Instruktur tidak ada
+          summary: Instruktur tidak ada atau nonaktif
           value:
-            message: Instruktur tidak ditemukan.
+            message: Instruktur tidak ditemukan atau tidak aktif.
             errors:
               default_instructor_id:
-                - Instruktur tidak ditemukan.
+                - Instruktur tidak ditemukan atau tidak aktif.
+InstructorValidationError:
+  description: Validasi instruktur gagal (SCRUM-54).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        nameRequired:
+          summary: Nama kosong
+          value:
+            message: Nama instruktur wajib diisi.
+            errors:
+              name:
+                - Nama instruktur wajib diisi.
+        nameTooLong:
+          summary: Nama lebih dari 100 karakter
+          value:
+            message: Nama instruktur maksimal 100 karakter.
+            errors:
+              name:
+                - Nama instruktur maksimal 100 karakter.
+        phoneInvalid:
+          summary: Nomor HP bukan nomor Indonesia
+          value:
+            message: Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.
+            errors:
+              phone_number:
+                - Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.

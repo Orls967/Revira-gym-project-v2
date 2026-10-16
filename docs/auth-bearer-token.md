@@ -312,13 +312,56 @@ Aturan:
 
 - `name` wajib, maks 100 karakter. `description` opsional (boleh `null`), maks 1000 karakter.
 - `min_participants` wajib, bilangan bulat **1-1000** (0, negatif, pecahan, dan nilai di atas 1000 ditolak 422).
-- `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang ada.
+- `default_instructor_id` opsional (boleh `null`); bila diisi harus ID instruktur yang **aktif** (422 `Instruktur tidak ditemukan atau tidak aktif.`). Pada PUT, instruktur yang sudah terpasang boleh dikirim ulang walau kini nonaktif, agar kelas tetap bisa diubah; mengganti ke instruktur lain tetap wajib yang aktif.
 - `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
 - Field lain seperti kapasitas maksimum diabaikan.
 - Kelas yang sudah punya jadwal **tidak bisa dihapus**: 409 `{ "message": "Kelas tidak dapat dihapus karena sudah memiliki jadwal. Silakan nonaktifkan kelas (is_active = false) sebagai alternatif." }`. Nonaktifkan lewat PUT dengan `is_active: false`.
 - `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
 
 Kelas nonaktif tidak boleh dipilih untuk jadwal baru. Backend jadwal (SCRUM-55) memakai scope `GymClass::active()`.
+
+## Instruktur (admin, SCRUM-54)
+
+CRUD instruktur. Semua endpoint memakai `auth:sanctum` + `role:admin` (tamu 401, member 403).
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/instructors` | 200, paginasi Laravel `{ "data": [...], "links": {...}, "meta": {...} }` |
+| POST   | `/api/v1/admin/instructors` | 201, `{ "message": "Instruktur berhasil dibuat.", "data": {...} }` |
+| GET    | `/api/v1/admin/instructors/{id}` | 200, `{ "data": {...} }` |
+| PUT    | `/api/v1/admin/instructors/{id}` | 200, `{ "message": "Instruktur berhasil diperbarui.", "data": {...} }` |
+| DELETE | `/api/v1/admin/instructors/{id}` | 200, `{ "message": "Instruktur berhasil dihapus." }` |
+
+Query string `GET /api/v1/admin/instructors` (semuanya opsional, nilai tidak valid mendapat 422):
+
+| Parameter | Keterangan |
+|-----------|------------|
+| `is_active` | `true`/`false` (atau `1`/`0`). Tanpa parameter ini, instruktur aktif dan nonaktif sama-sama tampil. Pakai `is_active=true` untuk pilihan instruktur di form kelas/jadwal. |
+| `search` | Cari nama instruktur yang mengandung teks ini (maks 100 karakter, tidak peka huruf besar/kecil). `%` dan `_` dicari apa adanya, bukan wildcard. |
+| `page` | Nomor halaman, minimal 1. |
+| `per_page` | 1-100, default 15. |
+
+Body POST dan PUT:
+
+```json
+{
+  "name": "Budi Santoso",
+  "specialization": "Yoga",
+  "phone_number": "081234567890",
+  "is_active": true
+}
+```
+
+Aturan:
+
+- `name` wajib, maks 100 karakter (422 `Nama instruktur wajib diisi.` / `Nama instruktur maksimal 100 karakter.`).
+- `specialization` opsional (boleh `null`), maks 100 karakter.
+- `phone_number` opsional (boleh `null`); bila diisi harus nomor Indonesia `08` + 8-11 digit. Format `+62`/`62`, spasi, dan tanda hubung diterima lalu disimpan sebagai `08xxx` (422 `Nomor HP harus nomor Indonesia yang diawali 08, +62, atau 62.`).
+- `is_active` opsional, default `true`. Pada PUT, bila tidak dikirim nilainya tidak berubah.
+- Instruktur **tidak bisa dihapus** bila sudah dipakai (FK `restrict`), dan dibalas 409:
+  - punya jadwal, termasuk jadwal yang dibatalkan: `Instruktur tidak dapat dihapus karena sudah memiliki jadwal. Silakan pindahkan jadwal ke instruktur lain lebih dulu, atau nonaktifkan instruktur (is_active = false) sebagai alternatif.`
+  - masih menjadi `default_instructor_id` suatu kelas: `Instruktur tidak dapat dihapus karena masih menjadi instruktur default kelas. Silakan ganti instruktur default kelas tersebut lebih dulu, atau nonaktifkan instruktur (is_active = false) sebagai alternatif.`
+- `{id}` yang tidak ada mendapat 404 `{ "message": "Data tidak ditemukan." }`.
 
 ## Helper untuk backend
 
