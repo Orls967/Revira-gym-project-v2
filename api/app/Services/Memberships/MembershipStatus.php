@@ -11,6 +11,10 @@ use Illuminate\Validation\ValidationException;
  * Satu sumber aturan "member aktif" (B6, SCRUM-71): membership active dengan start_date <= tanggal <= end_date (WITA).
  * Dipakai /me, booking (SCRUM-70), approve transaksi (SCRUM-67), dan daftar member (SCRUM-68).
  * Seorang user boleh punya dua membership active (yang berjalan dan perpanjangannya) asalkan periodenya tidak tumpang tindih.
+ *
+ * Tanggal boleh Carbon dari zona waktu mana pun (dikonversi ke WITA) atau string tanggal yang valid.
+ * Input string dari request wajib divalidasi formatnya oleh pemanggil (FormRequest rule `date`);
+ * string tidak valid melempar InvalidFormatException.
  */
 class MembershipStatus
 {

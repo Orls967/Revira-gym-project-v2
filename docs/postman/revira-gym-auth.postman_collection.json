@@ -12,7 +12,8 @@
     { "key": "token", "value": "" },
     { "key": "id", "value": "1" },
     { "key": "scheduleCursor", "value": "" },
-    { "key": "scheduleEtag", "value": "" }
+    { "key": "scheduleEtag", "value": "" },
+    { "key": "scheduleId", "value": "1" }
   ],  
   "item": [
     {
@@ -2669,6 +2670,311 @@
         }
       ],
       "description": "Jadwal admin (SCRUM-55), role:admin; login dulu lewat \"Login (admin-web)\". Admin: tumpang tindih jadwal instruktur di tanggal yang sama ditolak 422; hanya jadwal scheduled yang bisa diubah (409); jadwal berpeserta tidak bisa dihapus (409), batalkan lewat PATCH status. Jadwal publik dan polling status (SCRUM-56) tanpa token, rate limit 120/menit per IP; polling memakai variabel scheduleCursor dan scheduleEtag."
+    },
+    {
+      "name": "Sprint 3 - Booking member (SCRUM-70)",
+      "item": [
+        {
+          "name": "Member - daftar booking sendiri",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/member/bookings",
+            "description": "Role member. Booking milik sendiri (booked/attended/cancelled) untuk sesi yang jam selesainya belum lewat, termasuk sesi yang dibatalkan admin. Terurut tanggal lalu jam mulai, tanpa paginasi."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 31,\n      \"status\": \"booked\",\n      \"booked_at\": \"2026-10-16T10:00:00+08:00\",\n      \"updated_at\": \"2026-10-16T10:00:00+08:00\",\n      \"schedule\": {\n        \"id\": 10,\n        \"class_id\": 1,\n        \"class_name\": \"Yoga Pagi\",\n        \"instructor_name\": \"Budi Santoso\",\n        \"schedule_date\": \"2026-10-17\",\n        \"start_time\": \"07:00\",\n        \"end_time\": \"08:00\",\n        \"status\": \"scheduled\",\n        \"cancel_reason\": null,\n        \"participants_count\": 5,\n        \"min_participants\": 3\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai admin",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Member - booking sesi",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/member/class-schedules/{{scheduleId}}/booking",
+            "description": "Role member, tanpa body. Syarat: sesi scheduled dan jam mulai belum lewat (WITA); member aktif pada schedule_date (start_date <= tanggal sesi <= end_date). Tanpa batas kapasitas. Booking ulang setelah batal mengaktifkan kembali booking lama (ID sama, booked_at baru). Sudah booking → 409."
+          },
+          "response": [
+            {
+              "name": "201 Booking berhasil",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Booking kelas berhasil.\",\n  \"data\": {\n    \"id\": 31,\n    \"status\": \"booked\",\n    \"booked_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T10:00:00+08:00\",\n    \"schedule\": {\n      \"id\": 10,\n      \"class_id\": 1,\n      \"class_name\": \"Yoga Pagi\",\n      \"instructor_name\": \"Budi Santoso\",\n      \"schedule_date\": \"2026-10-17\",\n      \"start_time\": \"07:00\",\n      \"end_time\": \"08:00\",\n      \"status\": \"scheduled\",\n      \"cancel_reason\": null,\n      \"participants_count\": 5,\n      \"min_participants\": 3\n    }\n  }\n}"
+            },
+            {
+              "name": "409 Sudah booking",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda sudah booking sesi kelas ini.\"\n}"
+            },
+            {
+              "name": "422 Membership tidak aktif pada tanggal sesi",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Membership tidak aktif pada tanggal sesi.\",\n  \"errors\": {\n    \"booking\": [\n      \"Membership tidak aktif pada tanggal sesi.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Sesi dibatalkan",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Sesi kelas ini sudah dibatalkan.\",\n  \"errors\": {\n    \"booking\": [\n      \"Sesi kelas ini sudah dibatalkan.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Sesi sudah dimulai",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Sesi kelas ini sudah dimulai atau sudah lewat.\",\n  \"errors\": {\n    \"booking\": [\n      \"Sesi kelas ini sudah dimulai atau sudah lewat.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "404 Sesi tidak ada",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Data tidak ditemukan.\"\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai admin",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Member - batal booking sendiri",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/member/class-schedules/{{scheduleId}}/booking",
+            "description": "Role member. Hanya booking milik sendiri berstatus booked, sebelum jam mulai sesi. Status menjadi cancelled (baris tidak dihapus). Tidak punya booking di sesi ini (termasuk booking milik orang lain) → 404."
+          },
+          "response": [
+            {
+              "name": "200 Dibatalkan",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Booking kelas berhasil dibatalkan.\",\n  \"data\": {\n    \"id\": 31,\n    \"status\": \"cancelled\",\n    \"booked_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T11:00:00+08:00\",\n    \"schedule\": {\n      \"id\": 10,\n      \"class_id\": 1,\n      \"class_name\": \"Yoga Pagi\",\n      \"instructor_name\": \"Budi Santoso\",\n      \"schedule_date\": \"2026-10-17\",\n      \"start_time\": \"07:00\",\n      \"end_time\": \"08:00\",\n      \"status\": \"scheduled\",\n      \"cancel_reason\": null,\n      \"participants_count\": 4,\n      \"min_participants\": 3\n    }\n  }\n}"
+            },
+            {
+              "name": "422 Sesi sudah dimulai",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.\",\n  \"errors\": {\n    \"booking\": [\n      \"Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Sudah dibatalkan",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Booking ini sudah dibatalkan.\",\n  \"errors\": {\n    \"booking\": [\n      \"Booking ini sudah dibatalkan.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "404 Tidak punya booking",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Booking tidak ditemukan.\"\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai admin",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        }
+      ],
+      "description": "Booking sesi kelas oleh member (SCRUM-70), role:member; login dulu lewat \"Login (mobile)\". Isi variabel scheduleId dengan ID sesi dari GET /class-schedules. participants_count di jadwal publik, polling status, dan admin langsung berubah setelah booking/batal."
     },
     {
       "name": "Sprint 2 - Bukti transfer (SCRUM-48)",

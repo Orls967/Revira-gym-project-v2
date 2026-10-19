@@ -51,15 +51,23 @@ class ClassSchedule extends Model
      */
     public function scopeUpcoming(Builder $query): Builder
     {
-        $now = now();
-
         return $query
             ->whereIn('status', [self::STATUS_SCHEDULED, self::STATUS_ONGOING])
-            ->where(fn (Builder $query) => $query
-                ->whereDate('schedule_date', '>', $now->toDateString())
-                ->orWhere(fn (Builder $query) => $query
-                    ->whereDate('schedule_date', $now->toDateString())
-                    ->where('end_time', '>', $now->format('H:i:s'))));
+            ->notEnded();
+    }
+
+    /**
+     * Jadwal yang jam selesainya belum lewat (WITA), apa pun statusnya, termasuk yang dibatalkan.
+     */
+    public function scopeNotEnded(Builder $query): Builder
+    {
+        $now = now();
+
+        return $query->where(fn (Builder $query) => $query
+            ->whereDate('schedule_date', '>', $now->toDateString())
+            ->orWhere(fn (Builder $query) => $query
+                ->whereDate('schedule_date', $now->toDateString())
+                ->where('end_time', '>', $now->format('H:i:s'))));
     }
 
     /**
@@ -134,6 +142,14 @@ class ClassSchedule extends Model
     public function startsAt(): CarbonImmutable
     {
         return CarbonImmutable::parse($this->schedule_date->format('Y-m-d').' '.$this->start_time);
+    }
+
+    /**
+     * Sesi dianggap sudah dimulai tepat pada jam mulainya (WITA).
+     */
+    public function hasStarted(): bool
+    {
+        return ! $this->startsAt()->isFuture();
     }
 
     /**

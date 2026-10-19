@@ -284,3 +284,33 @@ ClassScheduleStatusError:
             errors:
               status:
                 - Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:30-08:30 yang bertumpuk dengan jadwal ini.
+BookingRuleError:
+  description: |
+    Pelanggaran aturan booking (SCRUM-70), selalu pada field `booking`:
+    - `Membership tidak aktif pada tanggal sesi.`
+    - `Sesi kelas ini sudah dibatalkan.`
+    - `Sesi kelas ini sudah dimulai atau selesai.` (status `ongoing`/`completed`)
+    - `Sesi kelas ini sudah dimulai atau sudah lewat.` (jam mulai sudah lewat, WITA)
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Membership tidak aktif pada tanggal sesi.
+        errors:
+          booking:
+            - Membership tidak aktif pada tanggal sesi.
+BookingCancelError:
+  description: |
+    Pembatalan booking ditolak (SCRUM-70), selalu pada field `booking`:
+    - `Booking ini sudah dibatalkan.`
+    - `Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.`
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.
+        errors:
+          booking:
+            - Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.

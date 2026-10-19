@@ -56,6 +56,8 @@ tags:
     description: Jadwal kelas.
   - name: Receipts
     description: Bukti transfer.
+  - name: Bookings
+    description: Booking sesi kelas oleh member.
   - name: Sprint 2
     description: Endpoint yang belum diimplementasikan (`x-status` planned).
 paths:
@@ -107,6 +109,10 @@ paths:
     $ref: ./openapi/paths/schedules.yaml#/publicSchedules
   /class-schedules/status:
     $ref: ./openapi/paths/schedules.yaml#/publicScheduleStatus
+  /member/bookings:
+    $ref: ./openapi/paths/bookings.yaml#/memberBookings
+  /member/class-schedules/{id}/booking:
+    $ref: ./openapi/paths/bookings.yaml#/memberBooking
   /transactions/{transaction}/receipt:
     $ref: ./openapi/paths/receipts.yaml#/receipt
 components:
