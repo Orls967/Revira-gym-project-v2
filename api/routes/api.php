@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
 use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\Member\MembershipApplicationController;
 use App\Http\Controllers\Api\V1\PublicClassController;
 use App\Http\Controllers\Api\V1\PublicClassScheduleController;
 use App\Http\Controllers\Api\V1\PublicOperationalHourController;
@@ -124,4 +125,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 
 Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {
     Route::get('/ping', fn () => response()->json(['message' => 'pong', 'role' => 'member']));
+
+    // Pengajuan membership baru atau perpanjangan dengan upload bukti transfer (SCRUM-69)
+    Route::post('/memberships', MembershipApplicationController::class);
 });
