@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Membership;
 use App\Models\User;
+use App\Services\Memberships\MembershipStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,6 +14,8 @@ use Illuminate\Http\Request;
  */
 class MeController extends Controller
 {
+    public function __construct(private readonly MembershipStatus $membershipStatus) {}
+
     /**
      * GET /api/v1/me. Aplikasi mobile memakai membership.is_active untuk mengaktifkan tombol booking.
      */
@@ -35,23 +38,19 @@ class MeController extends Controller
     }
 
     /**
-     * Ringkasan membership. Jika ada yang sedang berlaku, itu yang ditampilkan;
-     * jika tidak, status diambil dari catatan terakhir (pending, rejected, expired) atau none.
+     * Ringkasan membership dengan prioritas: yang berlaku hari ini (aturan B6), lalu membership active
+     * yang belum mulai (upcoming), lalu catatan terakhir (pending, rejected, expired), atau none.
+     * Dengan begitu pengajuan perpanjangan tidak menutupi membership yang sedang berjalan.
      *
      * @return array<string, mixed>
      */
     private function membershipSummary(User $user): array
     {
-        $active = $user->memberships()
-            ->currentlyActive()
-            ->with('membershipPlan')
-            ->latest('end_date')
-            ->first();
+        $active = $this->membershipStatus->activeOn($user, today());
 
-        $membership = $active ?? $user->memberships()
-            ->with('membershipPlan')
-            ->latest('id')
-            ->first();
+        $membership = $active
+            ?? $user->memberships()->upcoming()->oldest('start_date')->first()
+            ?? $user->memberships()->latest('id')->first();
 
         if (! $membership) {
             return [
@@ -63,16 +62,28 @@ class MeController extends Controller
             ];
         }
 
-        // Status active yang end_date-nya sudah lewat dilaporkan sebagai expired
-        $status = $active || $membership->status !== 'active' ? $membership->status : 'expired';
+        $membership->loadMissing('membershipPlan');
 
         return [
             'is_active' => $active !== null,
-            'status' => $status,
+            'status' => $active ? 'active' : $this->inactiveStatus($membership),
             'plan' => $this->planSummary($membership),
             'start_date' => $membership->start_date?->toDateString(),
             'end_date' => $membership->end_date?->toDateString(),
         ];
+    }
+
+    /**
+     * Status untuk membership yang tidak berlaku hari ini. Status active yang belum mulai dilaporkan upcoming,
+     * dan yang end_date-nya sudah lewat dilaporkan expired walau job expiry belum jalan.
+     */
+    private function inactiveStatus(Membership $membership): string
+    {
+        if ($membership->status !== 'active') {
+            return $membership->status;
+        }
+
+        return $membership->start_date?->isAfter(today()) ? 'upcoming' : 'expired';
     }
 
     /**
