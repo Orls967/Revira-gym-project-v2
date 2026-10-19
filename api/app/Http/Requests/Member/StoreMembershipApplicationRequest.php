@@ -21,9 +21,7 @@ class StoreMembershipApplicationRequest extends FormRequest
      */
     public function rules(): array
     {
-        $isTransfer = $this->input('payment_method') === 'transfer';
-
-        return [
+        $rules = [
             'membership_plan_id' => [
                 'required',
                 'integer',
@@ -38,10 +36,17 @@ class StoreMembershipApplicationRequest extends FormRequest
                 'required',
                 'in:transfer,on_the_spot',
             ],
-            'receipt_image' => $isTransfer
-                ? ReceiptStorage::rules()
-                : ['prohibited'],
         ];
+
+        // M2: prohibited hanya berlaku bila payment_method === 'on_the_spot'.
+        // Bila payment_method tidak valid/kosong, tidak ada error menyesatkan pada receipt_image.
+        if ($this->input('payment_method') === 'transfer') {
+            $rules['receipt_image'] = ReceiptStorage::rules();
+        } elseif ($this->input('payment_method') === 'on_the_spot') {
+            $rules['receipt_image'] = ['prohibited'];
+        }
+
+        return $rules;
     }
 
     /**

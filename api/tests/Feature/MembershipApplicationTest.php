@@ -504,4 +504,67 @@ class MembershipApplicationTest extends TestCase
         // message harus ada
         $this->assertNotEmpty($response->json('message'));
     }
+
+    // =========================================================================
+    // Rate limit: request ke-11 dalam 1 menit → 429
+    // =========================================================================
+
+    public function test_throttle_returns_429_on_eleventh_request(): void
+    {
+        $member = User::factory()->create(['role' => UserRole::Member]);
+        Sanctum::actingAs($member);
+
+        // Kirim 10 request untuk menghabiskan kuota 10 request per menit
+        for ($i = 0; $i < 10; $i++) {
+            $this->postJson($this->url, [
+                'membership_plan_id' => $this->plan->id,
+            ]);
+        }
+
+        // Request ke-11 harus menghasilkan 429 Too Many Requests
+        $response = $this->postJson($this->url, [
+            'membership_plan_id' => $this->plan->id,
+        ]);
+
+        $response->assertStatus(429)
+            ->assertJson([
+                'message' => 'Too Many Attempts.',
+            ]);
+    }
+
+    // =========================================================================
+    // Validasi receipt_image: bila payment_method kosong/tidak valid,
+    // error hanya pada payment_method, tidak ada error prohibited pada receipt_image
+    // =========================================================================
+
+    public function test_invalid_or_missing_payment_method_does_not_trigger_prohibited_on_receipt(): void
+    {
+        $member = User::factory()->create(['role' => UserRole::Member]);
+        Sanctum::actingAs($member);
+
+        $file = UploadedFile::fake()->image('bukti.jpg');
+
+        // Kasus 1: payment_method kosong
+        $response1 = $this->postJson($this->url, [
+            'membership_plan_id' => $this->plan->id,
+            'start_date' => today()->toDateString(),
+            'receipt_image' => $file,
+        ]);
+
+        $response1->assertUnprocessable()
+            ->assertJsonValidationErrors(['payment_method'])
+            ->assertJsonMissingValidationErrors(['receipt_image']);
+
+        // Kasus 2: payment_method tidak valid
+        $response2 = $this->postJson($this->url, [
+            'membership_plan_id' => $this->plan->id,
+            'start_date' => today()->toDateString(),
+            'payment_method' => 'credit_card',
+            'receipt_image' => $file,
+        ]);
+
+        $response2->assertUnprocessable()
+            ->assertJsonValidationErrors(['payment_method'])
+            ->assertJsonMissingValidationErrors(['receipt_image']);
+    }
 }

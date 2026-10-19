@@ -128,7 +128,7 @@ Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(func
     Route::get('/ping', fn () => response()->json(['message' => 'pong', 'role' => 'member']));
 
     // Pengajuan membership baru atau perpanjangan dengan upload bukti transfer (SCRUM-69)
-    Route::post('/memberships', MembershipApplicationController::class);
+    Route::post('/memberships', MembershipApplicationController::class)->middleware('throttle:10,1');
 
     // Booking dan batal booking sesi kelas oleh member aktif (SCRUM-70)
     Route::controller(BookingController::class)->group(function () {

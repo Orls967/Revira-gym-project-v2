@@ -7,8 +7,8 @@ memberApplications:
       SCRUM-69 (tiket induk SCRUM-103). Role member.
 
       Mengajukan permohonan membership baru atau perpanjangan. Bukti transfer wajib
-      diunggah bila `payment_method = transfer`; dilarang (dan diabaikan oleh server) bila
-      `payment_method = on_the_spot`.
+      diunggah bila `payment_method = transfer`; dilarang bila `payment_method = on_the_spot`
+      (akan ditolak 422).
 
       **Aturan bisnis:**
       - **B2 – Pengajuan ganda:** Tolak bila member sudah punya membership berstatus `pending`.
@@ -119,7 +119,7 @@ memberApplications:
                   errors:
                     start_date:
                       - Periode membership baru bertabrakan dengan masa aktif yang sedang berjalan.
-              fileTerlalu Besar:
+              fileTerlaluBesar:
                 summary: Ukuran bukti transfer melebihi 2 MB
                 value:
                   message: Ukuran file bukti transfer maksimal 2 MB.
@@ -136,9 +136,9 @@ memberApplications:
               buktiDilarang:
                 summary: Mengirim bukti untuk pembayaran on_the_spot
                 value:
-                  message: The receipt image field is prohibited.
+                  message: Bukti transfer tidak diperlukan untuk pembayaran di tempat.
                   errors:
                     receipt_image:
-                      - The receipt image field is prohibited.
+                      - Bukti transfer tidak diperlukan untuk pembayaran di tempat.
       '429':
         $ref: ../components/responses.yaml#/TooManyRequests

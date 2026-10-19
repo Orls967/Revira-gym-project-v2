@@ -50,12 +50,16 @@ class MembershipApplicationService
         }
 
         try {
-            $result = DB::transaction(function () use ($user, $plan, $data, $startDate, $paymentMethod, $receiptPath) {
-                // Kunci baris memberships user untuk mencegah race condition B2
+            $result = DB::transaction(function () use ($user, $plan, $startDate, $endDate, $paymentMethod, $receiptPath) {
+                // Kunci baris user terlebih dahulu untuk mencegah race condition pengajuan simultan
+                User::whereKey($user->id)->lockForUpdate()->first();
+
+                // Kunci baris memberships user
                 $user->memberships()->lockForUpdate()->get();
 
-                // Cek ulang B2 di dalam DB transaction
+                // Cek penentu secara atomik di dalam transaksi (B2 & B3) setelah baris terkunci
                 $this->guardAgainstDuplicatePending($user);
+                $this->guardAgainstOverlap($user, $startDate, $endDate);
 
                 // --- B1: Tentukan record_type ---
                 $recordType = $this->determineRecordType($user);
