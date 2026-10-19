@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Admin\GymClassController;
 use App\Http\Controllers\Api\V1\Admin\InstructorController;
 use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
 use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
+use App\Http\Controllers\Api\V1\Admin\TransactionController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\Member\BookingController;
@@ -121,6 +122,9 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
             Route::patch('/{classSchedule}/status', 'updateStatus');
             Route::delete('/{classSchedule}', 'destroy');
         });
+
+    // Verifikasi transaksi: daftar transaksi per status (SCRUM-66)
+    Route::get('/transactions', [TransactionController::class, 'index']);
 });
 
 Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {
