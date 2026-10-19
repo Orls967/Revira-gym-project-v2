@@ -951,3 +951,46 @@ AdminTransactionListResponse:
     meta:
       $ref: '#/PaginationMeta'
 
+AdminMembershipSummary:
+  type: object
+  required:
+    - id
+    - status
+    - record_type
+    - start_date
+    - end_date
+  properties:
+    id:
+      type: integer
+    status:
+      type: string
+      enum: [pending, active, rejected, expired]
+    record_type:
+      type: string
+      enum: [registration, extension]
+    start_date:
+      type: [string, 'null']
+      format: date
+      examples: ['2026-10-20']
+    end_date:
+      type: [string, 'null']
+      format: date
+      examples: ['2026-11-18']
+
+AdminTransactionDecisionResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+      examples: ['Transaksi disetujui. Membership member sudah aktif.']
+    data:
+      type: object
+      required: [transaction, membership]
+      properties:
+        transaction:
+          $ref: '#/AdminTransaction'
+        membership:
+          $ref: '#/AdminMembershipSummary'
+
+

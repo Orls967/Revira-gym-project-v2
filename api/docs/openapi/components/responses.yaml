@@ -342,4 +342,20 @@ TransactionValidationError:
             errors:
               page:
                 - The page field must be an integer.
+TransactionConflict:
+  description: Konflik status verifikasi transaksi atau periode membership bertabrakan (SCRUM-67).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        alreadyProcessed:
+          summary: Transaksi sudah diproses sebelumnya
+          value:
+            message: 'Transaksi ini sudah diproses (status: verified).'
+        overlapping:
+          summary: Periode membership bertabrakan dengan membership aktif lain
+          value:
+            message: Periode membership bertabrakan dengan masa aktif lain milik member ini.
+
 

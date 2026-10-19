@@ -3019,8 +3019,172 @@
       ]
     },
     {
-      "name": "Sprint 3 - Transaksi admin (SCRUM-66)",
+      "name": "Sprint 3 - Transaksi admin (SCRUM-66, SCRUM-67)",
       "item": [
+        {
+          "name": "Admin - setujui transaksi (approve)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/transactions/{{id}}/approve",
+            "description": "Role admin (SCRUM-67). Menyetujui transaksi pending. Menghitung tanggal mulai dan akhir membership, memverifikasi tidak ada konflik tumpang tindih, dan mengaktifkan membership."
+          },
+          "response": [
+            {
+              "name": "200 OK (disetujui)",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Transaksi disetujui. Membership member sudah aktif.\",\n  \"data\": {\n    \"transaction\": {\n      \"id\": 2,\n      \"member\": {\n        \"id\": 3,\n        \"name\": \"Siti Rahmah\",\n        \"email\": \"member2@revira.test\",\n        \"phone_number\": \"081234567891\"\n      },\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"1 Bulan Reguler\",\n        \"duration_days\": 30\n      },\n      \"record_type\": \"registration\",\n      \"start_date\": \"2026-10-20\",\n      \"amount\": 150000,\n      \"payment_method\": \"transfer\",\n      \"verification_status\": \"verified\",\n      \"has_receipt\": true,\n      \"receipt_url\": \"/api/v1/transactions/2/receipt\",\n      \"reject_reason\": null,\n      \"verified_at\": \"2026-10-19T15:30:00+08:00\",\n      \"created_at\": \"2026-10-18T09:00:00+08:00\"\n    },\n    \"membership\": {\n      \"id\": 2,\n      \"status\": \"active\",\n      \"record_type\": \"registration\",\n      \"start_date\": \"2026-10-20\",\n      \"end_date\": \"2026-11-18\"\n    }\n  }\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "409 Transaksi sudah diproses",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Transaksi ini sudah diproses (status: verified).\"\n}"
+            },
+            {
+              "name": "409 Periode bertabrakan",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Periode membership bertabrakan dengan masa aktif lain milik member ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Admin - tolak transaksi (reject)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reject_reason\": \"Nominal transfer tidak sesuai.\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/transactions/{{id}}/reject",
+            "description": "Role admin (SCRUM-67). Menolak transaksi pending dengan mencatat reject_reason. Status membership menjadi rejected."
+          },
+          "response": [
+            {
+              "name": "200 OK (ditolak)",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Transaksi ditolak.\",\n  \"data\": {\n    \"transaction\": {\n      \"id\": 2,\n      \"member\": {\n        \"id\": 3,\n        \"name\": \"Siti Rahmah\",\n        \"email\": \"member2@revira.test\",\n        \"phone_number\": \"081234567891\"\n      },\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"1 Bulan Reguler\",\n        \"duration_days\": 30\n      },\n      \"record_type\": \"registration\",\n      \"start_date\": \"2026-10-20\",\n      \"amount\": 150000,\n      \"payment_method\": \"transfer\",\n      \"verification_status\": \"rejected\",\n      \"has_receipt\": true,\n      \"receipt_url\": \"/api/v1/transactions/2/receipt\",\n      \"reject_reason\": \"Nominal transfer tidak sesuai.\",\n      \"verified_at\": \"2026-10-19T15:30:00+08:00\",\n      \"created_at\": \"2026-10-18T09:00:00+08:00\"\n    },\n    \"membership\": {\n      \"id\": 2,\n      \"status\": \"rejected\",\n      \"record_type\": \"registration\",\n      \"start_date\": \"2026-10-20\",\n      \"end_date\": null\n    }\n  }\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            },
+            {
+              "name": "409 Transaksi sudah diproses",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Transaksi ini sudah diproses (status: rejected).\"\n}"
+            },
+            {
+              "name": "422 Alasan penolakan kosong",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Alasan penolakan wajib diisi.\",\n  \"errors\": {\n    \"reject_reason\": [\n      \"Alasan penolakan wajib diisi.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
         {
           "name": "Admin - daftar transaksi (default pending)",
           "request": {
