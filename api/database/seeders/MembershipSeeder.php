@@ -105,5 +105,23 @@ class MembershipSeeder extends Seeder
                 'status' => 'active',
             ]
         );
+
+        // 7. Pending membership (on_the_spot) untuk member4 sebagai contoh data SCRUM-69.
+        //    record_type = extension karena member4 sudah punya membership active (pernah diverifikasi).
+        //    start_date setelah masa aktif berakhir sehingga berurutan.
+        if ($member4 && $plan30) {
+            Membership::updateOrCreate(
+                [
+                    'user_id' => $member4->id,
+                    'record_type' => 'extension',
+                ],
+                [
+                    'membership_plan_id' => $plan30->id,
+                    'start_date' => $today->copy()->addDays(26)->toDateString(),
+                    'end_date' => null,
+                    'status' => 'pending',
+                ]
+            );
+        }
     }
 }
