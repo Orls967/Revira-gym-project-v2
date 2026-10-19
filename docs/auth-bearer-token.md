@@ -167,6 +167,8 @@ Urutan prioritas data yang ditampilkan:
 2. Jika tidak ada, membership `upcoming` dengan `start_date` paling awal.
 3. Jika tidak ada juga, catatan membership terbaru. `start_date`/`end_date` bisa `null` untuk status `pending` dan `rejected`.
 
+**Catatan untuk tim mobile dan Admin Web:** nilai `upcoming` baru ditambahkan di SCRUM-71 (`is_active: false`). Saat ini belum dipakai frontend; tangani saat layar membership/booking dibuat, mis. tampilkan "Membership mulai {start_date}" dan nonaktifkan tombol booking untuk sesi sebelum tanggal itu.
+
 | Status | Body |
 |--------|------|
 | 200 | lihat contoh di atas |

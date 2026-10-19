@@ -76,8 +76,8 @@ MembershipStatus:
   enum: [pending, active, expired, rejected]
 MembershipSummaryStatus:
   type: string
-  description: Status pada `/me`. `none` berarti belum punya catatan membership.
-  enum: [none, pending, active, expired, rejected]
+  description: Status pada `/me`. `none` berarti belum punya catatan membership. `upcoming` berarti membership sudah disetujui tetapi `start_date` masih di masa depan (SCRUM-71).
+  enum: [none, pending, active, upcoming, expired, rejected]
 DayOfWeek:
   type: string
   enum: [Senin, Selasa, Rabu, Kamis, Jumat, Sabtu, Minggu]
@@ -206,10 +206,10 @@ MembershipSummary:
   properties:
     is_active:
       type: boolean
-      description: True bila ada membership berstatus active dan `end_date` belum lewat (inklusif hari terakhir).
+      description: True bila ada membership berstatus active dengan `start_date` <= hari ini <= `end_date` (WITA, inklusif). Perpanjangan yang belum mulai tidak dihitung (SCRUM-71).
     status:
       $ref: '#/MembershipSummaryStatus'
-      description: Status active yang `end_date`-nya sudah lewat dilaporkan `expired`.
+      description: Status active yang `end_date`-nya sudah lewat dilaporkan `expired`; yang `start_date`-nya belum tiba dilaporkan `upcoming`.
     plan:
       oneOf:
         - $ref: '#/PlanSummary'

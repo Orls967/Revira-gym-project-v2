@@ -159,6 +159,51 @@ class MembershipStatusTest extends TestCase
     }
 
     /**
+     * Memastikan Carbon dari zona waktu lain dikonversi ke WITA: 2026-10-19 17:00 UTC = 2026-10-20 01:00 WITA.
+     */
+    public function test_carbon_in_other_timezone_is_converted_to_app_timezone(): void
+    {
+        $user = User::factory()->create();
+        Membership::factory()->for($user)->create([
+            'start_date' => '2026-10-20',
+            'end_date' => '2026-11-18',
+        ]);
+
+        $this->assertTrue($this->status->isActiveOn($user, Carbon::parse('2026-10-19 17:00:00', 'UTC')));
+        $this->assertFalse($this->status->isActiveOn($user, Carbon::parse('2026-10-19 15:59:59', 'UTC')));
+        $this->assertFalse($this->status->isActiveOn($user, Carbon::parse('2026-11-18 16:00:00', 'UTC')));
+
+        $this->assertTrue($this->status->overlapsActive(
+            $user,
+            Carbon::parse('2026-11-18 15:00:00', 'UTC'),
+            Carbon::parse('2026-12-17 15:00:00', 'UTC'),
+        ));
+        $this->assertFalse($this->status->overlapsActive(
+            $user,
+            Carbon::parse('2026-11-18 16:00:00', 'UTC'),
+            Carbon::parse('2026-12-17 16:00:00', 'UTC'),
+        ));
+    }
+
+    /**
+     * Memastikan membership masih aktif sampai 23.59.59 WITA pada end_date dan tidak aktif lagi pukul 00.00.01 esoknya.
+     */
+    public function test_end_date_boundary_follows_app_timezone(): void
+    {
+        $user = User::factory()->create();
+        Membership::factory()->for($user)->create([
+            'start_date' => '2026-10-20',
+            'end_date' => '2026-11-18',
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-11-18 23:59:59', 'Asia/Makassar'));
+        $this->assertTrue($this->status->isActiveToday($user));
+
+        $this->travelTo(Carbon::parse('2026-11-19 00:00:01', 'Asia/Makassar'));
+        $this->assertFalse($this->status->isActiveToday($user));
+    }
+
+    /**
      * Memastikan batas hari mengikuti WITA: pukul 23.30 WITA masih dihitung tanggal yang sama.
      */
     public function test_today_follows_app_timezone(): void
