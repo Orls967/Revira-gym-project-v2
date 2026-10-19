@@ -143,7 +143,7 @@ erDiagram
 
 **Justifikasi:** Mewakili "periode keanggotaan", bukan sekadar status boolean — setiap pendaftaran/perpanjangan jadi baris baru, bukan update baris lama. Ini penting untuk tiga hal: (1) US-13 butuh riwayat member lengkap, bukan cuma status terkini; (2) cron reminder H-3 (US-06) tinggal `WHERE status='active' AND end_date` mendekati, tanpa perlu tahu riwayat lama; (3) jika ditolak lalu member mendaftar ulang, itu baris baru yang bersih, bukan menimpa data penolakan sebelumnya (jejak audit tetap ada).
 **Index:** `(user_id, status)`.
-**Catatan implementasi (bukan constraint DB, tapi aturan aplikasi):** hanya boleh ada satu baris `status='active'` per `user_id` pada satu waktu, supaya definisi "member aktif" (syarat booking, US-03) tidak ambigu.
+**Catatan implementasi (bukan constraint DB, tapi aturan aplikasi, B6 di SCRUM-25):** "member aktif" pada suatu tanggal = membership `status='active'` dengan `start_date <= tanggal <= end_date` (WITA). Satu user boleh punya **dua** baris `status='active'` (yang sedang berjalan dan perpanjangannya) asalkan periodenya **tidak tumpang tindih**, sehingga pada satu tanggal paling banyak satu membership yang berlaku dan definisi "member aktif" (syarat booking, US-03) tetap tidak ambigu. Aturan ini diterapkan lewat scope `Membership::activeOn()`/`currentlyActive()` dan service `App\Services\Memberships\MembershipStatus` (SCRUM-71).
 
 ### 3.4 `instructors`
 | Kolom | Tipe | Key | Ket. |
@@ -271,7 +271,7 @@ Berikut poin yang **belum eksplisit** di draft awal tapi penting ditambahkan seb
 4. **Index `(user_id, status)` pada `memberships`** dan **`(schedule_date, status)` pada `class_schedules`** — kedua kombinasi ini paling sering di-query (cek member aktif, cek sesi mendatang & statusnya) untuk dashboard real-time.
 5. **Pertimbangkan kolom `recipient_phone`** (snapshot nomor WA saat pesan dikirim) di `notification_logs` — jika `users.phone_number` berubah setelahnya, log tetap mencerminkan nomor yang benar-benar dihubungi.
 6. **Larang hard delete** untuk `instructors`, `membership_plans`, dan `classes` di level aplikasi — selalu pakai `is_active=false`, karena semuanya dirujuk oleh data historis (`class_schedules`, `memberships`, `transactions`).
-7. **Validasi aplikasi** (bukan constraint DB): hanya satu `memberships.status='active'` yang boleh berlaku per `user_id` pada satu waktu.
+7. **Validasi aplikasi** (bukan constraint DB): hanya satu membership yang boleh berlaku per `user_id` pada satu tanggal. Boleh ada dua baris `memberships.status='active'` (berjalan + perpanjangan) asalkan periodenya tidak tumpang tindih (B6, SCRUM-71).
 
 ---
 

@@ -178,7 +178,8 @@
           "type": "bearer",
           "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
         },
-        "url": "{{baseUrl}}/me"
+        "url": "{{baseUrl}}/me",
+        "description": "Role member. membership.is_active true bila ada membership active dengan start_date <= hari ini <= end_date (WITA). membership.status: active, upcoming (disetujui, belum mulai), pending, rejected, expired, none. Lihat docs/auth-bearer-token.md."
       },
       "response": [
         {

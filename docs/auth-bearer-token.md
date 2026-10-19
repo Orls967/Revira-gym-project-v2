@@ -126,7 +126,7 @@ Body:
 Profil member pemilik token beserta status keanggotaannya. Butuh header `Authorization: Bearer <token>` dan **hanya untuk role `member`** (admin mendapat 403; Admin Web bisa memakai `GET /api/v1/user`).
 
 Aplikasi mobile memakai **`data.membership.is_active`** untuk mengaktifkan tombol booking (SCRUM-26 AC1).
-`is_active` bernilai `true` hanya jika ada membership berstatus `active` yang `end_date`-nya belum lewat (hari terakhir masih dihitung aktif).
+`is_active` bernilai `true` hanya jika ada membership berstatus `active` yang berlaku hari ini (WITA): `start_date <= hari ini <= end_date` (hari pertama dan terakhir ikut dihitung). Perpanjangan yang sudah disetujui tetapi belum mulai **tidak** membuat member aktif lebih awal (SCRUM-71).
 
 Contoh respons 200:
 
@@ -155,13 +155,17 @@ Nilai `membership.status`:
 | Status | Arti | `is_active` |
 |--------|------|-------------|
 | `active` | Membership sedang berlaku | `true` |
+| `upcoming` | Membership sudah disetujui tetapi `start_date` masih di masa depan (mis. perpanjangan setelah masa lama habis) | `false` |
 | `pending` | Pendaftaran/perpanjangan terbaru menunggu verifikasi admin | `false` |
 | `rejected` | Pendaftaran/perpanjangan terbaru ditolak | `false` |
 | `expired` | Membership terakhir sudah berakhir | `false` |
 | `none` | Belum pernah mendaftar membership; `plan`, `start_date`, `end_date` bernilai `null` | `false` |
 
-Jika ada membership yang sedang berlaku, data itu yang ditampilkan walaupun ada catatan lebih baru (mis. perpanjangan yang masih `pending`).
-Jika tidak ada, yang ditampilkan adalah catatan membership terbaru. `start_date`/`end_date` bisa `null` untuk status `pending` dan `rejected`.
+Urutan prioritas data yang ditampilkan:
+
+1. Membership yang berlaku hari ini, walaupun ada catatan lebih baru (mis. perpanjangan yang masih `pending` atau perpanjangan yang sudah disetujui dan menunggu tanggal mulai).
+2. Jika tidak ada, membership `upcoming` dengan `start_date` paling awal.
+3. Jika tidak ada juga, catatan membership terbaru. `start_date`/`end_date` bisa `null` untuk status `pending` dan `rejected`.
 
 | Status | Body |
 |--------|------|
