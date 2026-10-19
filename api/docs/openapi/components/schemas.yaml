@@ -687,6 +687,22 @@ ClassScheduleMutationResponse:
       type: string
     data:
       $ref: '#/ClassSchedule'
+ClassScheduleStatusResponse:
+  type: object
+  required: [message, data, meta]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/ClassSchedule'
+    meta:
+      type: object
+      required: [cancelled_bookings_count]
+      properties:
+        cancelled_bookings_count:
+          type: integer
+          minimum: 0
+          description: Jumlah booking `booked` yang ikut dibatalkan karena jadwal dibatalkan (SCRUM-94). Selalu 0 untuk transisi selain `cancelled`.
 ClassSchedulePage:
   type: object
   required: [data, links, meta]

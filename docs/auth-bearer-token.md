@@ -438,13 +438,24 @@ Status (`PATCH .../status`, body `{ "status": "cancelled", "cancel_reason": "Ins
 
 | Dari | Ke | Syarat |
 |------|----|--------|
-| `scheduled` | `cancelled` | `cancel_reason` wajib, maks 255 (`Alasan pembatalan wajib diisi bila jadwal dibatalkan.`) |
+| `scheduled` | `cancelled` | `cancel_reason` wajib, maks 255 (`Alasan pembatalan wajib diisi bila jadwal dibatalkan.`), dan waktu mulai belum lewat (`Jadwal yang sudah dimulai tidak dapat dibatalkan.`) |
 | `scheduled` | `ongoing`, `completed` | waktu mulai sudah lewat |
 | `ongoing` | `completed` | - |
-| `ongoing` | `cancelled` | `cancel_reason` wajib |
 | `cancelled` | `scheduled` | waktu mulai belum lewat, kelas dan instruktur masih aktif, dan tidak bertumpuk dengan jadwal lain instruktur itu |
 
 `completed` adalah status akhir. `cancel_reason` dikosongkan (`null`) bila status bukan `cancelled`.
+
+**Pembatalan sesi ikut membatalkan booking (SCRUM-94, B9).** Pembatalan boleh kapan saja sebelum sesi dimulai, tanpa syarat jumlah peserta (indikator di bawah minimum hanya tampilan Admin Web, SCRUM-95). Sesi `ongoing` sudah dimulai, jadi tidak bisa dibatalkan lagi. Dalam transaksi yang sama, semua booking `booked` menjadi `cancelled` dan `participants_count` menjadi 0. Respons PATCH status selalu membawa `meta`:
+
+```json
+{
+  "message": "Status jadwal berhasil diperbarui.",
+  "data": { "id": 10, "status": "cancelled", "cancel_reason": "Instruktur berhalangan hadir", "participants_count": 0 },
+  "meta": { "cancelled_bookings_count": 4 }
+}
+```
+
+(`data` berisi semua field jadwal seperti di atas; contoh ini dipersingkat.) `cancelled_bookings_count` bernilai 0 untuk transisi selain `cancelled`. Member mengetahui pembatalan lewat `GET /member/bookings` (`schedule.status = cancelled` beserta `cancel_reason`) dan polling `GET /class-schedules/status`; notifikasi WA menyusul di SCRUM-30. Mengaktifkan kembali jadwal (`cancelled` ke `scheduled`) tidak memulihkan booking; member booking ulang sendiri.
 
 Hapus:
 

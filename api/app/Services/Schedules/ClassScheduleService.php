@@ -2,6 +2,7 @@
 
 namespace App\Services\Schedules;
 
+use App\Models\ClassParticipant;
 use App\Models\ClassSchedule;
 use App\Models\Instructor;
 use Illuminate\Support\Facades\DB;
@@ -26,9 +27,9 @@ class ClassScheduleService
             ClassSchedule::STATUS_COMPLETED,
             ClassSchedule::STATUS_CANCELLED,
         ],
+        // Sesi ongoing sudah dimulai, jadi tidak bisa dibatalkan lagi (B9, SCRUM-94)
         ClassSchedule::STATUS_ONGOING => [
             ClassSchedule::STATUS_COMPLETED,
-            ClassSchedule::STATUS_CANCELLED,
         ],
         ClassSchedule::STATUS_CANCELLED => [
             ClassSchedule::STATUS_SCHEDULED,
@@ -76,11 +77,17 @@ class ClassScheduleService
     }
 
     /**
+     * Ubah status jadwal. Pembatalan (B9, SCRUM-94) hanya sebelum sesi dimulai dan, dalam transaksi yang sama,
+     * mengubah semua booking berstatus booked menjadi cancelled. Baris jadwal dikunci seperti saat booking
+     * (BookingService), supaya tidak ada booking baru yang lolos bersamaan dengan pembatalan.
+     *
      * @throws ValidationException bila transisi tidak diizinkan
      */
-    public function changeStatus(ClassSchedule $schedule, string $status, ?string $cancelReason): ClassSchedule
+    public function changeStatus(ClassSchedule $schedule, string $status, ?string $cancelReason): StatusChangeResult
     {
         return DB::transaction(function () use ($schedule, $status, $cancelReason) {
+            // Kunci baris jadwal sampai transaksi selesai; SQLite (tes) mengabaikan klausa ini
+            $schedule = ClassSchedule::whereKey($schedule->getKey())->lockForUpdate()->firstOrFail();
             $from = $schedule->status;
 
             if ($from === $status) {
@@ -97,6 +104,10 @@ class ClassScheduleService
                 $this->fail("Jadwal belum dimulai, sehingga belum dapat diubah ke {$status}.");
             }
 
+            if ($status === ClassSchedule::STATUS_CANCELLED && $schedule->hasStarted()) {
+                $this->fail('Jadwal yang sudah dimulai tidak dapat dibatalkan.');
+            }
+
             if ($status === ClassSchedule::STATUS_SCHEDULED) {
                 $this->ensureCanBeRescheduled($schedule);
             }
@@ -105,8 +116,25 @@ class ClassScheduleService
             $schedule->cancel_reason = $status === ClassSchedule::STATUS_CANCELLED ? $cancelReason : null;
             $schedule->save();
 
-            return $schedule;
+            $cancelledBookings = $status === ClassSchedule::STATUS_CANCELLED
+                ? $this->cancelBookings($schedule)
+                : 0;
+
+            return new StatusChangeResult($schedule, $cancelledBookings);
         });
+    }
+
+    /**
+     * Batalkan semua booking booked di jadwal ini; peserta attended tidak ada karena sesi belum dimulai.
+     * Update massal tidak memicu $touches, tetapi updated_at jadwal sudah berubah karena status ikut disimpan,
+     * jadi polling GET /class-schedules/status tetap menangkap perubahan ini.
+     * Mengaktifkan kembali jadwal (cancelled ke scheduled) tidak memulihkan booking; member booking ulang sendiri.
+     */
+    private function cancelBookings(ClassSchedule $schedule): int
+    {
+        return $schedule->participants()
+            ->where('status', ClassParticipant::STATUS_BOOKED)
+            ->update(['status' => ClassParticipant::STATUS_CANCELLED]);
     }
 
     /**

@@ -2298,7 +2298,7 @@
               "raw": "{\n  \"status\": \"cancelled\",\n  \"cancel_reason\": \"Instruktur berhalangan hadir\"\n}"
             },
             "url": "{{baseUrl}}/admin/class-schedules/{{id}}/status",
-            "description": "Transisi: scheduled -> cancelled (alasan wajib) / ongoing / completed (setelah waktu mulai); ongoing -> completed / cancelled; cancelled -> scheduled (sebelum waktu mulai, tidak bertumpuk). completed adalah status akhir."
+            "description": "Transisi: scheduled -> cancelled (alasan wajib, sebelum waktu mulai) / ongoing / completed (setelah waktu mulai); ongoing -> completed; cancelled -> scheduled (sebelum waktu mulai, tidak bertumpuk). completed adalah status akhir. Pembatalan ikut mengubah semua booking booked menjadi cancelled (SCRUM-94); jumlahnya di meta.cancelled_bookings_count (0 untuk transisi lain). Mengaktifkan kembali jadwal tidak memulihkan booking."
           },
           "response": [
             {
@@ -2312,7 +2312,20 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"message\": \"Status jadwal berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 10,\n    \"class_id\": 1,\n    \"class_name\": \"Yoga Pagi\",\n    \"instructor_id\": 1,\n    \"instructor_name\": \"Budi Santoso\",\n    \"schedule_date\": \"2026-10-17\",\n    \"start_time\": \"07:00\",\n    \"end_time\": \"08:00\",\n    \"status\": \"cancelled\",\n    \"cancel_reason\": \"Instruktur berhalangan hadir\",\n    \"participants_count\": 4,\n    \"min_participants\": 3,\n    \"created_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T11:20:00+08:00\"\n  }\n}"
+              "body": "{\n  \"message\": \"Status jadwal berhasil diperbarui.\",\n  \"data\": {\n    \"id\": 10,\n    \"class_id\": 1,\n    \"class_name\": \"Yoga Pagi\",\n    \"instructor_id\": 1,\n    \"instructor_name\": \"Budi Santoso\",\n    \"schedule_date\": \"2026-10-17\",\n    \"start_time\": \"07:00\",\n    \"end_time\": \"08:00\",\n    \"status\": \"cancelled\",\n    \"cancel_reason\": \"Instruktur berhalangan hadir\",\n    \"participants_count\": 0,\n    \"min_participants\": 3,\n    \"created_at\": \"2026-10-16T10:00:00+08:00\",\n    \"updated_at\": \"2026-10-16T11:20:00+08:00\"\n  },\n  \"meta\": {\n    \"cancelled_bookings_count\": 4\n  }\n}"
+            },
+            {
+              "name": "422 Sesi sudah dimulai",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Jadwal yang sudah dimulai tidak dapat dibatalkan.\",\n  \"errors\": {\n    \"status\": [\n      \"Jadwal yang sudah dimulai tidak dapat dibatalkan.\"\n    ]\n  }\n}"
             },
             {
               "name": "422 Batal tanpa alasan",

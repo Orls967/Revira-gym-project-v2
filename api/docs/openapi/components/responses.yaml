@@ -243,7 +243,7 @@ ClassScheduleValidationError:
               end_time:
                 - Jam selesai harus setelah jam mulai.
 ClassScheduleStatusError:
-  description: Perubahan status jadwal tidak valid (SCRUM-55).
+  description: Perubahan status jadwal tidak valid (SCRUM-55, SCRUM-94).
   content:
     application/json:
       schema:
@@ -263,6 +263,13 @@ ClassScheduleStatusError:
             errors:
               status:
                 - Status jadwal tidak dapat diubah dari completed ke scheduled.
+        cancelAfterStart:
+          summary: Membatalkan sesi yang sudah dimulai (SCRUM-94)
+          value:
+            message: Jadwal yang sudah dimulai tidak dapat dibatalkan.
+            errors:
+              status:
+                - Jadwal yang sudah dimulai tidak dapat dibatalkan.
         rescheduleAfterStart:
           summary: Mengaktifkan kembali jadwal batal setelah waktu mulai
           value:
