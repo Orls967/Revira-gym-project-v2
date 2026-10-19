@@ -133,7 +133,7 @@ class ClassSchedule extends Model
      */
     private static function participantsCountDefinition(): array
     {
-        return ['participants as participants_count' => fn (Builder $query) => $query->where('status', '!=', 'cancelled')];
+        return ['participants as participants_count' => fn (Builder $query) => $query->where('status', '!=', ClassParticipant::STATUS_CANCELLED)];
     }
 
     /**

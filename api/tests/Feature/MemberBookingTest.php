@@ -2,13 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\BookingConflictException;
 use App\Models\ClassParticipant;
 use App\Models\ClassSchedule;
 use App\Models\GymClass;
 use App\Models\Membership;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Tests\Concerns\InteractsWithApiAuth;
 use Tests\TestCase;
 
@@ -128,6 +131,21 @@ class MemberBookingTest extends TestCase
             ->assertExactJson(['message' => 'Anda sudah booking sesi kelas ini.']);
 
         $this->assertSame(1, ClassParticipant::count());
+    }
+
+    /**
+     * Memastikan booking ganda (409) tidak dicatat ke laravel.log karena bukan error server.
+     */
+    public function test_double_booking_is_not_logged(): void
+    {
+        $schedule = $this->schedule();
+        ClassParticipant::factory()->for($schedule)->for($this->member)->create();
+        Log::spy();
+
+        $this->postJson($this->bookingUrl($schedule))->assertConflict();
+
+        Log::shouldNotHaveReceived('error');
+        $this->assertFalse(app(ExceptionHandler::class)->shouldReport(new BookingConflictException));
     }
 
     /**
