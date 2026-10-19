@@ -269,13 +269,18 @@ adminScheduleStatus:
 
       | Dari | Ke | Syarat |
       |------|----|--------|
-      | `scheduled` | `cancelled` | `cancel_reason` wajib (maks 255) |
+      | `scheduled` | `cancelled` | `cancel_reason` wajib (maks 255) dan waktu mulai belum lewat |
       | `scheduled` | `ongoing`, `completed` | waktu mulai sudah lewat |
       | `ongoing` | `completed` | - |
-      | `ongoing` | `cancelled` | `cancel_reason` wajib |
       | `cancelled` | `scheduled` | waktu mulai belum lewat, kelas dan instruktur masih aktif, dan tidak bertumpuk dengan jadwal lain instruktur itu |
 
       `completed` adalah status akhir. `cancel_reason` hanya disimpan untuk `cancelled`; status lain mengosongkannya (`null`).
+
+      **Pembatalan (SCRUM-94, B9)**: boleh kapan saja sebelum sesi dimulai, tanpa syarat jumlah peserta. Dalam transaksi yang sama,
+      semua booking `booked` menjadi `cancelled`, sehingga `participants_count` menjadi 0. Jumlah booking yang ikut dibatalkan
+      dikirim di `meta.cancelled_bookings_count` (selalu ada; 0 untuk transisi lain). Sesi yang sudah dimulai (termasuk `ongoing`)
+      tidak bisa dibatalkan. Member melihat pembatalan lewat `GET /member/bookings` dan polling `GET /class-schedules/status`.
+      Mengaktifkan kembali jadwal (`cancelled` ke `scheduled`) tidak memulihkan booking; member booking ulang sendiri.
     requestBody:
       required: true
       content:
@@ -291,7 +296,7 @@ adminScheduleStatus:
         content:
           application/json:
             schema:
-              $ref: ../components/schemas.yaml#/ClassScheduleMutationResponse
+              $ref: ../components/schemas.yaml#/ClassScheduleStatusResponse
             example:
               message: Status jadwal berhasil diperbarui.
               data:
@@ -305,10 +310,12 @@ adminScheduleStatus:
                 end_time: '08:00'
                 status: cancelled
                 cancel_reason: Instruktur berhalangan hadir
-                participants_count: 4
+                participants_count: 0
                 min_participants: 3
                 created_at: '2026-10-16T10:00:00+08:00'
                 updated_at: '2026-10-16T11:20:00+08:00'
+              meta:
+                cancelled_bookings_count: 4
       '401':
         $ref: ../components/responses.yaml#/Unauthorized
       '403':

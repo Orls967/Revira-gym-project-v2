@@ -12,8 +12,8 @@ export function useFetch<T>(url: string) {
         setIsLoading(true);
         const response = await api.get(url);
         setData(response.data.data); // Menyesuaikan dengan standar Laravel API Anda
-      } catch (err: any) {
-        setError(err.response?.data?.message || 'Terjadi kesalahan saat memuat data');
+      } catch (err: unknown) {
+        setError((err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Terjadi kesalahan saat memuat data');
       } finally {
         setIsLoading(false);
       }

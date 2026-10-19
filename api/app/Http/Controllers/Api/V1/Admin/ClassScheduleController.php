@@ -84,10 +84,12 @@ class ClassScheduleController extends Controller
 
     /**
      * PATCH /api/v1/admin/class-schedules/{classSchedule}/status
+     *
+     * meta.cancelled_bookings_count = jumlah booking yang ikut dibatalkan (selalu 0 bila status bukan cancelled).
      */
     public function updateStatus(UpdateClassScheduleStatusRequest $request, ClassSchedule $classSchedule): JsonResponse
     {
-        $schedule = $this->schedules->changeStatus(
+        $result = $this->schedules->changeStatus(
             $classSchedule,
             $request->validated('status'),
             $request->validated('cancel_reason'),
@@ -95,7 +97,10 @@ class ClassScheduleController extends Controller
 
         return response()->json([
             'message' => 'Status jadwal berhasil diperbarui.',
-            'data' => new ClassScheduleResource($schedule->loadDetails()),
+            'data' => new ClassScheduleResource($result->schedule->loadDetails()),
+            'meta' => [
+                'cancelled_bookings_count' => $result->cancelledBookingsCount,
+            ],
         ]);
     }
 

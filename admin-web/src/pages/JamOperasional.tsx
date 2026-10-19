@@ -11,18 +11,24 @@ interface OperationalHour {
   is_closed: boolean;
 }
 
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
+
 export default function JamOperasional() {
   const [hours, setHours] = useState<OperationalHour[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   
-  // State Modal Form Tambah/Ubah
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDay, setEditingDay] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // State Modal Konfirmasi Hapus
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deletingDay, setDeletingDay] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -41,8 +47,8 @@ export default function JamOperasional() {
     setFetchError('');
     try {
       const response = await api.get('/operational-hours');
-      setHours(response.data.data);
-    } catch (err: any) {
+      setHours(response.data.data || []);
+    } catch {
       setFetchError('Gagal memuat data jam operasional.');
     } finally {
       setIsLoading(false);
@@ -50,7 +56,21 @@ export default function JamOperasional() {
   };
 
   useEffect(() => {
-    fetchHours();
+    let ignore = false;
+    api.get('/operational-hours')
+      .then((res) => {
+        if (!ignore) setHours(res.data.data || []);
+      })
+      .catch(() => {
+        if (!ignore) setFetchError('Gagal memuat data jam operasional.');
+      })
+      .finally(() => {
+        if (!ignore) setIsLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const openModal = (hour?: OperationalHour) => {
@@ -74,13 +94,11 @@ export default function JamOperasional() {
     e.preventDefault();
     setFormError('');
     
-    // Validasi jam buka & tutup
     if (!formData.is_holiday && formData.close_time <= formData.open_time) {
       setFormError('Jam tutup harus lebih dari jam buka.');
       return;
     }
 
-    // Validasi hari duplikat saat tambah baru
     if (!editingDay && hours.some(h => h.day_of_week === formData.day)) {
       setFormError(`Jadwal untuk hari ${formData.day} sudah ada.`);
       return;
@@ -88,67 +106,50 @@ export default function JamOperasional() {
 
     setIsSubmitting(true);
     try {
-      const payload: OperationalHour = {
+      const payload = {
         day_of_week: formData.day,
         open_time: formData.is_holiday ? null : formData.open_time,
         close_time: formData.is_holiday ? null : formData.close_time,
         is_closed: formData.is_holiday
       };
 
-      // --- MOCK SIMULASI (Delay 1 Detik & Update Tabel Lokal) ---
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
       if (editingDay) {
-        setHours(prev => prev.map(h => h.day_of_week === editingDay ? { ...h, ...payload } : h));
+        // Cari ID jika backend menyediakannya, jika tidak gunakan day_of_week
+        const hourId = hours.find(h => h.day_of_week === editingDay)?.id;
+        const endpoint = hourId ? `/operational-hours/${hourId}` : `/operational-hours/${editingDay}`;
+        await api.put(endpoint, payload);
       } else {
-        setHours(prev => [...prev, { id: Date.now(), ...payload }]);
+        await api.post('/operational-hours', payload);
       }
-
-      // =====================================================================
-      // HAPUS MOCK DI ATAS & BUKA KOMENTAR DI BAWAH JIKA BACKEND SUDAH SIAP:
-      // =====================================================================
-      // if (editingDay) {
-      //   await api.put(`/operational-hours/${editingDay}`, payload);
-      // } else {
-      //   await api.post('/operational-hours', payload);
-      // }
-      // fetchHours();
-      // =====================================================================
       
+      await fetchHours();
       setIsModalOpen(false);
-    } catch (err: any) {
-      setFormError(err.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      setFormError(apiErr.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Buka Modal Konfirmasi Hapus
   const confirmDelete = (day_of_week: string) => {
     setDeletingDay(day_of_week);
     setIsDeleteModalOpen(true);
   };
 
-  // Eksekusi Hapus dengan Simulasi Delay 1 Detik
   const handleDelete = async () => {
     if (!deletingDay) return;
     setIsDeleting(true);
 
     try {
-      // --- MOCK SIMULASI DELETE (Delay 1 Detik & Update Tabel Lokal) ---
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setHours(prev => prev.filter(h => h.day_of_week !== deletingDay));
-
-      // =====================================================================
-      // HAPUS MOCK DI ATAS & BUKA KOMENTAR DI BAWAH JIKA BACKEND SUDAH SIAP:
-      // =====================================================================
-      // await api.delete(`/operational-hours/${deletingDay}`);
-      // fetchHours();
-      // =====================================================================
-
+      const hourId = hours.find(h => h.day_of_week === deletingDay)?.id;
+      const endpoint = hourId ? `/operational-hours/${hourId}` : `/operational-hours/${deletingDay}`;
+      await api.delete(endpoint);
+      
+      await fetchHours();
       setIsDeleteModalOpen(false);
       setDeletingDay(null);
-    } catch (err) {
+    } catch {
       alert('Gagal menghapus jadwal.');
     } finally {
       setIsDeleting(false);
