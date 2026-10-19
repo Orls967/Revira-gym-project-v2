@@ -10,6 +10,12 @@ class ClassParticipant extends Model
 {
     use HasFactory;
 
+    public const STATUS_BOOKED = 'booked';
+
+    public const STATUS_ATTENDED = 'attended';
+
+    public const STATUS_CANCELLED = 'cancelled';
+
     protected $fillable = [
         'class_schedule_id',
         'user_id',

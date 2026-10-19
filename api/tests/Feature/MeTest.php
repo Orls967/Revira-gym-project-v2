@@ -135,6 +135,90 @@ class MeTest extends TestCase
     }
 
     /**
+     * Memastikan membership active yang belum mulai tidak mengaktifkan booking dan dilaporkan upcoming.
+     */
+    public function test_membership_not_started_yet_is_reported_upcoming(): void
+    {
+        $user = User::factory()->create();
+        Membership::factory()->for($user)->expired()->create(['record_type' => 'registration']);
+        Membership::factory()->for($user)->create([
+            'record_type' => 'extension',
+            'start_date' => today()->addDay()->toDateString(),
+            'end_date' => today()->addDays(30)->toDateString(),
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/me')
+            ->assertJsonPath('data.membership.is_active', false)
+            ->assertJsonPath('data.membership.status', 'upcoming')
+            ->assertJsonPath('data.membership.start_date', today()->addDay()->toDateString());
+    }
+
+    /**
+     * Memastikan membership upcoming tetap ditampilkan walau ada catatan lebih baru yang ditolak.
+     */
+    public function test_upcoming_membership_takes_priority_over_newer_rejected_record(): void
+    {
+        $user = User::factory()->create();
+        Membership::factory()->for($user)->create([
+            'start_date' => today()->addDays(3)->toDateString(),
+            'end_date' => today()->addDays(32)->toDateString(),
+        ]);
+        Membership::factory()->for($user)->rejected()->create(['record_type' => 'extension']);
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/me')->assertJsonPath('data.membership.status', 'upcoming');
+    }
+
+    /**
+     * Memastikan dengan dua membership active berurutan, yang sedang berjalan yang ditampilkan, bukan perpanjangannya.
+     */
+    public function test_running_membership_is_shown_before_its_approved_extension(): void
+    {
+        $user = User::factory()->create();
+        Membership::factory()->for($user)->create([
+            'record_type' => 'registration',
+            'start_date' => today()->subDays(25)->toDateString(),
+            'end_date' => today()->addDays(4)->toDateString(),
+        ]);
+        Membership::factory()->for($user)->create([
+            'record_type' => 'extension',
+            'start_date' => today()->addDays(5)->toDateString(),
+            'end_date' => today()->addDays(34)->toDateString(),
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/me')
+            ->assertJsonPath('data.membership.is_active', true)
+            ->assertJsonPath('data.membership.status', 'active')
+            ->assertJsonPath('data.membership.start_date', today()->subDays(25)->toDateString())
+            ->assertJsonPath('data.membership.end_date', today()->addDays(4)->toDateString());
+    }
+
+    /**
+     * Memastikan setelah membership berjalan habis, perpanjangan yang sudah mulai membuat member tetap aktif.
+     */
+    public function test_extension_becomes_active_once_it_starts(): void
+    {
+        $user = User::factory()->create();
+        Membership::factory()->for($user)->create([
+            'record_type' => 'registration',
+            'start_date' => today()->subDays(30)->toDateString(),
+            'end_date' => today()->subDay()->toDateString(),
+        ]);
+        Membership::factory()->for($user)->create([
+            'record_type' => 'extension',
+            'start_date' => today()->toDateString(),
+            'end_date' => today()->addDays(29)->toDateString(),
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/me')
+            ->assertJsonPath('data.membership.is_active', true)
+            ->assertJsonPath('data.membership.start_date', today()->toDateString());
+    }
+
+    /**
      * Memastikan tanpa membership aktif, status diambil dari catatan terbaru (mis. perpanjangan ditolak).
      */
     public function test_without_active_membership_latest_record_status_is_used(): void

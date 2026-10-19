@@ -1,0 +1,172 @@
+memberBookings:
+  get:
+    operationId: listMemberBookings
+    tags: [Bookings]
+    summary: Booking milik sendiri (member)
+    description: |
+      SCRUM-70. Role member. Booking milik member pemilik token untuk sesi yang jam selesainya belum lewat (WITA),
+      apa pun status booking (`booked`, `attended`, `cancelled`) dan status sesi, termasuk sesi yang dibatalkan admin
+      (`schedule.status = cancelled` beserta `cancel_reason`). Sesi yang sedang berjalan hari ini masih tampil.
+      Terurut `schedule_date`, lalu `start_time`. Tanpa paginasi.
+
+      Pakai daftar ini untuk menentukan tombol di layar jadwal: sesi dengan booking `booked` menampilkan tombol batal.
+    responses:
+      '200':
+        description: Daftar booking.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MemberBookingList
+            example:
+              data:
+                - id: 31
+                  status: booked
+                  booked_at: '2026-10-16T10:00:00+08:00'
+                  updated_at: '2026-10-16T10:00:00+08:00'
+                  schedule:
+                    id: 10
+                    class_id: 1
+                    class_name: Yoga Pagi
+                    instructor_name: Budi Santoso
+                    schedule_date: '2026-10-17'
+                    start_time: '07:00'
+                    end_time: '08:00'
+                    status: scheduled
+                    cancel_reason: null
+                    participants_count: 5
+                    min_participants: 3
+                - id: 27
+                  status: cancelled
+                  booked_at: '2026-10-15T08:00:00+08:00'
+                  updated_at: '2026-10-16T09:00:00+08:00'
+                  schedule:
+                    id: 11
+                    class_id: 2
+                    class_name: Zumba Sore
+                    instructor_name: Siti Rahma
+                    schedule_date: '2026-10-18'
+                    start_time: '17:00'
+                    end_time: '18:00'
+                    status: cancelled
+                    cancel_reason: Instruktur berhalangan hadir
+                    participants_count: 0
+                    min_participants: 5
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+memberBooking:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      description: ID sesi (`class_schedules.id`).
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: bookClassSchedule
+    tags: [Bookings]
+    summary: Booking sesi kelas (member)
+    description: |
+      SCRUM-70 (aturan B7 SCRUM-25). Role member. Tanpa body.
+
+      Syarat:
+      - Sesi berstatus `scheduled` dan jam mulainya belum lewat (WITA).
+      - Member aktif pada `schedule_date`: punya membership `active` dengan `start_date` <= `schedule_date` <= `end_date`
+        (aturan SCRUM-71). Perpanjangan yang sudah disetujui dihitung untuk sesi di periode perpanjangan.
+      - Tanpa batas kapasitas (kelas hanya punya `min_participants`).
+
+      Booking ulang setelah batal mengaktifkan kembali booking lama (ID sama, `booked_at` diperbarui), karena satu member
+      hanya punya satu baris per sesi. `participants_count` sesi langsung bertambah dan `updated_at` sesi ikut berubah,
+      sehingga polling `GET /class-schedules/status` menangkapnya.
+    responses:
+      '201':
+        description: Booking berhasil (baru atau diaktifkan kembali).
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MemberBookingResponse
+            example:
+              message: Booking kelas berhasil.
+              data:
+                id: 31
+                status: booked
+                booked_at: '2026-10-16T10:00:00+08:00'
+                updated_at: '2026-10-16T10:00:00+08:00'
+                schedule:
+                  id: 10
+                  class_id: 1
+                  class_name: Yoga Pagi
+                  instructor_name: Budi Santoso
+                  schedule_date: '2026-10-17'
+                  start_time: '07:00'
+                  end_time: '08:00'
+                  status: scheduled
+                  cancel_reason: null
+                  participants_count: 5
+                  min_participants: 3
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '409':
+        description: Member sudah punya booking `booked` (atau `attended`) di sesi ini.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Anda sudah booking sesi kelas ini.
+      '422':
+        $ref: ../components/responses.yaml#/BookingRuleError
+  delete:
+    operationId: cancelClassScheduleBooking
+    tags: [Bookings]
+    summary: Batalkan booking sendiri (member)
+    description: |
+      SCRUM-70 (aturan B8 SCRUM-25). Role member. Hanya booking milik sendiri berstatus `booked`, sebelum jam mulai sesi (WITA).
+      Booking tidak dihapus; statusnya menjadi `cancelled` dan member bisa booking ulang selama syarat booking terpenuhi.
+      `participants_count` sesi langsung berkurang dan `updated_at` sesi ikut berubah (polling `GET /class-schedules/status`).
+    responses:
+      '200':
+        description: Booking dibatalkan.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MemberBookingResponse
+            example:
+              message: Booking kelas berhasil dibatalkan.
+              data:
+                id: 31
+                status: cancelled
+                booked_at: '2026-10-16T10:00:00+08:00'
+                updated_at: '2026-10-16T11:00:00+08:00'
+                schedule:
+                  id: 10
+                  class_id: 1
+                  class_name: Yoga Pagi
+                  instructor_name: Budi Santoso
+                  schedule_date: '2026-10-17'
+                  start_time: '07:00'
+                  end_time: '08:00'
+                  status: scheduled
+                  cancel_reason: null
+                  participants_count: 4
+                  min_participants: 3
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        description: Sesi tidak ada (`Data tidak ditemukan.`) atau member tidak punya booking di sesi ini (`Booking tidak ditemukan.`), termasuk booking milik orang lain.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            example:
+              message: Booking tidak ditemukan.
+      '422':
+        $ref: ../components/responses.yaml#/BookingCancelError

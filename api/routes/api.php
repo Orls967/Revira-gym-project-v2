@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\Admin\MembershipPlanController;
 use App\Http\Controllers\Api\V1\Admin\OperationalHourController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\Member\BookingController;
 use App\Http\Controllers\Api\V1\Member\MembershipApplicationController;
 use App\Http\Controllers\Api\V1\PublicClassController;
 use App\Http\Controllers\Api\V1\PublicClassScheduleController;
@@ -128,4 +129,11 @@ Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(func
 
     // Pengajuan membership baru atau perpanjangan dengan upload bukti transfer (SCRUM-69)
     Route::post('/memberships', MembershipApplicationController::class);
+
+    // Booking dan batal booking sesi kelas oleh member aktif (SCRUM-70)
+    Route::controller(BookingController::class)->group(function () {
+        Route::get('/bookings', 'index');
+        Route::post('/class-schedules/{classSchedule}/booking', 'store')->whereNumber('classSchedule');
+        Route::delete('/class-schedules/{classSchedule}/booking', 'destroy')->whereNumber('classSchedule');
+    });
 });
