@@ -125,6 +125,10 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 
     // Verifikasi transaksi: daftar transaksi per status (SCRUM-66)
     Route::get('/transactions', [TransactionController::class, 'index']);
+
+    // Verifikasi transaksi: setujui atau tolak (SCRUM-67)
+    Route::post('/transactions/{transaction}/approve', [TransactionController::class, 'approve'])->whereNumber('transaction');
+    Route::post('/transactions/{transaction}/reject', [TransactionController::class, 'reject'])->whereNumber('transaction');
 });
 
 Route::middleware(['auth:sanctum', 'role:member'])->prefix('member')->group(function () {
