@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/common/PageHeader';
 import Modal from '../components/common/Modal';
-// Buka komentar import api di bawah ini saat mengaktifkan integrasi backend SCRUM-54
-// import api from '../lib/api';
+import api from '../lib/api';
 
 interface Instructor {
   id: number;
@@ -11,6 +10,15 @@ interface Instructor {
   phone: string;
   specialty: string;
   is_active: boolean;
+}
+
+interface ApiError {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+    };
+  };
 }
 
 export default function Instruktur() {
@@ -41,20 +49,8 @@ export default function Instruktur() {
     setIsLoading(true);
     setFetchError('');
     try {
-      // --- MOCK API DATA ---
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setInstructors([
-        { id: 1, name: 'Budi Santoso', email: 'budi@revira.test', phone: '081234567890', specialty: 'Yoga, Pilates', is_active: true },
-        { id: 2, name: 'Siti Aminah', email: 'siti@revira.test', phone: '081298765432', specialty: 'Zumba, Aerobik', is_active: true },
-        { id: 3, name: 'Andi Darmawan', email: 'andi@revira.test', phone: '081345678901', specialty: 'Weightlifting, Crossfit', is_active: false },
-        { id: 4, name: 'Rina Melati', email: 'rina@revira.test', phone: '081456789012', specialty: 'HIIT Cardio', is_active: true },
-        { id: 5, name: 'Tono Wijaya', email: 'tono@revira.test', phone: '081567890123', specialty: 'Muay Thai', is_active: true },
-        { id: 6, name: 'Maya Sari', email: 'maya@revira.test', phone: '081678901234', specialty: 'Yoga', is_active: true },
-      ]);
-      
-      // Buka komentar di bawah jika backend SCRUM-54 sudah siap
-      // const response = await api.get('/instructors');
-      // setInstructors(response.data.data);
+      const response = await api.get('/instructors');
+      setInstructors(response.data.data || []);
     } catch {
       setFetchError('Gagal memuat data instruktur.');
     } finally {
@@ -62,8 +58,23 @@ export default function Instruktur() {
     }
   };
 
+  // Initial Fetch (Tanpa set-state-in-effect warning)
   useEffect(() => {
-    fetchInstructors();
+    let ignore = false;
+    api.get('/instructors')
+      .then((res) => {
+        if (!ignore) setInstructors(res.data.data || []);
+      })
+      .catch(() => {
+        if (!ignore) setFetchError('Gagal memuat data instruktur.');
+      })
+      .finally(() => {
+        if (!ignore) setIsLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   // Filter & Pagination Logic
@@ -73,16 +84,6 @@ export default function Instruktur() {
   );
   
   const totalPages = Math.ceil(filteredInstructors.length / itemsPerPage);
-
-  // Penyesuaian otomatis currentPage jika item terakhir pada halaman terakhir dihapus
-  useEffect(() => {
-    if (totalPages > 0 && currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    } else if (totalPages === 0 && currentPage !== 1) {
-      setCurrentPage(1);
-    }
-  }, [totalPages, currentPage]);
-
   const safeCurrentPage = totalPages > 0 ? Math.min(currentPage, totalPages) : 1;
   const currentData = filteredInstructors.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
 
@@ -110,26 +111,18 @@ export default function Instruktur() {
     setIsSubmitting(true);
     
     try {
-      // --- MOCK API CALL ---
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
       if (editingId) {
-        setInstructors(prev => prev.map(i => i.id === editingId ? { ...i, ...formData } as Instructor : i));
+        await api.put(`/instructors/${editingId}`, formData);
       } else {
-        setInstructors(prev => [{ id: Date.now(), ...formData } as Instructor, ...prev]);
+        await api.post('/instructors', formData);
       }
-
-      // Buka komentar di bawah jika backend siap
-      // if (editingId) {
-      //   await api.put(`/instructors/${editingId}`, formData);
-      // } else {
-      //   await api.post('/instructors', formData);
-      // }
-      // fetchInstructors();
-
+      
+      // Ambil data terbaru dari server
+      await fetchInstructors();
       setIsModalOpen(false);
-    } catch (err: any) {
-      setFormError(err.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      setFormError(apiErr.response?.data?.message || 'Terjadi kesalahan saat menyimpan data.');
     } finally {
       setIsSubmitting(false);
     }
@@ -139,21 +132,29 @@ export default function Instruktur() {
     if (!window.confirm('Apakah Anda yakin ingin menghapus instruktur ini?')) return;
     
     try {
-      // --- MOCK 409 CONFLICT SIMULATION ---
-      // Jika mencoba menghapus instruktur ID 1 (Budi Santoso), simulasikan error jadwal bentrok
-      if (id === 1) {
-        throw { response: { status: 409, data: { message: 'Instruktur masih memiliki jadwal sesi kelas yang aktif.' } } };
+      await api.delete(`/instructors/${id}`);
+      
+      // Ambil data terbaru dari server setelah dihapus
+      const response = await api.get('/instructors');
+      const newData = response.data.data || [];
+      setInstructors(newData);
+
+      // Koreksi Paginasi jika item terakhir dihapus
+      const filteredAfterDelete = newData.filter((inst: Instructor) =>
+        inst.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        inst.specialty.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      const newTotalPages = Math.ceil(filteredAfterDelete.length / itemsPerPage);
+      
+      if (newTotalPages > 0 && currentPage > newTotalPages) {
+        setCurrentPage(newTotalPages);
+      } else if (newTotalPages === 0) {
+        setCurrentPage(1);
       }
-
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setInstructors(prev => prev.filter(i => i.id !== id));
-
-      // Buka komentar di bawah jika backend siap
-      // await api.delete(`/instructors/${id}`);
-      // fetchInstructors();
-    } catch (err: any) {
-      if (err.response?.status === 409) {
-        alert(`Gagal Menghapus (Error 409):\n${err.response.data.message}`);
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      if (apiErr.response?.status === 409) {
+        alert(`Gagal Menghapus (Error 409):\n${apiErr.response.data?.message}`);
       } else {
         alert('Gagal menghapus instruktur.');
       }
@@ -171,7 +172,6 @@ export default function Instruktur() {
         </button>
       </PageHeader>
 
-      {/* Pencarian */}
       <div className="mb-6 flex">
         <input 
           type="text" 
@@ -231,21 +231,20 @@ export default function Instruktur() {
             </tbody>
           </table>
           
-          {/* Paginasi */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-3 border-t border-zinc-800 bg-zinc-950/30">
               <span className="text-sm text-zinc-400">Halaman {safeCurrentPage} dari {totalPages}</span>
               <div className="space-x-2">
                 <button 
                   disabled={safeCurrentPage === 1} 
-                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  onClick={() => setCurrentPage(safeCurrentPage - 1)}
                   className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 disabled:opacity-50"
                 >
                   Sebelumnya
                 </button>
                 <button 
                   disabled={safeCurrentPage === totalPages} 
-                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  onClick={() => setCurrentPage(safeCurrentPage + 1)}
                   className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 disabled:opacity-50"
                 >
                   Selanjutnya
@@ -256,7 +255,6 @@ export default function Instruktur() {
         </div>
       )}
 
-      {/* Modal Form Instruktur */}
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => !isSubmitting && setIsModalOpen(false)} 
