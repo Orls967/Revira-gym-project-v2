@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/common/PageHeader';
 import Modal from '../components/common/Modal';
-// Buka komentar import api di bawah ini saat mengaktifkan integrasi backend SCRUM-52 & SCRUM-55
-// import api from '../lib/api';
+import api from '../lib/api';
 
 // --- TIPE DATA ---
 interface GymClass {
   id: number;
   name: string;
   min_participants: number;
+  is_active: boolean;
+}
+
+interface Instructor {
+  id: number;
+  name: string;
   is_active: boolean;
 }
 
@@ -26,12 +31,22 @@ interface Schedule {
   cancel_reason?: string;
 }
 
+interface ApiError {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+    };
+  };
+}
+
 export default function Kelas() {
   const [activeTab, setActiveTab] = useState<'kelas' | 'jadwal'>('kelas');
   const [isLoading, setIsLoading] = useState(false);
 
-  // --- STATE KELAS ---
+  // --- STATE KELAS & INSTRUKTUR ---
   const [classes, setClasses] = useState<GymClass[]>([]);
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [classForm, setClassForm] = useState<Partial<GymClass>>({ name: '', min_participants: 5, is_active: true });
   const [classError, setClassError] = useState('');
@@ -47,21 +62,33 @@ export default function Kelas() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancellingId, setCancellingId] = useState<number | null>(null);
 
-  // Mock Instruktur untuk Dropdown
-  const mockInstructors = [
-    { id: 1, name: 'Budi Santoso' },
-    { id: 2, name: 'Siti Aminah' }
-  ];
-
-  // --- INISIALISASI MOCK DATA ---
+  // --- INISIALISASI DATA API ---
   useEffect(() => {
-    setClasses([
-      { id: 1, name: 'Yoga Pemula', min_participants: 5, is_active: true },
-      { id: 2, name: 'HIIT Cardio', min_participants: 10, is_active: true },
-    ]);
-    setSchedules([
-      { id: 1, class_id: 1, class_name: 'Yoga Pemula', instructor_id: 1, instructor_name: 'Budi Santoso', date: '2026-10-20', time: '08:00', participants_count: 3, min_participants: 5, status: 'scheduled' }
-    ]);
+    let ignore = false;
+
+    Promise.all([
+      api.get('/classes'),
+      api.get('/schedules'),
+      api.get('/instructors')
+    ])
+      .then(([clsRes, schRes, instRes]) => {
+        if (!ignore) {
+          setClasses(clsRes.data.data || []);
+          setSchedules(schRes.data.data || []);
+          setInstructors(instRes.data.data || []);
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setClassError('Gagal memuat data dari server.');
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   // --- HANDLER KELAS ---
@@ -69,35 +96,57 @@ export default function Kelas() {
     e.preventDefault();
     setIsLoading(true);
     setClassError('');
+    
+    const payload = {
+      name: classForm.name,
+      min_participants: classForm.min_participants,
+      is_active: classForm.is_active
+    };
+
     try {
-      await new Promise(res => setTimeout(res, 800)); // Mock API delay
       if (classForm.id) {
-        setClasses(prev => prev.map(c => c.id === classForm.id ? { ...c, ...classForm } as GymClass : c));
-        // Sinkronisasi nama kelas & min_participants di jadwal terkait jika kelas diedit
+        await api.put(`/classes/${classForm.id}`, payload);
+        // Update state lokal agar cepat responsif
+        setClasses(prev => prev.map(c => c.id === classForm.id ? { ...c, ...payload } as GymClass : c));
         setSchedules(prev => prev.map(s => 
           s.class_id === classForm.id 
-            ? { ...s, class_name: classForm.name || s.class_name, min_participants: classForm.min_participants ?? s.min_participants } 
+            ? { ...s, class_name: payload.name || s.class_name, min_participants: payload.min_participants ?? s.min_participants } 
             : s
         ));
       } else {
-        setClasses(prev => [...prev, { ...classForm, id: Date.now() } as GymClass]);
+        const response = await api.post('/classes', payload);
+        // Tangkap data kelas baru (beserta ID dari database)
+        setClasses(prev => [...prev, response.data.data]);
       }
       setIsClassModalOpen(false);
-    } catch {
-      setClassError('Gagal menyimpan kelas');
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      setClassError(apiErr.response?.data?.message || 'Gagal menyimpan kelas ke server.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteClass = async (id: number) => {
+    // Validasi frontend (opsional, karena backend juga akan mengembalikan 409)
     const hasSchedule = schedules.some(s => s.class_id === id && s.status === 'scheduled');
     if (hasSchedule) {
       alert('Error 409: Tidak dapat menghapus kelas karena masih ada jadwal aktif yang terkait dengan kelas ini.');
       return;
     }
-    if (window.confirm('Hapus kelas ini?')) {
+
+    if (!window.confirm('Apakah Anda yakin ingin menghapus kelas ini?')) return;
+
+    try {
+      await api.delete(`/classes/${id}`);
       setClasses(prev => prev.filter(c => c.id !== id));
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      if (apiErr.response?.status === 409) {
+        alert(`Error 409: ${apiErr.response.data?.message || 'Kelas ini masih memiliki jadwal aktif.'}`);
+      } else {
+        alert('Gagal menghapus kelas.');
+      }
     }
   };
 
@@ -106,54 +155,28 @@ export default function Kelas() {
     e.preventDefault();
     setIsLoading(true);
     setScheduleError('');
-    try {
-      await new Promise(res => setTimeout(res, 800)); // Mock API delay
-      const selectedClass = classes.find(c => c.id === Number(scheduleForm.class_id));
-      const selectedInstructor = mockInstructors.find(i => i.id === Number(scheduleForm.instructor_id));
-      
-      if (!selectedClass || !selectedInstructor) {
-        setScheduleError('Kelas atau instruktur tidak valid.');
-        setIsLoading(false);
-        return;
-      }
 
+    const payload = {
+      class_id: scheduleForm.class_id,
+      instructor_id: scheduleForm.instructor_id,
+      date: scheduleForm.date,
+      time: scheduleForm.time
+    };
+
+    try {
       if (scheduleForm.id) {
-        // Mode Edit: Pertahankan participants_count, status, dan cancel_reason yang sudah ada
-        setSchedules(prev => prev.map(s => {
-          if (s.id !== scheduleForm.id) return s;
-          return {
-            ...s,
-            class_id: selectedClass.id,
-            class_name: selectedClass.name,
-            instructor_id: selectedInstructor.id,
-            instructor_name: selectedInstructor.name,
-            date: scheduleForm.date!,
-            time: scheduleForm.time!,
-            min_participants: selectedClass.min_participants,
-            participants_count: s.participants_count,
-            status: s.status,
-            cancel_reason: s.cancel_reason
-          };
-        }));
+        await api.put(`/schedules/${scheduleForm.id}`, payload);
       } else {
-        // Mode Buat Baru: Set participants_count = 0 dan status = 'scheduled'
-        const newSchedule: Schedule = {
-          id: Date.now(),
-          class_id: selectedClass.id,
-          class_name: selectedClass.name,
-          instructor_id: selectedInstructor.id,
-          instructor_name: selectedInstructor.name,
-          date: scheduleForm.date!,
-          time: scheduleForm.time!,
-          participants_count: 0,
-          min_participants: selectedClass.min_participants,
-          status: 'scheduled'
-        };
-        setSchedules(prev => [...prev, newSchedule]);
+        await api.post('/schedules', payload);
       }
+      
+      // Ambil ulang jadwal dari server agar data join (class_name, instructor_name) terjamin sinkron
+      const res = await api.get('/schedules');
+      setSchedules(res.data.data || []);
       setIsScheduleModalOpen(false);
-    } catch {
-      setScheduleError('Gagal menyimpan jadwal. Pastikan instruktur tidak bentrok.');
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      setScheduleError(apiErr.response?.data?.message || 'Gagal menyimpan jadwal. Pastikan jadwal instruktur tidak bentrok.');
     } finally {
       setIsLoading(false);
     }
@@ -163,18 +186,30 @@ export default function Kelas() {
     e.preventDefault();
     if (!cancelReason.trim()) return;
     setIsLoading(true);
+    
     try {
-      await new Promise(res => setTimeout(res, 800)); // Mock API delay
-      setSchedules(prev => prev.map(s => s.id === cancellingId ? { ...s, status: 'cancelled', cancel_reason: cancelReason } : s));
+      // Kirim pembaruan status ke backend
+      await api.put(`/schedules/${cancellingId}`, { 
+        status: 'cancelled', 
+        cancel_reason: cancelReason 
+      });
+      
+      // Update UI lokal
+      setSchedules(prev => prev.map(s => 
+        s.id === cancellingId ? { ...s, status: 'cancelled', cancel_reason: cancelReason } : s
+      ));
+      
       setIsCancelModalOpen(false);
       setCancelReason('');
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      alert(`Gagal membatalkan jadwal: ${apiErr.response?.data?.message || 'Error Server'}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Opsi kelas untuk dropdown jadwal: tampilkan semua kelas aktif, 
-  // ATAU kelas nonaktif yang saat ini sedang dipakai oleh jadwal yang diedit
+  // Filter dropdown jadwal: Sertakan kelas aktif atau kelas yang kebetulan sedang dipakai di jadwal yang diedit
   const availableClassesForSchedule = classes.filter(
     c => c.is_active || (scheduleForm.id && c.id === Number(scheduleForm.class_id))
   );
@@ -193,7 +228,8 @@ export default function Kelas() {
           <button 
             onClick={() => { 
               const firstActiveClassId = classes.find(c => c.is_active)?.id || 0;
-              setScheduleForm({ class_id: firstActiveClassId, instructor_id: mockInstructors[0].id, date: '', time: '' }); 
+              const firstActiveInstId = instructors.find(i => i.is_active)?.id || 0;
+              setScheduleForm({ class_id: firstActiveClassId, instructor_id: firstActiveInstId, date: '', time: '' }); 
               setIsScheduleModalOpen(true); 
             }} 
             className="bg-amber-400 hover:bg-amber-500 text-zinc-950 px-4 py-2 rounded-md font-bold text-sm transition-colors"
@@ -222,19 +258,23 @@ export default function Kelas() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {classes.map(c => (
-                <tr key={c.id} className="hover:bg-zinc-800/50">
-                  <td className="px-6 py-4 font-medium text-white">{c.name}</td>
-                  <td className="px-6 py-4">{c.min_participants} orang</td>
-                  <td className="px-6 py-4">
-                    {c.is_active ? <span className="bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full text-xs font-medium">Aktif</span> : <span className="bg-zinc-500/10 text-zinc-400 px-2.5 py-1 rounded-full text-xs font-medium">Nonaktif</span>}
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-3">
-                    <button onClick={() => { setClassForm(c); setIsClassModalOpen(true); }} className="text-amber-400 hover:text-amber-300">Edit</button>
-                    <button onClick={() => handleDeleteClass(c.id)} className="text-red-400 hover:text-red-300">Hapus</button>
-                  </td>
-                </tr>
-              ))}
+              {classes.length === 0 ? (
+                <tr><td colSpan={4} className="px-6 py-8 text-center text-zinc-500">Tidak ada kelas.</td></tr>
+              ) : (
+                classes.map(c => (
+                  <tr key={c.id} className="hover:bg-zinc-800/50">
+                    <td className="px-6 py-4 font-medium text-white">{c.name}</td>
+                    <td className="px-6 py-4">{c.min_participants} orang</td>
+                    <td className="px-6 py-4">
+                      {c.is_active ? <span className="bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full text-xs font-medium">Aktif</span> : <span className="bg-zinc-500/10 text-zinc-400 px-2.5 py-1 rounded-full text-xs font-medium">Nonaktif</span>}
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-3">
+                      <button onClick={() => { setClassForm(c); setIsClassModalOpen(true); }} className="text-amber-400 hover:text-amber-300">Edit</button>
+                      <button onClick={() => handleDeleteClass(c.id)} className="text-red-400 hover:text-red-300">Hapus</button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -255,27 +295,31 @@ export default function Kelas() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {schedules.map(s => (
-                <tr key={s.id} className="hover:bg-zinc-800/50">
-                  <td className="px-6 py-4"><div className="font-medium text-white">{s.date}</div><div className="text-xs text-zinc-500">{s.time}</div></td>
-                  <td className="px-6 py-4 text-white">{s.class_name}</td>
-                  <td className="px-6 py-4">{s.instructor_name}</td>
-                  <td className="px-6 py-4">{s.participants_count} / {s.min_participants}</td>
-                  <td className="px-6 py-4">
-                    {s.status === 'scheduled' && <span className="bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full text-xs font-medium">Dijadwalkan</span>}
-                    {s.status === 'completed' && <span className="bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full text-xs font-medium">Selesai</span>}
-                    {s.status === 'cancelled' && <span className="bg-red-500/10 text-red-400 px-2.5 py-1 rounded-full text-xs font-medium">Dibatalkan</span>}
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-3">
-                    {s.status === 'scheduled' && (
-                      <>
-                        <button onClick={() => { setScheduleForm(s); setIsScheduleModalOpen(true); }} className="text-amber-400 hover:text-amber-300">Edit</button>
-                        <button onClick={() => { setCancellingId(s.id); setIsCancelModalOpen(true); }} className="text-red-400 hover:text-red-300">Batal</button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {schedules.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-zinc-500">Belum ada jadwal yang dibuat.</td></tr>
+              ) : (
+                schedules.map(s => (
+                  <tr key={s.id} className="hover:bg-zinc-800/50">
+                    <td className="px-6 py-4"><div className="font-medium text-white">{s.date}</div><div className="text-xs text-zinc-500">{s.time}</div></td>
+                    <td className="px-6 py-4 text-white">{s.class_name}</td>
+                    <td className="px-6 py-4">{s.instructor_name}</td>
+                    <td className="px-6 py-4">{s.participants_count} / {s.min_participants}</td>
+                    <td className="px-6 py-4">
+                      {s.status === 'scheduled' && <span className="bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full text-xs font-medium">Dijadwalkan</span>}
+                      {s.status === 'completed' && <span className="bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full text-xs font-medium">Selesai</span>}
+                      {s.status === 'cancelled' && <span className="bg-red-500/10 text-red-400 px-2.5 py-1 rounded-full text-xs font-medium">Dibatalkan</span>}
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-3">
+                      {s.status === 'scheduled' && (
+                        <>
+                          <button onClick={() => { setScheduleForm(s); setIsScheduleModalOpen(true); }} className="text-amber-400 hover:text-amber-300">Edit</button>
+                          <button onClick={() => { setCancellingId(s.id); setIsCancelModalOpen(true); }} className="text-red-400 hover:text-red-300">Batal</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -333,7 +377,11 @@ export default function Kelas() {
               className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white focus:ring-amber-400"
             >
               <option value={0} disabled>-- Pilih Instruktur --</option>
-              {mockInstructors.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+              {instructors.filter(i => i.is_active || (scheduleForm.id && i.id === Number(scheduleForm.instructor_id))).map(i => (
+                <option key={i.id} value={i.id}>
+                  {i.name} {!i.is_active ? '(Nonaktif)' : ''}
+                </option>
+              ))}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">

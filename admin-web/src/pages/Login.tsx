@@ -32,9 +32,10 @@ export default function Login() {
 
       setAuth(token, user);
       navigate('/');
-    } catch (err: any) {
+      } catch (err: unknown) {
+      const errorObj = err as { response?: { data?: { message?: string } } };
       setError(
-        err.response?.data?.message || 'Email atau password salah. Gagal terhubung ke server.'
+        errorObj.response?.data?.message || 'Email atau password salah. Gagal terhubung ke server.'
       );
     } finally {
       setIsLoading(false);
