@@ -243,7 +243,7 @@ ClassScheduleValidationError:
               end_time:
                 - Jam selesai harus setelah jam mulai.
 ClassScheduleStatusError:
-  description: Perubahan status jadwal tidak valid (SCRUM-55).
+  description: Perubahan status jadwal tidak valid (SCRUM-55, SCRUM-94).
   content:
     application/json:
       schema:
@@ -263,6 +263,13 @@ ClassScheduleStatusError:
             errors:
               status:
                 - Status jadwal tidak dapat diubah dari completed ke scheduled.
+        cancelAfterStart:
+          summary: Membatalkan sesi yang sudah dimulai (SCRUM-94)
+          value:
+            message: Jadwal yang sudah dimulai tidak dapat dibatalkan.
+            errors:
+              status:
+                - Jadwal yang sudah dimulai tidak dapat dibatalkan.
         rescheduleAfterStart:
           summary: Mengaktifkan kembali jadwal batal setelah waktu mulai
           value:
@@ -284,3 +291,33 @@ ClassScheduleStatusError:
             errors:
               status:
                 - Instruktur sudah memiliki jadwal lain pada 2026-10-17 pukul 07:30-08:30 yang bertumpuk dengan jadwal ini.
+BookingRuleError:
+  description: |
+    Pelanggaran aturan booking (SCRUM-70), selalu pada field `booking`:
+    - `Membership tidak aktif pada tanggal sesi.`
+    - `Sesi kelas ini sudah dibatalkan.`
+    - `Sesi kelas ini sudah dimulai atau selesai.` (status `ongoing`/`completed`)
+    - `Sesi kelas ini sudah dimulai atau sudah lewat.` (jam mulai sudah lewat, WITA)
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Membership tidak aktif pada tanggal sesi.
+        errors:
+          booking:
+            - Membership tidak aktif pada tanggal sesi.
+BookingCancelError:
+  description: |
+    Pembatalan booking ditolak (SCRUM-70), selalu pada field `booking`:
+    - `Booking ini sudah dibatalkan.`
+    - `Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.`
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      example:
+        message: Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.
+        errors:
+          booking:
+            - Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.

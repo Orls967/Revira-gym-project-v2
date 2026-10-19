@@ -687,6 +687,22 @@ ClassScheduleMutationResponse:
       type: string
     data:
       $ref: '#/ClassSchedule'
+ClassScheduleStatusResponse:
+  type: object
+  required: [message, data, meta]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/ClassSchedule'
+    meta:
+      type: object
+      required: [cancelled_bookings_count]
+      properties:
+        cancelled_bookings_count:
+          type: integer
+          minimum: 0
+          description: Jumlah booking `booked` yang ikut dibatalkan karena jadwal dibatalkan (SCRUM-94). Selalu 0 untuk transisi selain `cancelled`.
 ClassSchedulePage:
   type: object
   required: [data, links, meta]
@@ -768,3 +784,71 @@ ScheduleStatusList:
       type: array
       items:
         $ref: '#/ScheduleStatusItem'
+BookingStatus:
+  type: string
+  description: Status booking (migration `class_participants.status`). `attended` diisi fitur presensi berikutnya.
+  enum: [booked, attended, cancelled]
+MemberBookingSchedule:
+  type: object
+  description: Ringkasan sesi yang dibooking.
+  required: [id, class_id, class_name, instructor_name, schedule_date, start_time, end_time, status, cancel_reason, participants_count, min_participants]
+  properties:
+    id:
+      type: integer
+      description: ID sesi (`class_schedules.id`), dipakai di URL booking/batal.
+    class_id:
+      type: integer
+    class_name:
+      type: string
+    instructor_name:
+      type: string
+    schedule_date:
+      type: string
+      format: date
+    start_time:
+      $ref: '#/ClockTime'
+    end_time:
+      $ref: '#/ClockTime'
+    status:
+      $ref: '#/ScheduleStatus'
+      description: Status sesi. `cancelled` berarti sesi dibatalkan admin.
+    cancel_reason:
+      type: [string, 'null']
+    participants_count:
+      type: integer
+      minimum: 0
+      description: Jumlah peserta aktif (status bukan `cancelled`).
+    min_participants:
+      type: integer
+MemberBooking:
+  type: object
+  required: [id, status, booked_at, updated_at, schedule]
+  properties:
+    id:
+      type: integer
+      description: ID booking (`class_participants.id`). Booking ulang setelah batal memakai ID yang sama.
+    status:
+      $ref: '#/BookingStatus'
+    booked_at:
+      $ref: '#/Timestamp'
+      description: Waktu booking terakhir (diperbarui saat booking ulang setelah batal).
+    updated_at:
+      $ref: '#/Timestamp'
+    schedule:
+      $ref: '#/MemberBookingSchedule'
+MemberBookingResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+    data:
+      $ref: '#/MemberBooking'
+MemberBookingList:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/MemberBooking'

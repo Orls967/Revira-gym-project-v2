@@ -438,13 +438,24 @@ Status (`PATCH .../status`, body `{ "status": "cancelled", "cancel_reason": "Ins
 
 | Dari | Ke | Syarat |
 |------|----|--------|
-| `scheduled` | `cancelled` | `cancel_reason` wajib, maks 255 (`Alasan pembatalan wajib diisi bila jadwal dibatalkan.`) |
+| `scheduled` | `cancelled` | `cancel_reason` wajib, maks 255 (`Alasan pembatalan wajib diisi bila jadwal dibatalkan.`), dan waktu mulai belum lewat (`Jadwal yang sudah dimulai tidak dapat dibatalkan.`) |
 | `scheduled` | `ongoing`, `completed` | waktu mulai sudah lewat |
 | `ongoing` | `completed` | - |
-| `ongoing` | `cancelled` | `cancel_reason` wajib |
 | `cancelled` | `scheduled` | waktu mulai belum lewat, kelas dan instruktur masih aktif, dan tidak bertumpuk dengan jadwal lain instruktur itu |
 
 `completed` adalah status akhir. `cancel_reason` dikosongkan (`null`) bila status bukan `cancelled`.
+
+**Pembatalan sesi ikut membatalkan booking (SCRUM-94, B9).** Pembatalan boleh kapan saja sebelum sesi dimulai, tanpa syarat jumlah peserta (indikator di bawah minimum hanya tampilan Admin Web, SCRUM-95). Sesi `ongoing` sudah dimulai, jadi tidak bisa dibatalkan lagi. Dalam transaksi yang sama, semua booking `booked` menjadi `cancelled` dan `participants_count` menjadi 0. Respons PATCH status selalu membawa `meta`:
+
+```json
+{
+  "message": "Status jadwal berhasil diperbarui.",
+  "data": { "id": 10, "status": "cancelled", "cancel_reason": "Instruktur berhalangan hadir", "participants_count": 0 },
+  "meta": { "cancelled_bookings_count": 4 }
+}
+```
+
+(`data` berisi semua field jadwal seperti di atas; contoh ini dipersingkat.) `cancelled_bookings_count` bernilai 0 untuk transisi selain `cancelled`. Member mengetahui pembatalan lewat `GET /member/bookings` (`schedule.status = cancelled` beserta `cancel_reason`) dan polling `GET /class-schedules/status`; notifikasi WA menyusul di SCRUM-30. Mengaktifkan kembali jadwal (`cancelled` ke `scheduled`) tidak memulihkan booking; member booking ulang sendiri.
 
 Hapus:
 
@@ -494,7 +505,63 @@ Aturan polling:
 - ETag dihitung dari isi respons. Kirim `If-None-Match: <ETag>` dengan URL yang sama; bila tidak berubah, server membalas 304 tanpa body. `Cache-Control: no-cache, private`. Header `ETag` ikut diekspos lewat CORS (`exposed_headers` di `config/cors.php`), jadi klien browser dari origin yang diizinkan bisa membacanya.
 - Panduan klien: polling hanya saat layar jadwal aktif, tiap 15-30 detik; berhenti saat app di latar belakang; bila error (5xx/jaringan/429) mundur bertahap (30 s, 60 s, 120 s, maks 5 menit).
 
-Untuk backend Sprint 3 (booking): ubah peserta lewat model Eloquent (`create`/`save`/`delete`) agar `touches` berjalan. Update massal lewat query builder (`ClassParticipant::where(...)->update()`) tidak memperbarui jadwal; panggil `ClassSchedule::whereKey(...)->touch()` secara manual.
+Booking (SCRUM-70) sudah mengikuti aturan ini. Untuk backend lain: ubah peserta lewat model Eloquent (`create`/`save`/`delete`) agar `touches` berjalan. Update massal lewat query builder (`ClassParticipant::where(...)->update()`) tidak memperbarui jadwal; panggil `ClassSchedule::whereKey(...)->touch()` secara manual.
+
+## Booking kelas oleh member (SCRUM-70)
+
+Semua endpoint memakai `auth:sanctum` + `role:member` (tamu 401, admin 403). Kontrak lengkap di `api/docs/openapi/paths/bookings.yaml`.
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/member/bookings` | 200, `{ "data": [...] }` tanpa paginasi |
+| POST   | `/api/v1/member/class-schedules/{id}/booking` | 201, `{ "message": "Booking kelas berhasil.", "data": {...} }` |
+| DELETE | `/api/v1/member/class-schedules/{id}/booking` | 200, `{ "message": "Booking kelas berhasil dibatalkan.", "data": {...} }` |
+
+`{id}` adalah ID sesi (`class_schedules.id`). Tanpa body. Bentuk `data` (satu booking):
+
+```json
+{
+  "id": 31,
+  "status": "booked",
+  "booked_at": "2026-10-16T10:00:00+08:00",
+  "updated_at": "2026-10-16T10:00:00+08:00",
+  "schedule": {
+    "id": 10,
+    "class_id": 1,
+    "class_name": "Yoga Pagi",
+    "instructor_name": "Budi Santoso",
+    "schedule_date": "2026-10-17",
+    "start_time": "07:00",
+    "end_time": "08:00",
+    "status": "scheduled",
+    "cancel_reason": null,
+    "participants_count": 5,
+    "min_participants": 3
+  }
+}
+```
+
+`status` booking: `booked`, `attended`, atau `cancelled`. `schedule.status` adalah status sesi (`cancelled` = dibatalkan admin).
+
+**Booking** (B7):
+- Sesi harus `scheduled` dan jam mulainya belum lewat (WITA). Tanpa batas kapasitas.
+- Member harus aktif pada `schedule_date` (`start_date <= schedule_date <= end_date`, aturan SCRUM-71). Perpanjangan yang sudah disetujui berlaku untuk sesi di periodenya.
+- Booking ulang setelah batal mengaktifkan kembali baris lama (ID sama, `booked_at` diperbarui) karena UNIQUE `(class_schedule_id, user_id)`.
+
+**Batal** (B8): hanya booking milik sendiri berstatus `booked`, sebelum jam mulai sesi. Baris tidak dihapus, status menjadi `cancelled`.
+
+**Daftar booking**: booking milik sendiri (semua status) untuk sesi yang jam selesainya belum lewat, termasuk sesi yang dibatalkan admin, terurut tanggal lalu jam mulai.
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 404 | Sesi tidak ada | `{ "message": "Data tidak ditemukan." }` |
+| 404 | Batal, tetapi member tidak punya booking di sesi itu (termasuk booking milik orang lain) | `{ "message": "Booking tidak ditemukan." }` |
+| 409 | Sudah booking (`booked`/`attended`) | `{ "message": "Anda sudah booking sesi kelas ini." }` |
+| 422 | Pelanggaran aturan, selalu di field `booking` | `Membership tidak aktif pada tanggal sesi.`, `Sesi kelas ini sudah dibatalkan.`, `Sesi kelas ini sudah dimulai atau selesai.`, `Sesi kelas ini sudah dimulai atau sudah lewat.`, `Booking ini sudah dibatalkan.`, `Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.` |
+
+Setiap booking/batal langsung mengubah `participants_count` dan `updated_at` sesi, sehingga terlihat di `GET /admin/class-schedules`, `GET /class-schedules`, dan polling `GET /class-schedules/status`.
+
+Untuk backend lain: logika ada di `App\Services\Bookings\BookingService` (`book`, `cancel`); baris sesi dikunci `lockForUpdate` selama transaksi. Scope `ClassSchedule::notEnded()` (jam selesai belum lewat, semua status) dan method `ClassSchedule::hasStarted()` tersedia.
 
 ## Helper untuk backend
 
