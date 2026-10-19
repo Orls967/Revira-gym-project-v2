@@ -2697,6 +2697,105 @@
           }
         }
       ]
+    },
+    {
+      "name": "Sprint 3 - Pengajuan membership (SCRUM-69)",
+      "description": "Endpoint pengajuan membership baru atau perpanjangan dengan upload bukti transfer. POST /member/memberships.\n\nGunakan variabel `token` (dari Login) dan `base_url`. Untuk mencoba upload gambar, pilih field receipt_image dengan tipe File di body form-data.",
+      "item": [
+        {
+          "name": "POST Ajukan Membership (transfer + bukti)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "membership_plan_id", "value": "1", "type": "text" },
+                { "key": "start_date", "value": "2026-10-25", "type": "text" },
+                { "key": "payment_method", "value": "transfer", "type": "text" },
+                { "key": "receipt_image", "type": "file", "src": [] }
+              ]
+            },
+            "url": "{{baseUrl}}/member/memberships",
+            "description": "SCRUM-69. Ajukan membership dengan metode transfer dan upload bukti transfer (gambar JPG/PNG/WebP maks 2 MB).\n\nPastikan sudah login sebagai member dan token tersimpan di variabel `token`."
+          },
+          "response": [
+            {
+              "name": "201 Pengajuan berhasil (transfer)",
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Pengajuan membership berhasil dikirim dan menunggu verifikasi admin.\",\n  \"data\": {\n    \"membership\": {\n      \"id\": 5,\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"Bulanan\",\n        \"duration_days\": 30,\n        \"price\": 150000\n      },\n      \"record_type\": \"registration\",\n      \"start_date\": \"2026-10-25\",\n      \"end_date\": null,\n      \"status\": \"pending\"\n    },\n    \"transaction\": {\n      \"id\": 7,\n      \"amount\": 150000,\n      \"payment_method\": \"transfer\",\n      \"verification_status\": \"pending\",\n      \"has_receipt\": true,\n      \"created_at\": \"2026-10-25T08:00:00+08:00\"\n    }\n  }\n}"
+            },
+            {
+              "name": "422 Validasi field gagal",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Paket tidak ditemukan atau tidak aktif. (and 2 more errors)\",\n  \"errors\": {\n    \"membership_plan_id\": [\n      \"Paket tidak ditemukan atau tidak aktif.\"\n    ],\n    \"start_date\": [\n      \"Tanggal mulai minimal hari ini.\"\n    ],\n    \"receipt_image\": [\n      \"Bukti transfer wajib diunggah untuk pembayaran transfer.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Pengajuan ganda (sudah ada pending)",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Masih ada pengajuan yang menunggu verifikasi.\",\n  \"errors\": {\n    \"membership\": [\n      \"Masih ada pengajuan yang menunggu verifikasi.\"\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 Tidak ada token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Role bukan member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Ajukan Membership (on_the_spot)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "membership_plan_id", "value": "1", "type": "text" },
+                { "key": "start_date", "value": "2026-10-25", "type": "text" },
+                { "key": "payment_method", "value": "on_the_spot", "type": "text" }
+              ]
+            },
+            "url": "{{baseUrl}}/member/memberships",
+            "description": "SCRUM-69. Ajukan membership dengan metode bayar langsung di tempat. Tidak perlu menyertakan bukti transfer."
+          },
+          "response": [
+            {
+              "name": "201 Pengajuan berhasil (on_the_spot)",
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Pengajuan membership berhasil dikirim dan menunggu verifikasi admin.\",\n  \"data\": {\n    \"membership\": {\n      \"id\": 6,\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"Bulanan\",\n        \"duration_days\": 30,\n        \"price\": 150000\n      },\n      \"record_type\": \"extension\",\n      \"start_date\": \"2026-10-25\",\n      \"end_date\": null,\n      \"status\": \"pending\"\n    },\n    \"transaction\": {\n      \"id\": 8,\n      \"amount\": 150000,\n      \"payment_method\": \"on_the_spot\",\n      \"verification_status\": \"pending\",\n      \"has_receipt\": false,\n      \"created_at\": \"2026-10-25T08:00:00+08:00\"\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
