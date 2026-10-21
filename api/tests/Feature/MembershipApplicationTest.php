@@ -7,11 +7,9 @@ use App\Models\Membership;
 use App\Models\MembershipPlan;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\Memberships\MembershipApplicationService;
 use App\Services\ReceiptStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -410,60 +408,19 @@ class MembershipApplicationTest extends TestCase
         $member = User::factory()->create(['role' => UserRole::Member]);
         Sanctum::actingAs($member);
 
-        // Simulasi: paksa DB::transaction untuk melempar exception
-        // dengan membuat plan tidak ada setelah FormRequest lolos.
-        // Caranya: hapus plan setelah request dikirim, di dalam DB transaction.
-        // Pendekatan: override dengan partial mock pada service, atau gunakan event.
-        // Kita pakai pendekatan sederhana: jadikan plan tidak ada pada saat DB transaction berjalan
-        // dengan mock DB untuk melempar exception setelah store receipt.
-
-        // Inject mock service yang langsung melempar exception setelah store
-        $storedPaths = [];
-
-        // Spy on ReceiptStorage::store: simpan path yang di-store
-        $realStorage = app(ReceiptStorage::class);
-
-        $mockService = new class($realStorage) extends MembershipApplicationService
-        {
-            public array $storedPaths = [];
-
-            public function __construct(private ReceiptStorage $receiptStorage)
-            {
-                parent::__construct($receiptStorage);
-            }
-
-            public function submit(User $user, array $data, ?UploadedFile $receipt): array
-            {
-                // Simpan file ke disk dulu
-                $path = null;
-                if ($receipt !== null && $data['payment_method'] === 'transfer') {
-                    $path = $this->receiptStorage->store($receipt);
-                    $this->storedPaths[] = $path;
-                }
-
-                // Kemudian lempar exception (simulasi DB gagal)
-                if ($path !== null) {
-                    $this->receiptStorage->delete($path);
-                }
-
-                throw new \RuntimeException('Simulasi DB gagal');
-            }
-        };
-
-        $this->app->instance(MembershipApplicationService::class, $mockService);
-
-        $file = UploadedFile::fake()->image('bukti.jpg');
+        // Insert transaksi dipaksa gagal setelah file bukti tersimpan dan membership dibuat.
+        Transaction::creating(fn () => throw new \RuntimeException('Simulasi DB gagal'));
 
         $this->postJson($this->url, [
             'membership_plan_id' => $this->plan->id,
             'start_date' => today()->toDateString(),
             'payment_method' => 'transfer',
-            'receipt_image' => $file,
+            'receipt_image' => UploadedFile::fake()->image('bukti.jpg'),
         ])->assertStatus(500);
 
-        // Pastikan disk kosong: tidak ada file tertinggal
-        $remaining = Storage::disk($this->disk)->allFiles();
-        $this->assertEmpty($remaining, 'File harus dihapus bila DB transaction gagal.');
+        $this->assertEmpty(Storage::disk($this->disk)->allFiles(), 'File harus dihapus bila DB transaction gagal.');
+        $this->assertDatabaseCount('memberships', 0);
+        $this->assertDatabaseCount('transactions', 0);
     }
 
     // =========================================================================
