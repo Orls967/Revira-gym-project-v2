@@ -227,25 +227,30 @@ class AdminTransactionListTest extends TestCase
     }
 
     /**
-     * 4. Urutan verified: transaksi terbaru di atas (created_at desc, id desc).
+     * 4. Urutan verified: riwayat verifikasi terbaru di atas (verified_at desc, id desc).
+     * Transaksi dibuat dengan created_at dan verified_at berkebalikan untuk membuktikan
+     * bahwa pengurutan mengikuti verified_at, bukan created_at.
      */
-    public function test_verified_transactions_ordered_by_newest_first(): void
+    public function test_verified_transactions_ordered_by_verified_at_desc(): void
     {
         $admin = $this->createAdmin();
 
         $baseTime = Carbon::parse('2026-10-18 10:00:00');
 
-        $txOldest = $this->createTransaction([
+        $txOldestCreated = $this->createTransaction([
             'verification_status' => 'verified',
             'created_at' => $baseTime->copy()->subHours(5),
-        ]);
-        $txNewest = $this->createTransaction([
-            'verification_status' => 'verified',
-            'created_at' => $baseTime->copy()->subHours(1),
+            'verified_at' => $baseTime->copy()->subHours(1),
         ]);
         $txMiddle = $this->createTransaction([
             'verification_status' => 'verified',
             'created_at' => $baseTime->copy()->subHours(3),
+            'verified_at' => $baseTime->copy()->subHours(3),
+        ]);
+        $txNewestCreated = $this->createTransaction([
+            'verification_status' => 'verified',
+            'created_at' => $baseTime->copy()->subHours(1),
+            'verified_at' => $baseTime->copy()->subHours(5),
         ]);
 
         Sanctum::actingAs($admin);
@@ -254,7 +259,72 @@ class AdminTransactionListTest extends TestCase
 
         $response->assertOk();
         $ids = array_column($response->json('data'), 'id');
-        $this->assertSame([$txNewest->id, $txMiddle->id, $txOldest->id], $ids);
+        $this->assertSame([$txOldestCreated->id, $txMiddle->id, $txNewestCreated->id], $ids);
+    }
+
+    /**
+     * Urutan rejected: riwayat verifikasi terbaru di atas (verified_at desc, id desc).
+     * Transaksi dibuat dengan created_at dan verified_at berkebalikan untuk membuktikan
+     * bahwa pengurutan mengikuti verified_at, bukan created_at.
+     */
+    public function test_rejected_transactions_ordered_by_verified_at_desc(): void
+    {
+        $admin = $this->createAdmin();
+
+        $baseTime = Carbon::parse('2026-10-18 10:00:00');
+
+        $txOldestCreated = $this->createTransaction([
+            'verification_status' => 'rejected',
+            'reject_reason' => 'Alasan 1',
+            'created_at' => $baseTime->copy()->subHours(5),
+            'verified_at' => $baseTime->copy()->subHours(1),
+        ]);
+        $txMiddle = $this->createTransaction([
+            'verification_status' => 'rejected',
+            'reject_reason' => 'Alasan 2',
+            'created_at' => $baseTime->copy()->subHours(3),
+            'verified_at' => $baseTime->copy()->subHours(3),
+        ]);
+        $txNewestCreated = $this->createTransaction([
+            'verification_status' => 'rejected',
+            'reject_reason' => 'Alasan 3',
+            'created_at' => $baseTime->copy()->subHours(1),
+            'verified_at' => $baseTime->copy()->subHours(5),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson(self::URL.'?status=rejected');
+
+        $response->assertOk();
+        $ids = array_column($response->json('data'), 'id');
+        $this->assertSame([$txOldestCreated->id, $txMiddle->id, $txNewestCreated->id], $ids);
+    }
+
+    /**
+     * Urutan verified dengan verified_at sama diurutkan berdasarkan id desc (tie-breaker).
+     */
+    public function test_verified_transactions_with_same_verified_at_ordered_by_id_desc(): void
+    {
+        $admin = $this->createAdmin();
+        $sameTime = Carbon::parse('2026-10-18 12:00:00');
+
+        $txFirst = $this->createTransaction([
+            'verification_status' => 'verified',
+            'verified_at' => $sameTime,
+        ]);
+        $txSecond = $this->createTransaction([
+            'verification_status' => 'verified',
+            'verified_at' => $sameTime,
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson(self::URL.'?status=verified');
+        $response->assertOk();
+
+        $ids = array_column($response->json('data'), 'id');
+        $this->assertSame([$txSecond->id, $txFirst->id], $ids);
     }
 
     /**
