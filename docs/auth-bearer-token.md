@@ -563,6 +563,34 @@ Setiap booking/batal langsung mengubah `participants_count` dan `updated_at` ses
 
 Untuk backend lain: logika ada di `App\Services\Bookings\BookingService` (`book`, `cancel`); baris sesi dikunci `lockForUpdate` selama transaksi. Scope `ClassSchedule::notEnded()` (jam selesai belum lewat, semua status) dan method `ClassSchedule::hasStarted()` tersedia.
 
+## Daftar transaksi untuk verifikasi admin (SCRUM-66)
+
+Endpoint untuk admin melihat daftar transaksi membership (pendaftaran atau perpanjangan) yang perlu diverifikasi atau riwayat yang sudah diproses. Semua request memakai middleware `auth:sanctum` + `role:admin` (tamu 401, member 403). Kontrak lengkap di `api/docs/openapi/paths/transactions.yaml`.
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/transactions` | 200, paginasi Laravel `{ "data": [...], "links": {...}, "meta": {...} }` |
+
+Query string (opsional):
+
+| Parameter | Tipe | Keterangan |
+|-----------|------|------------|
+| `status`  | string | Status verifikasi transaksi: `pending`, `verified`, atau `rejected`. Default `pending`. Nilai kosong (`?status=`) diperlakukan sama seperti default (`pending`). Nilai selain itu menghasilkan 422. |
+| `page`    | integer | Nomor halaman paginasi (minimal 1, default 1). Paginasi tetap 15 data per halaman. |
+
+Urutan hasil per status:
+- `pending`: transaksi paling lama menunggu di atas (`created_at asc`, `id asc`), agar admin memproses antrean secara adil (FIFO).
+- `verified` dan `rejected`: riwayat verifikasi terbaru di atas (`verified_at desc`, `id desc`), agar transaksi yang baru saja diproses admin langsung terlihat di urutan teratas.
+
+Kode status respons:
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 200 | Sukses mengambil daftar transaksi | Paginasi data transaksi (member, paket, record_type, amount, payment_method, verification_status, has_receipt, receipt_url, reject_reason, verified_at, created_at) |
+| 401 | Token tidak ada, salah, atau sudah dicabut | `{ "message": "Unauthenticated." }` |
+| 403 | Login sebagai non-admin (mis. role member) | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
+| 422 | Query tidak valid (mis. `status` selain pending/verified/rejected atau `page` bukan integer positif) | `{ "message": "...", "errors": { ... } }` |
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:
