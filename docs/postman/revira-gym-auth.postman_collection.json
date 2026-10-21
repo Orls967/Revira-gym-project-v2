@@ -3284,7 +3284,7 @@
               ]
             },
             "url": "{{baseUrl}}/admin/transactions?status=verified",
-            "description": "Role admin. Menampilkan daftar transaksi berstatus verified (terbaru di atas: created_at desc, id desc)."
+            "description": "Role admin. Menampilkan daftar transaksi berstatus verified (riwayat verifikasi terbaru di atas: verified_at desc, id desc)."
           },
           "response": [
             {
@@ -3362,7 +3362,7 @@
               ]
             },
             "url": "{{baseUrl}}/admin/transactions?status=rejected",
-            "description": "Role admin. Menampilkan daftar transaksi berstatus rejected lengkap dengan reject_reason (terbaru di atas: created_at desc, id desc)."
+            "description": "Role admin. Menampilkan daftar transaksi berstatus rejected lengkap dengan reject_reason (riwayat verifikasi terbaru di atas: verified_at desc, id desc)."
           },
           "response": [
             {

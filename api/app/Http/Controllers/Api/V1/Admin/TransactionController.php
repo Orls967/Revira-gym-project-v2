@@ -26,7 +26,7 @@ class TransactionController extends Controller
      */
     public function index(IndexTransactionRequest $request): JsonResponse
     {
-        $status = $request->input('status', 'pending');
+        $status = $request->validated('status') ?? 'pending';
 
         $query = Transaction::query()
             ->where('verification_status', $status)
@@ -35,7 +35,7 @@ class TransactionController extends Controller
         if ($status === 'pending') {
             $query->orderBy('created_at', 'asc')->orderBy('id', 'asc');
         } else {
-            $query->orderBy('created_at', 'desc')->orderBy('id', 'desc');
+            $query->orderByDesc('verified_at')->orderByDesc('id');
         }
 
         $transactions = $query->paginate(15)->withQueryString();

@@ -4,16 +4,16 @@ adminTransactions:
     tags: [Transaksi]
     summary: Daftar transaksi berdasarkan status verifikasi
     description: |
-      Menampilkan daftar transaksi membership yang difilter berdasarkan status verifikasi (default `pending`).
+      Menampilkan daftar transaksi membership yang difilter berdasarkan status verifikasi (default `pending`; nilai kosong `?status=` diperlakukan sebagai `pending`).
       Hanya untuk peran admin. Hasil diurutkan berdasarkan aturan:
       - `pending`: transaksi terlama di atas (`created_at` asc, `id` asc).
-      - `verified` dan `rejected`: transaksi terbaru di atas (`created_at` desc, `id` desc).
+      - `verified` dan `rejected`: riwayat verifikasi terbaru di atas (`verified_at` desc, `id` desc).
       Paginasi tetap 15 data per halaman.
     parameters:
       - name: status
         in: query
         required: false
-        description: Status verifikasi transaksi. Default `pending`.
+        description: Status verifikasi transaksi. Default `pending`. Nilai kosong (`?status=`) diperlakukan sebagai `pending`.
         schema:
           type: string
           enum: [pending, verified, rejected]
