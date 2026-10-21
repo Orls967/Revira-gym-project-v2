@@ -591,6 +591,50 @@ Kode status respons:
 | 403 | Login sebagai non-admin (mis. role member) | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
 | 422 | Query tidak valid (mis. `status` selain pending/verified/rejected atau `page` bukan integer positif) | `{ "message": "...", "errors": { ... } }` |
 
+## Approve dan tolak transaksi membership oleh admin (SCRUM-67)
+
+Endpoint untuk admin mengambil keputusan terhadap transaksi membership berstatus `pending` (menyetujui atau menolak). Semua request wajib menyertakan token Bearer dengan middleware `auth:sanctum` + `role:admin` (tamu 401, member 403). Kontrak lengkap di `api/docs/openapi/paths/transactions.yaml`.
+
+| Method | Endpoint | Keterangan | Body Request |
+|--------|----------|------------|--------------|
+| POST   | `/api/v1/admin/transactions/{transaction}/approve` | Menyetujui transaksi pending dan mengaktifkan membership | Tidak ada (kosong) |
+| POST   | `/api/v1/admin/transactions/{transaction}/reject`  | Menolak transaksi pending dengan alasan penolakan | JSON: `{ "reject_reason": "string" }` (wajib, maks 255 karakter) |
+
+### Aturan bisnis
+
+1. **Aturan B4 (Approve / Menyetujui Transaksi)**:
+   - Baris transaksi dan membership dikunci secara atomik (`lockForUpdate`).
+   - Transaksi dan membership harus berstatus `pending`. Jika transaksi sudah pernah diproses atau membership sudah bukan `pending`, ditolak dengan 409 tanpa mengubah data.
+   - Paket membership wajib ada (gagal jika data paket tidak ditemukan).
+   - Penentuan tanggal mulai (`start_date`): bila `start_date` pengajuan kosong atau sebelum hari ini (zona waktu WITA / `Asia/Makassar`), dimajukan ke hari ini (`today`). Jika di masa depan, tetap menggunakan tanggal pengajuan.
+   - Penentuan tanggal berakhir (`end_date`): `start_date` + `duration_days` - 1 hari (mis. paket 30 hari yang mulai tanggal 20 Oktober berakhir pada 18 November; paket 1 hari berakhir pada tanggal yang sama).
+   - Validasi tumpang tindih (B3): sistem memeriksa apakah member memiliki membership lain berstatus `active` yang rentang tanggalnya saling bertabrakan dengan rentang [`start_date`, `end_date`] ini. Jika bertabrakan, ditolak dengan 409 tanpa perubahan data.
+   - Perubahan data: status membership diubah menjadi `active`, `start_date` dan `end_date` disimpan; status transaksi diubah menjadi `verified`, mencatat `verified_by` (ID admin), `verified_at` (waktu verifikasi), dan `reject_reason` = `null`.
+
+2. **Aturan B5 (Reject / Menolak Transaksi)**:
+   - Baris transaksi dan membership dikunci secara atomik (`lockForUpdate`).
+   - Transaksi dan membership harus berstatus `pending`. Jika sudah diproses atau status membership tidak sesuai, ditolak dengan 409 tanpa mengubah data.
+   - Validasi input: `reject_reason` wajib diisi, berupa string bukan hanya spasi putih, maksimal 255 karakter (jika tidak valid menghasilkan 422).
+   - Perubahan data: status membership diubah menjadi `rejected` (dengan `end_date` tetap `null`); status transaksi diubah menjadi `rejected`, mencatat `reject_reason`, `verified_by` (ID admin), dan `verified_at` (waktu penolakan).
+   - File bukti transfer (`receipt_image`) **tidak dihapus** dari penyimpanan dan tetap tersimpan sebagai arsip bukti audit.
+
+### Kode status respons
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 200 | Sukses menyetujui transaksi | `{ "message": "Transaksi disetujui. Membership member sudah aktif.", "data": { "transaction": {...}, "membership": {...} } }` |
+| 200 | Sukses menolak transaksi | `{ "message": "Transaksi ditolak.", "data": { "transaction": {...}, "membership": {...} } }` |
+| 401 | Token tidak ada, salah, atau sudah dicabut | `{ "message": "Unauthenticated." }` |
+| 403 | Login sebagai non-admin (mis. role member) | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
+| 404 | Transaksi dengan ID tersebut tidak ditemukan | `{ "message": "Data tidak ditemukan." }` |
+| 409 | Transaksi sudah disetujui sebelumnya | `{ "message": "Transaksi ini sudah disetujui sebelumnya." }` |
+| 409 | Transaksi sudah ditolak sebelumnya | `{ "message": "Transaksi ini sudah ditolak sebelumnya." }` |
+| 409 | Status membership sudah aktif | `{ "message": "Membership ini sudah aktif." }` |
+| 409 | Status membership sudah ditolak | `{ "message": "Membership ini sudah ditolak." }` |
+| 409 | Periode bertabrakan dengan membership aktif lain | `{ "message": "Periode membership bertabrakan dengan masa aktif lain milik member ini." }` |
+| 422 | `reject_reason` kosong atau hanya spasi | `{ "message": "Alasan penolakan wajib diisi.", "errors": { "reject_reason": ["Alasan penolakan wajib diisi."] } }` |
+| 422 | `reject_reason` lebih dari 255 karakter | `{ "message": "Alasan penolakan maksimal 255 karakter.", "errors": { "reject_reason": ["Alasan penolakan maksimal 255 karakter."] } }` |
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:
