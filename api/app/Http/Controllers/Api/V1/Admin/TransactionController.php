@@ -18,7 +18,7 @@ class TransactionController extends Controller
      */
     public function index(IndexTransactionRequest $request): JsonResponse
     {
-        $status = $request->input('status', 'pending');
+        $status = $request->validated('status') ?? 'pending';
 
         $query = Transaction::query()
             ->where('verification_status', $status)
