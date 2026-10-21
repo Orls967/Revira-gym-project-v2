@@ -4,6 +4,7 @@ namespace App\Services\Transactions;
 
 use App\Exceptions\TransactionConflictException;
 use App\Models\Membership;
+use App\Models\MembershipPlan;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\Carbon;
@@ -33,8 +34,8 @@ class TransactionVerificationService
                 throw TransactionConflictException::forMembershipStatus($lockedMembership->status);
             }
 
-            $lockedMembership->loadMissing('membershipPlan');
-            $plan = $lockedMembership->membershipPlan;
+            /** @var MembershipPlan $plan */
+            $plan = $lockedMembership->membershipPlan()->firstOrFail();
 
             $today = Carbon::today(config('app.timezone'));
 
@@ -46,7 +47,7 @@ class TransactionVerificationService
                 $startDate = $today->copy();
             }
 
-            $durationDays = (int) ($plan?->duration_days ?? 30);
+            $durationDays = (int) $plan->duration_days;
             $endDate = $startDate->copy()->addDays($durationDays - 1);
 
             // B3: cek membership LAIN milik user yang sama berstatus active dan tumpang tindih

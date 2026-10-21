@@ -291,6 +291,7 @@ class AdminTransactionDecisionTest extends TestCase
                         'id' => $transaction->id,
                         'verification_status' => 'rejected',
                         'reject_reason' => $reason,
+                        'verified_at' => Carbon::now('Asia/Makassar')->toIso8601String(),
                     ],
                     'membership' => [
                         'id' => $transaction->membership_id,
@@ -306,6 +307,10 @@ class AdminTransactionDecisionTest extends TestCase
             'reject_reason' => $reason,
             'verified_by' => $admin->id,
         ]);
+
+        $freshTx = $transaction->fresh();
+        $this->assertNotNull($freshTx->verified_at);
+        $this->assertSame($admin->id, $freshTx->verified_by);
 
         $this->assertDatabaseHas('memberships', [
             'id' => $transaction->membership_id,
