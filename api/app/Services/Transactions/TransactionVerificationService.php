@@ -26,7 +26,11 @@ class TransactionVerificationService
             $lockedMembership = Membership::whereKey($lockedTransaction->membership_id)->lockForUpdate()->firstOrFail();
 
             if ($lockedTransaction->verification_status !== 'pending') {
-                throw new TransactionConflictException("Transaksi ini sudah diproses (status: {$lockedTransaction->verification_status}).");
+                throw TransactionConflictException::forTransactionStatus($lockedTransaction->verification_status);
+            }
+
+            if ($lockedMembership->status !== 'pending') {
+                throw TransactionConflictException::forMembershipStatus($lockedMembership->status);
             }
 
             $lockedMembership->loadMissing('membershipPlan');
@@ -91,7 +95,11 @@ class TransactionVerificationService
             $lockedMembership = Membership::whereKey($lockedTransaction->membership_id)->lockForUpdate()->firstOrFail();
 
             if ($lockedTransaction->verification_status !== 'pending') {
-                throw new TransactionConflictException("Transaksi ini sudah diproses (status: {$lockedTransaction->verification_status}).");
+                throw TransactionConflictException::forTransactionStatus($lockedTransaction->verification_status);
+            }
+
+            if ($lockedMembership->status !== 'pending') {
+                throw TransactionConflictException::forMembershipStatus($lockedMembership->status);
             }
 
             $lockedMembership->update([

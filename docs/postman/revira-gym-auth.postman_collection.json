@@ -3072,7 +3072,7 @@
               "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
             },
             {
-              "name": "409 Transaksi sudah diproses",
+              "name": "409 Transaksi sudah disetujui",
               "status": "Conflict",
               "code": 409,
               "header": [
@@ -3082,7 +3082,7 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"message\": \"Transaksi ini sudah diproses (status: verified).\"\n}"
+              "body": "{\n  \"message\": \"Transaksi ini sudah disetujui sebelumnya.\"\n}"
             },
             {
               "name": "409 Periode bertabrakan",
@@ -3158,7 +3158,7 @@
               "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
             },
             {
-              "name": "409 Transaksi sudah diproses",
+              "name": "409 Transaksi sudah ditolak",
               "status": "Conflict",
               "code": 409,
               "header": [
@@ -3168,7 +3168,7 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"message\": \"Transaksi ini sudah diproses (status: rejected).\"\n}"
+              "body": "{\n  \"message\": \"Transaksi ini sudah ditolak sebelumnya.\"\n}"
             },
             {
               "name": "422 Alasan penolakan kosong",

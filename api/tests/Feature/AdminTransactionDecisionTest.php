@@ -318,19 +318,20 @@ class AdminTransactionDecisionTest extends TestCase
     }
 
     /**
-     * 6. Proses ulang transaksi verified -> 409; transaksi rejected -> 409 (approve dan reject).
+     * 6. Proses ulang transaksi verified -> 409 ("Transaksi ini sudah disetujui sebelumnya.");
+     * transaksi rejected -> 409 ("Transaksi ini sudah ditolak sebelumnya.") (approve dan reject).
      */
     public function test_reprocessing_already_verified_or_rejected_transaction_returns_409(): void
     {
         $admin = $this->createAdmin();
 
-        $verifiedTx = $this->createTransaction([], [], [
+        $verifiedTx = $this->createTransaction([], ['status' => 'active'], [
             'verification_status' => 'verified',
             'verified_by' => $admin->id,
             'verified_at' => now(),
         ]);
 
-        $rejectedTx = $this->createTransaction([], [], [
+        $rejectedTx = $this->createTransaction([], ['status' => 'rejected'], [
             'verification_status' => 'rejected',
             'verified_by' => $admin->id,
             'verified_at' => now(),
@@ -343,7 +344,7 @@ class AdminTransactionDecisionTest extends TestCase
         $this->postJson("/api/v1/admin/transactions/{$verifiedTx->id}/approve")
             ->assertStatus(409)
             ->assertExactJson([
-                'message' => 'Transaksi ini sudah diproses (status: verified).',
+                'message' => 'Transaksi ini sudah disetujui sebelumnya.',
             ]);
 
         // Verified coba di-reject
@@ -352,14 +353,14 @@ class AdminTransactionDecisionTest extends TestCase
         ])
             ->assertStatus(409)
             ->assertExactJson([
-                'message' => 'Transaksi ini sudah diproses (status: verified).',
+                'message' => 'Transaksi ini sudah disetujui sebelumnya.',
             ]);
 
         // Rejected coba di-approve
         $this->postJson("/api/v1/admin/transactions/{$rejectedTx->id}/approve")
             ->assertStatus(409)
             ->assertExactJson([
-                'message' => 'Transaksi ini sudah diproses (status: rejected).',
+                'message' => 'Transaksi ini sudah ditolak sebelumnya.',
             ]);
 
         // Rejected coba di-reject lagi
@@ -368,8 +369,80 @@ class AdminTransactionDecisionTest extends TestCase
         ])
             ->assertStatus(409)
             ->assertExactJson([
-                'message' => 'Transaksi ini sudah diproses (status: rejected).',
+                'message' => 'Transaksi ini sudah ditolak sebelumnya.',
             ]);
+    }
+
+    /**
+     * Memproses transaksi dengan status membership bukan pending (active atau rejected) menghasilkan 409
+     * dan tidak mengubah data apa pun di database (SCRUM-67).
+     */
+    public function test_processing_transaction_with_non_pending_membership_returns_409(): void
+    {
+        $admin = $this->createAdmin();
+
+        // 1. Transaksi pending dengan membership active -> approve menghasilkan 409
+        $txWithActiveMembership = $this->createTransaction(
+            [],
+            ['status' => 'active', 'start_date' => '2026-10-15', 'end_date' => '2026-11-14'],
+            ['verification_status' => 'pending']
+        );
+
+        Sanctum::actingAs($admin);
+
+        $responseApprove = $this->postJson("/api/v1/admin/transactions/{$txWithActiveMembership->id}/approve");
+        $responseApprove->assertStatus(409)
+            ->assertExactJson([
+                'message' => 'Membership ini sudah aktif.',
+            ]);
+
+        // Pastikan tidak ada perubahan di DB
+        $this->assertDatabaseHas('transactions', [
+            'id' => $txWithActiveMembership->id,
+            'verification_status' => 'pending',
+            'verified_by' => null,
+            'verified_at' => null,
+            'reject_reason' => null,
+        ]);
+        $this->assertDatabaseHas('memberships', [
+            'id' => $txWithActiveMembership->membership_id,
+            'status' => 'active',
+        ]);
+        $freshActiveMembership = $txWithActiveMembership->membership()->firstOrFail();
+        $this->assertSame('2026-10-15', $freshActiveMembership->start_date?->toDateString());
+        $this->assertSame('2026-11-14', $freshActiveMembership->end_date?->toDateString());
+
+        // 2. Transaksi pending dengan membership rejected -> tolak menghasilkan 409
+        $txWithRejectedMembership = $this->createTransaction(
+            [],
+            ['status' => 'rejected', 'start_date' => '2026-10-15', 'end_date' => null],
+            ['verification_status' => 'pending']
+        );
+
+        $responseReject = $this->postJson("/api/v1/admin/transactions/{$txWithRejectedMembership->id}/reject", [
+            'reject_reason' => 'Alasan penolakan baru',
+        ]);
+        $responseReject->assertStatus(409)
+            ->assertExactJson([
+                'message' => 'Membership ini sudah ditolak.',
+            ]);
+
+        // Pastikan tidak ada perubahan di DB
+        $this->assertDatabaseHas('transactions', [
+            'id' => $txWithRejectedMembership->id,
+            'verification_status' => 'pending',
+            'reject_reason' => null,
+            'verified_by' => null,
+            'verified_at' => null,
+        ]);
+        $this->assertDatabaseHas('memberships', [
+            'id' => $txWithRejectedMembership->membership_id,
+            'status' => 'rejected',
+            'end_date' => null,
+        ]);
+        $freshRejectedMembership = $txWithRejectedMembership->membership()->firstOrFail();
+        $this->assertSame('2026-10-15', $freshRejectedMembership->start_date?->toDateString());
+        $this->assertNull($freshRejectedMembership->end_date);
     }
 
     /**
