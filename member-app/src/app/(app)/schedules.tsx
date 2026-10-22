@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "@/lib/api";
 import { ClassSchedule, ScheduleSection } from "@/types/schedule";
 import { MOCK_SCHEDULES } from "@/mocks/schedules";
+import { ChatAdminButton } from "@/components/ChatAdminButton";
 
 // Helper pengelompokan 7 hari
 const groupSchedulesByDay = (items: ClassSchedule[]): ScheduleSection[] => {
@@ -253,6 +254,18 @@ export default function ClassSchedulesScreen() {
                     {item.current_participants}/{item.max_participants} Peserta
                   </Text>
                 </View>
+              </View>
+
+              {/* Chat Admin - SCRUM-85 */}
+              <View className="mt-4">
+                <ChatAdminButton
+                  context="schedule"
+                  data={{
+                    className: item.title,
+                    date: item.date,
+                    sessionTime: `${item.start_time} - ${item.end_time} WITA`,
+                  }}
+                />
               </View>
             </View>
           );
