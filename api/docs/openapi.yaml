@@ -123,6 +123,10 @@ paths:
     $ref: ./openapi/paths/receipts.yaml#/receipt
   /admin/transactions:
     $ref: ./openapi/paths/transactions.yaml#/adminTransactions
+  /admin/transactions/{transaction}/approve:
+    $ref: ./openapi/paths/transactions.yaml#/adminTransactionApprove
+  /admin/transactions/{transaction}/reject:
+    $ref: ./openapi/paths/transactions.yaml#/adminTransactionReject
 
 components:
   securitySchemes:

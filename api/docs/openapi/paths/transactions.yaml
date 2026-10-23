@@ -100,3 +100,160 @@ adminTransactions:
         $ref: ../components/responses.yaml#/Forbidden
       '422':
         $ref: ../components/responses.yaml#/TransactionValidationError
+
+adminTransactionApprove:
+  post:
+    operationId: approveTransaction
+    tags: [Transaksi]
+    summary: Setujui transaksi membership (admin)
+    description: |
+      SCRUM-67 (induk SCRUM-24). Role admin.
+      Menyetujui transaksi pending:
+      - Menghitung tanggal mulai (`start_date`): bila `start_date` pengajuan sebelum hari ini (WITA), dimajukan ke hari ini.
+      - Menghitung tanggal berakhir (`end_date`): `start_date` + durasi paket - 1 hari.
+      - Memastikan tidak ada periode aktif lain milik member yang bertabrakan (B3, 409).
+      - Mengubah status transaksi menjadi `verified` dan status membership menjadi `active`.
+    security:
+      - BearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/TransactionId
+    responses:
+      '200':
+        description: Transaksi berhasil disetujui dan membership member sudah aktif.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AdminTransactionDecisionResponse
+            example:
+              message: Transaksi disetujui. Membership member sudah aktif.
+              data:
+                transaction:
+                  id: 2
+                  member:
+                    id: 3
+                    name: Siti Rahmah
+                    email: member2@revira.test
+                    phone_number: '081234567891'
+                  plan:
+                    id: 1
+                    name: 1 Bulan Reguler
+                    duration_days: 30
+                  record_type: registration
+                  start_date: '2026-10-20'
+                  amount: 150000
+                  payment_method: transfer
+                  verification_status: verified
+                  has_receipt: true
+                  receipt_url: /api/v1/transactions/2/receipt
+                  reject_reason: null
+                  verified_at: '2026-10-19T15:30:00+08:00'
+                  created_at: '2026-10-18T09:00:00+08:00'
+                membership:
+                  id: 2
+                  status: active
+                  record_type: registration
+                  start_date: '2026-10-20'
+                  end_date: '2026-11-18'
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '409':
+        $ref: ../components/responses.yaml#/TransactionConflict
+
+adminTransactionReject:
+  post:
+    operationId: rejectTransaction
+    tags: [Transaksi]
+    summary: Tolak transaksi membership (admin)
+    description: |
+      SCRUM-67 (induk SCRUM-24). Role admin.
+      Menolak transaksi pending dengan menyertakan alasan penolakan (`reject_reason`):
+      - Mengubah status transaksi menjadi `rejected`, mencatat admin pemverifikasi dan waktu penolakan.
+      - Mengubah status membership menjadi `rejected`. File bukti transfer tetap disimpan.
+    security:
+      - BearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/TransactionId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - reject_reason
+            properties:
+              reject_reason:
+                type: string
+                maxLength: 255
+                description: Alasan penolakan oleh admin (maksimal 255 karakter).
+                example: Nominal transfer tidak sesuai.
+    responses:
+      '200':
+        description: Transaksi berhasil ditolak.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AdminTransactionDecisionResponse
+            example:
+              message: Transaksi ditolak.
+              data:
+                transaction:
+                  id: 2
+                  member:
+                    id: 3
+                    name: Siti Rahmah
+                    email: member2@revira.test
+                    phone_number: '081234567891'
+                  plan:
+                    id: 1
+                    name: 1 Bulan Reguler
+                    duration_days: 30
+                  record_type: registration
+                  start_date: '2026-10-20'
+                  amount: 150000
+                  payment_method: transfer
+                  verification_status: rejected
+                  has_receipt: true
+                  receipt_url: /api/v1/transactions/2/receipt
+                  reject_reason: Nominal transfer tidak sesuai.
+                  verified_at: '2026-10-19T15:30:00+08:00'
+                  created_at: '2026-10-18T09:00:00+08:00'
+                membership:
+                  id: 2
+                  status: rejected
+                  record_type: registration
+                  start_date: '2026-10-20'
+                  end_date: null
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '404':
+        $ref: ../components/responses.yaml#/NotFound
+      '409':
+        $ref: ../components/responses.yaml#/TransactionConflict
+      '422':
+        description: Alasan penolakan tidak diisi atau melebihi 255 karakter.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            examples:
+              missingReason:
+                summary: Alasan penolakan kosong
+                value:
+                  message: Alasan penolakan wajib diisi.
+                  errors:
+                    reject_reason:
+                      - Alasan penolakan wajib diisi.
+              reasonTooLong:
+                summary: Alasan penolakan melebihi 255 karakter
+                value:
+                  message: Alasan penolakan maksimal 255 karakter.
+                  errors:
+                    reject_reason:
+                      - Alasan penolakan maksimal 255 karakter.
