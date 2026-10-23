@@ -784,6 +784,92 @@ ScheduleStatusList:
       type: array
       items:
         $ref: '#/ScheduleStatusItem'
+MembershipRecordType:
+  type: string
+  enum: [registration, extension]
+  description: >
+    `registration` bila user belum pernah punya membership aktif/expired.
+    `extension` bila sudah pernah.
+
+MembershipApplicationPlanSummary:
+  type: object
+  required: [id, name, duration_days, price]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    duration_days:
+      type: integer
+    price:
+      type: integer
+      description: Harga dalam rupiah (bilangan bulat).
+      examples: [150000]
+
+MembershipApplicationMembership:
+  type: object
+  required: [id, plan, record_type, start_date, end_date, status]
+  properties:
+    id:
+      type: integer
+    plan:
+      $ref: '#/MembershipApplicationPlanSummary'
+    record_type:
+      $ref: '#/MembershipRecordType'
+    start_date:
+      type: string
+      format: date
+      description: Tanggal mulai (Y-m-d).
+      examples: ['2026-10-20']
+    end_date:
+      type: ['null']
+      description: Selalu null saat pengajuan, diisi setelah verifikasi.
+    status:
+      type: string
+      enum: [pending]
+      description: Status saat pengajuan selalu pending.
+
+MembershipApplicationTransaction:
+  type: object
+  required: [id, amount, payment_method, verification_status, has_receipt, created_at]
+  properties:
+    id:
+      type: integer
+    amount:
+      type: integer
+      description: Harga paket saat pengajuan (rupiah, bilangan bulat).
+      examples: [150000]
+    payment_method:
+      type: string
+      enum: [transfer, on_the_spot]
+    verification_status:
+      type: string
+      enum: [pending]
+      description: Status saat pengajuan selalu pending.
+    has_receipt:
+      type: boolean
+      description: True bila bukti transfer tersimpan, false bila on_the_spot.
+    created_at:
+      $ref: '#/Timestamp'
+
+MembershipApplicationData:
+  type: object
+  required: [membership, transaction]
+  properties:
+    membership:
+      $ref: '#/MembershipApplicationMembership'
+    transaction:
+      $ref: '#/MembershipApplicationTransaction'
+
+MembershipApplicationResponse:
+  type: object
+  required: [message, data]
+  properties:
+    message:
+      type: string
+      examples: ['Pengajuan membership berhasil dikirim dan menunggu verifikasi admin.']
+    data:
+      $ref: '#/MembershipApplicationData'
 
 BookingStatus:
   type: string

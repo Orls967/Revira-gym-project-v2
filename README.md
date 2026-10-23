@@ -337,6 +337,6 @@ npm run build
 ## Aturan Kerja
 
 - **Branch**: Buat branch dari `dev`, dengan penamaan `feature/SCRUM-xx-deskripsi`.
-- **Pull Request (PR)**: PR diajukan ke `dev`. PR ke `dev` wajib lulus pemeriksaan status `ci-gate` dan mendapatkan minimal 1 approval review (berlaku setelah ruleset diaktifkan). Metode merge yang diizinkan hanya **Merge commit** (tanpa squash atau rebase). Branch `main` hanya untuk rilis.
+- **Pull Request (PR)**: PR diajukan ke `dev`. PR ke `dev` wajib lulus pemeriksaan status `ci-gate` dan mendapatkan minimal 1 approval review — aturan ini **sudah aktif sejak 19 Oktober 2026** (ditegakkan via GitHub Ruleset). Metode merge yang diizinkan hanya **Merge commit** (tanpa squash atau rebase). Branch `main` hanya untuk rilis.
 - **Commit**: Commit diawali kunci Jira, mis. `SCRUM-34: setup boilerplate`. Jangan menyertakan trailer Co-Authored-By atau trailer AI.
 - **Environment**: Jangan pernah commit berkas `.env`.
