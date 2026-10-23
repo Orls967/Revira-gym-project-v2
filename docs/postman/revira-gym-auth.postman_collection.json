@@ -3418,8 +3418,10 @@
               "body": "{\n  \"message\": \"Status harus salah satu dari: pending, verified, rejected.\",\n  \"errors\": {\n    \"status\": [\n      \"Status harus salah satu dari: pending, verified, rejected.\"\n    ]\n  }\n}"
             }
           ]
-        },
-          {
+        }
+      ]
+    },
+    {
       "name": "Sprint 3 - Pengajuan membership (SCRUM-69)",
       "description": "Endpoint pengajuan membership baru atau perpanjangan dengan upload bukti transfer. POST /member/memberships.\n\nGunakan variabel `token` (dari Login) dan `base_url`. Untuk mencoba upload gambar, pilih field receipt_image dengan tipe File di body form-data.",
       "item": [
@@ -3517,8 +3519,6 @@
           ]
         }
       ]
-    }
-]
     }
   ]
 }

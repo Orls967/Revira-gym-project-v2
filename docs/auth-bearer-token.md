@@ -590,6 +590,7 @@ Kode status respons:
 | 401 | Token tidak ada, salah, atau sudah dicabut | `{ "message": "Unauthenticated." }` |
 | 403 | Login sebagai non-admin (mis. role member) | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
 | 422 | Query tidak valid (mis. `status` selain pending/verified/rejected atau `page` bukan integer positif) | `{ "message": "...", "errors": { ... } }` |
+
 ## Pengajuan membership (member, SCRUM-69)
 
 Endpoint pengajuan membership baru atau perpanjangan oleh member. Dilindungi oleh `auth:sanctum` + `role:member` dan rate limiter `throttle:10,1` (maksimal 10 request per menit per user).
