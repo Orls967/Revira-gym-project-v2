@@ -1,0 +1,144 @@
+memberApplications:
+  post:
+    operationId: submitMembershipApplication
+    tags: [Membership]
+    summary: Ajukan membership baru (member)
+    description: |
+      SCRUM-69 (tiket induk SCRUM-103). Role member.
+
+      Mengajukan permohonan membership baru atau perpanjangan. Bukti transfer wajib
+      diunggah bila `payment_method = transfer`; dilarang bila `payment_method = on_the_spot`
+      (akan ditolak 422).
+
+      **Aturan bisnis:**
+      - **B2 – Pengajuan ganda:** Tolak bila member sudah punya membership berstatus `pending`.
+      - **B1 – record_type:** `registration` bila user belum pernah punya membership
+        berstatus `active` atau `expired`. Selain itu `extension`. Membership `rejected`
+        tidak dihitung.
+      - **B3 – Tumpang tindih:** Tolak bila periode baru (start_date sampai
+        start_date + duration_days − 1) bertabrakan dengan membership aktif yang sudah ada.
+      - **B10 – on_the_spot:** receipt_image tidak disimpan (null).
+      - amount disalin dari harga paket saat ini.
+    security:
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required:
+              - membership_plan_id
+              - start_date
+              - payment_method
+            properties:
+              membership_plan_id:
+                type: integer
+                description: ID paket membership yang aktif (is_active = true).
+                examples:
+                  - 1
+              start_date:
+                type: string
+                format: date
+                description: >
+                  Tanggal mulai membership (Y-m-d). Minimal hari ini (zona Asia/Makassar).
+                examples:
+                  - '2026-10-20'
+              payment_method:
+                type: string
+                enum: [transfer, on_the_spot]
+                description: Metode pembayaran.
+              receipt_image:
+                type: string
+                format: binary
+                description: >
+                  Bukti transfer. Wajib bila `payment_method = transfer`.
+                  Dilarang (akan ditolak 422) bila `payment_method = on_the_spot`.
+                  Format: JPEG, PNG, atau WebP. Ukuran maksimal 2 MB.
+    responses:
+      '201':
+        description: Pengajuan membership berhasil dikirim.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/MembershipApplicationResponse
+            example:
+              message: Pengajuan membership berhasil dikirim dan menunggu verifikasi admin.
+              data:
+                membership:
+                  id: 5
+                  plan:
+                    id: 1
+                    name: Bulanan
+                    duration_days: 30
+                    price: 150000
+                  record_type: registration
+                  start_date: '2026-10-20'
+                  end_date: null
+                  status: pending
+                transaction:
+                  id: 7
+                  amount: 150000
+                  payment_method: transfer
+                  verification_status: pending
+                  has_receipt: true
+                  created_at: '2026-10-20T08:00:00+08:00'
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        description: Validasi gagal atau aturan bisnis dilanggar.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+            examples:
+              validasiField:
+                summary: Validasi field gagal
+                value:
+                  message: Paket tidak ditemukan atau tidak aktif. (and 2 more errors)
+                  errors:
+                    membership_plan_id:
+                      - Paket tidak ditemukan atau tidak aktif.
+                    start_date:
+                      - Tanggal mulai minimal hari ini.
+                    receipt_image:
+                      - Bukti transfer wajib diunggah untuk pembayaran transfer.
+              pengajuanGanda:
+                summary: Sudah ada pengajuan pending
+                value:
+                  message: Masih ada pengajuan yang menunggu verifikasi.
+                  errors:
+                    membership:
+                      - Masih ada pengajuan yang menunggu verifikasi.
+              tumpangTindih:
+                summary: Periode bertabrakan dengan membership aktif
+                value:
+                  message: Periode membership baru bertabrakan dengan masa aktif yang sedang berjalan.
+                  errors:
+                    start_date:
+                      - Periode membership baru bertabrakan dengan masa aktif yang sedang berjalan.
+              fileTerlaluBesar:
+                summary: Ukuran bukti transfer melebihi 2 MB
+                value:
+                  message: Ukuran file bukti transfer maksimal 2 MB.
+                  errors:
+                    receipt_image:
+                      - Ukuran file bukti transfer maksimal 2 MB.
+              formatSalah:
+                summary: Format file bukan gambar
+                value:
+                  message: Format bukti transfer harus JPG, PNG, atau WEBP.
+                  errors:
+                    receipt_image:
+                      - Format bukti transfer harus JPG, PNG, atau WEBP.
+              buktiDilarang:
+                summary: Mengirim bukti untuk pembayaran on_the_spot
+                value:
+                  message: Bukti transfer tidak diperlukan untuk pembayaran di tempat.
+                  errors:
+                    receipt_image:
+                      - Bukti transfer tidak diperlukan untuk pembayaran di tempat.
+      '429':
+        $ref: ../components/responses.yaml#/TooManyRequests

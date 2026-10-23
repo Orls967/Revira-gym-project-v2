@@ -54,6 +54,8 @@ tags:
     description: Instruktur (admin).
   - name: Schedules
     description: Jadwal kelas.
+  - name: Membership
+    description: Pengajuan membership oleh member (SCRUM-69).
   - name: Receipts
     description: Bukti transfer.
   - name: Bookings
@@ -111,6 +113,8 @@ paths:
     $ref: ./openapi/paths/schedules.yaml#/publicSchedules
   /class-schedules/status:
     $ref: ./openapi/paths/schedules.yaml#/publicScheduleStatus
+  /member/memberships:
+    $ref: ./openapi/paths/memberships.yaml#/memberApplications
   /member/bookings:
     $ref: ./openapi/paths/bookings.yaml#/memberBookings
   /member/class-schedules/{id}/booking:

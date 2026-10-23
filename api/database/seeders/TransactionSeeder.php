@@ -155,5 +155,29 @@ class TransactionSeeder extends Seeder
                 }
             }
         }
+
+        // 7. Member 4: Pending membership on_the_spot (contoh data SCRUM-69, receipt_image = null)
+        $m4Pending = $member4
+            ? Membership::where('user_id', $member4->id)
+                ->where('record_type', 'extension')
+                ->where('status', 'pending')
+                ->first()
+            : null;
+
+        if ($m4Pending) {
+            Transaction::updateOrCreate(
+                ['membership_id' => $m4Pending->id],
+                [
+                    'user_id' => $m4Pending->user_id,
+                    'amount' => $m4Pending->membershipPlan->price,
+                    'payment_method' => 'on_the_spot',
+                    'receipt_image' => null,
+                    'verification_status' => 'pending',
+                    'verified_by' => null,
+                    'verified_at' => null,
+                    'reject_reason' => null,
+                ]
+            );
+        }
     }
 }

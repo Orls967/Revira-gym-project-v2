@@ -2,8 +2,10 @@ name: CI
 
 on:
   pull_request:
+    # dev: PR fitur; main: PR rilis dev → main. Keduanya wajib lolos ci-gate (ruleset protect-dev).
     branches:
       - dev
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
