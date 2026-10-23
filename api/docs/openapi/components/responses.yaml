@@ -321,3 +321,25 @@ BookingCancelError:
         errors:
           booking:
             - Booking tidak dapat dibatalkan karena sesi kelas sudah dimulai.
+TransactionValidationError:
+  description: Validasi query parameter transaksi gagal (SCRUM-66).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        invalidStatus:
+          summary: Status tidak valid
+          value:
+            message: 'Status harus salah satu dari: pending, verified, rejected.'
+            errors:
+              status:
+                - 'Status harus salah satu dari: pending, verified, rejected.'
+        invalidPage:
+          summary: Halaman tidak valid
+          value:
+            message: The page field must be an integer.
+            errors:
+              page:
+                - The page field must be an integer.
+

@@ -60,6 +60,8 @@ tags:
     description: Bukti transfer.
   - name: Bookings
     description: Booking sesi kelas oleh member.
+  - name: Transaksi
+    description: Verifikasi dan manajemen transaksi (admin).
   - name: Sprint 2
     description: Endpoint yang belum diimplementasikan (`x-status` planned).
 paths:
@@ -119,6 +121,9 @@ paths:
     $ref: ./openapi/paths/bookings.yaml#/memberBooking
   /transactions/{transaction}/receipt:
     $ref: ./openapi/paths/receipts.yaml#/receipt
+  /admin/transactions:
+    $ref: ./openapi/paths/transactions.yaml#/adminTransactions
+
 components:
   securitySchemes:
     BearerAuth:

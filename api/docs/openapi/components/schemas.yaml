@@ -939,3 +939,101 @@ MemberBookingList:
       type: array
       items:
         $ref: '#/MemberBooking'
+
+AdminTransactionMember:
+  type: object
+  required: [id, name, email, phone_number]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    email:
+      type: string
+      format: email
+    phone_number:
+      type: string
+
+AdminTransactionPlan:
+  type: object
+  required: [id, name, duration_days]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    duration_days:
+      type: integer
+
+AdminTransaction:
+  type: object
+  required:
+    - id
+    - member
+    - plan
+    - record_type
+    - start_date
+    - amount
+    - payment_method
+    - verification_status
+    - has_receipt
+    - receipt_url
+    - reject_reason
+    - verified_at
+    - created_at
+  properties:
+    id:
+      type: integer
+    member:
+      $ref: '#/AdminTransactionMember'
+    plan:
+      $ref: '#/AdminTransactionPlan'
+    record_type:
+      type: string
+      enum: [registration, extension]
+    start_date:
+      type: string
+      format: date
+      examples: ['2026-10-20']
+    amount:
+      type: integer
+      description: Nominal pembayaran dalam rupiah.
+      examples: [150000]
+    payment_method:
+      type: string
+      enum: [transfer, on_the_spot]
+    verification_status:
+      type: string
+      enum: [pending, verified, rejected]
+    has_receipt:
+      type: boolean
+      description: True jika terdapat file bukti transfer yang diunggah.
+    receipt_url:
+      type: [string, 'null']
+      description: Path relatif endpoint penyajian bukti transfer. Bernilai null bila bukan transfer atau belum ada bukti.
+      examples: ['/api/v1/transactions/2/receipt']
+    reject_reason:
+      type: [string, 'null']
+      description: Alasan penolakan jika verification_status rejected.
+    verified_at:
+      type: [string, 'null']
+      format: date-time
+      description: Waktu verifikasi ISO 8601 dengan offset +08:00.
+    created_at:
+      type: string
+      format: date-time
+      description: Waktu transaksi dibuat ISO 8601 dengan offset +08:00.
+
+AdminTransactionListResponse:
+  type: object
+  required: [data, links, meta]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/AdminTransaction'
+    links:
+      $ref: '#/PaginationLinks'
+    meta:
+      $ref: '#/PaginationMeta'
+
