@@ -563,6 +563,46 @@ Setiap booking/batal langsung mengubah `participants_count` dan `updated_at` ses
 
 Untuk backend lain: logika ada di `App\Services\Bookings\BookingService` (`book`, `cancel`); baris sesi dikunci `lockForUpdate` selama transaksi. Scope `ClassSchedule::notEnded()` (jam selesai belum lewat, semua status) dan method `ClassSchedule::hasStarted()` tersedia.
 
+## Pengajuan membership (member, SCRUM-69)
+
+Endpoint pengajuan membership baru atau perpanjangan oleh member. Dilindungi oleh `auth:sanctum` + `role:member` dan rate limiter `throttle:10,1` (maksimal 10 request per menit per user).
+
+- **Method & Endpoint**: `POST /api/v1/member/memberships`
+- **Content-Type**: `multipart/form-data`
+- **Header**:
+  ```http
+  Authorization: Bearer <token>
+  Accept: application/json
+  ```
+
+Field multipart:
+
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| `membership_plan_id` | Integer | Wajib. ID paket membership yang aktif (`is_active = true`). |
+| `start_date` | String | Wajib. Format tanggal `YYYY-MM-DD`, minimal hari ini (WITA / Asia/Makassar). |
+| `payment_method` | String | Wajib. Pilihan: `transfer` atau `on_the_spot`. |
+| `receipt_image` | File (binary) | Gambar JPG/PNG/WebP maks 2 MB. **Wajib** bila `payment_method = transfer`. **Dilarang** bila `payment_method = on_the_spot` (ditolak 422 jika dikirim). |
+
+Aturan bisnis:
+- **B1**: Penentuan `record_type` otomatis: `'registration'` bila user belum pernah memiliki membership berstatus `active` atau `expired` (pernah diverifikasi), selain itu `'extension'`. Status `rejected` tidak dihitung.
+- **B2**: Ditolak 422 jika user masih memiliki pengajuan berstatus `pending` (`"Masih ada pengajuan yang menunggu verifikasi."`).
+- **B3**: Ditolak 422 jika periode pengajuan baru bertabrakan dengan membership berstatus `active` (`"Periode membership baru bertabrakan dengan masa aktif yang sedang berjalan."`).
+- **B10**: Pada metode `on_the_spot`, `receipt_image` disimpan `null`.
+- Nominal transaksi (`amount`) disalin dari harga paket saat ini (`MembershipPlan.price`).
+
+Status respons:
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 201 | Pengajuan berhasil dikirim dan menunggu verifikasi admin | `{ "message": "...", "data": { "membership": {...}, "transaction": {...} } }` |
+| 401 | Token tidak ada, salah, atau dicabut | `{ "message": "Unauthenticated." }` |
+| 403 | Role bukan `member` (mis. admin) | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
+| 422 | Validasi field gagal atau aturan bisnis dilanggar (pengajuan ganda, overlap, bukti dilarang/hilang) | `{ "message": "...", "errors": { "field": ["..."] } }` |
+| 429 | Lebih dari 10 request dalam 1 menit | `{ "message": "Too Many Attempts." }` |
+
+> Rujukan kontrak lengkap (skema objek, headers, dan contoh respons): lihat [api/docs/openapi/paths/memberships.yaml](../api/docs/openapi/paths/memberships.yaml).
+
 ## Helper untuk backend
 
 `App\Services\Auth\ApiTokenService`:
