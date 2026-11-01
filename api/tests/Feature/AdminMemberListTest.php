@@ -125,6 +125,22 @@ class AdminMemberListTest extends TestCase
     }
 
     /**
+     * Urutan mengikuti nama, bukan urutan pembuatan (id); nama sama diurutkan berdasarkan id.
+     */
+    public function test_members_are_sorted_by_name_not_creation_order(): void
+    {
+        $zaki = $this->member('Zaki Terakhir');
+        $budiFirst = $this->member('Budi Sama');
+        $andi = $this->member('Andi Awal');
+        $budiSecond = $this->member('Budi Sama');
+        $this->actingAsAdmin();
+
+        $ids = collect($this->getJson(self::URL)->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame([$andi->id, $budiFirst->id, $budiSecond->id, $zaki->id], $ids);
+    }
+
+    /**
      * Item member aktif memakai paket dan tanggal dari membership yang berlaku hari ini.
      */
     public function test_active_item_shows_current_membership_plan_and_dates(): void
