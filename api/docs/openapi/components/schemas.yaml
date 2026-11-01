@@ -1037,3 +1037,62 @@ AdminTransactionListResponse:
     meta:
       $ref: '#/PaginationMeta'
 
+
+AdminMember:
+  type: object
+  description: Satu baris daftar member Admin Web (SCRUM-68).
+  required:
+    - id
+    - name
+    - email
+    - phone_number
+    - membership_status
+    - plan
+    - start_date
+    - end_date
+    - registered_at
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    email:
+      type: string
+      format: email
+    phone_number:
+      type: [string, 'null']
+    membership_status:
+      type: string
+      enum: [active, pending, expired, none]
+      description: Status membership terkini (B11 SCRUM-104), prioritas active > pending > expired > none.
+    plan:
+      description: Paket dari membership yang menentukan status; null bila status none.
+      oneOf:
+        - $ref: '#/AdminTransactionPlan'
+        - type: 'null'
+    start_date:
+      type: [string, 'null']
+      format: date
+      examples: ['2026-10-15']
+    end_date:
+      type: [string, 'null']
+      format: date
+      description: Null bila membership masih pending (end_date dihitung saat disetujui) atau status none.
+      examples: ['2026-11-13']
+    registered_at:
+      type: string
+      format: date-time
+      description: Waktu akun dibuat (users.created_at), ISO 8601 dengan offset +08:00.
+
+AdminMemberListResponse:
+  type: object
+  required: [data, links, meta]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/AdminMember'
+    links:
+      $ref: '#/PaginationLinks'
+    meta:
+      $ref: '#/PaginationMeta'

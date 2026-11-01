@@ -343,3 +343,31 @@ TransactionValidationError:
               page:
                 - The page field must be an integer.
 
+MemberListValidationError:
+  description: Validasi query parameter daftar member gagal (SCRUM-68).
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/Error
+      examples:
+        invalidStatus:
+          summary: Status tidak valid
+          value:
+            message: 'Status harus salah satu dari: active, pending, expired, none.'
+            errors:
+              status:
+                - 'Status harus salah satu dari: active, pending, expired, none.'
+        unknownPlan:
+          summary: Paket tidak ditemukan
+          value:
+            message: Paket membership tidak ditemukan.
+            errors:
+              membership_plan_id:
+                - Paket membership tidak ditemukan.
+        invalidPage:
+          summary: Halaman tidak valid
+          value:
+            message: Nomor halaman minimal 1.
+            errors:
+              page:
+                - Nomor halaman minimal 1.

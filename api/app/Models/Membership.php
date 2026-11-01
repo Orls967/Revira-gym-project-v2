@@ -67,6 +67,31 @@ class Membership extends Model
     }
 
     /**
+     * Membership yang menunggu: pengajuan pending (belum diverifikasi) atau membership active yang belum mulai.
+     * Dipakai daftar member admin (B11, SCRUM-104) untuk status `pending`.
+     */
+    public function scopeAwaiting(Builder $query): void
+    {
+        $query->where(function (Builder $query) {
+            $query->where('status', 'pending')
+                ->orWhere(fn (Builder $query) => $query->upcoming());
+        });
+    }
+
+    /**
+     * Membership yang sudah lewat: status expired, atau status active dengan end_date sebelum hari ini
+     * (job yang mengubah status ke expired belum tentu sudah jalan).
+     */
+    public function scopeLapsed(Builder $query): void
+    {
+        $query->where(function (Builder $query) {
+            $query->where('status', 'expired')
+                ->orWhere(fn (Builder $query) => $query->where('status', 'active')
+                    ->whereDate('end_date', '<', today()));
+        });
+    }
+
+    /**
      * Membership active yang periodenya beririsan dengan rentang tanggal (inklusif).
      * Dipakai untuk menjaga aturan B6: membership active milik satu user tidak boleh tumpang tindih.
      * Konversi zona waktu dan syarat format string sama dengan scopeActiveOn().

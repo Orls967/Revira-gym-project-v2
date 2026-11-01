@@ -3355,6 +3355,259 @@
       ]
     }
 ]
+    },
+    {
+      "name": "Sprint 3 - Member admin (SCRUM-68)",
+      "description": "Daftar member untuk Admin Web (US-13). Login sebagai admin dulu (email = {{adminEmail}}). Status terkini (B11): active > pending > expired > none; member yang hanya punya pengajuan rejected dihitung none. Paginasi 15 per halaman, urut nama.",
+      "item": [
+        {
+          "name": "Admin - daftar member (semua status)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/members",
+            "description": "Role admin. Semua member urut nama dengan membership_status terkini, paket, start_date, end_date, registered_at. Paket dan tanggal null bila status none."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 4,\n      \"name\": \"Ahmad Fauzi\",\n      \"email\": \"member3@revira.test\",\n      \"phone_number\": \"081234567892\",\n      \"membership_status\": \"expired\",\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"1 Bulan Reguler\",\n        \"duration_days\": 30\n      },\n      \"start_date\": \"2026-09-01\",\n      \"end_date\": \"2026-09-30\",\n      \"registered_at\": \"2026-08-28T14:00:00+08:00\"\n    },\n    {\n      \"id\": 2,\n      \"name\": \"Andi Pratama\",\n      \"email\": \"member1@revira.test\",\n      \"phone_number\": \"081234567890\",\n      \"membership_status\": \"active\",\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"1 Bulan Reguler\",\n        \"duration_days\": 30\n      },\n      \"start_date\": \"2026-10-15\",\n      \"end_date\": \"2026-11-13\",\n      \"registered_at\": \"2026-10-01T09:00:00+08:00\"\n    },\n    {\n      \"id\": 5,\n      \"name\": \"Rina Wati\",\n      \"email\": \"member4@revira.test\",\n      \"phone_number\": \"081234567893\",\n      \"membership_status\": \"none\",\n      \"plan\": null,\n      \"start_date\": null,\n      \"end_date\": null,\n      \"registered_at\": \"2026-10-20T08:30:00+08:00\"\n    },\n    {\n      \"id\": 3,\n      \"name\": \"Siti Rahmah\",\n      \"email\": \"member2@revira.test\",\n      \"phone_number\": \"081234567891\",\n      \"membership_status\": \"pending\",\n      \"plan\": {\n        \"id\": 2,\n        \"name\": \"3 Bulan Reguler\",\n        \"duration_days\": 90\n      },\n      \"start_date\": \"2026-11-05\",\n      \"end_date\": null,\n      \"registered_at\": \"2026-10-02T10:15:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/members?page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/members?page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/members?page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/members\",\n    \"per_page\": 15,\n    \"to\": 4,\n    \"total\": 4\n  }\n}"
+            },
+            {
+              "name": "401 Tanpa token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Unauthenticated.\"\n}"
+            },
+            {
+              "name": "403 Login sebagai member",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Anda tidak memiliki akses ke sumber daya ini.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Admin - daftar member (status=active)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/members?status=active",
+            "description": "Filter status dijalankan di database: hanya member dengan membership yang berlaku hari ini (B6/SCRUM-71). Nilai lain: pending, expired, none."
+          },
+          "response": [
+            {
+              "name": "200 OK (active)",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 2,\n      \"name\": \"Andi Pratama\",\n      \"email\": \"member1@revira.test\",\n      \"phone_number\": \"081234567890\",\n      \"membership_status\": \"active\",\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"1 Bulan Reguler\",\n        \"duration_days\": 30\n      },\n      \"start_date\": \"2026-10-15\",\n      \"end_date\": \"2026-11-13\",\n      \"registered_at\": \"2026-10-01T09:00:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/members?status=active&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/members?status=active&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/members?status=active&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/members\",\n    \"per_page\": 15,\n    \"to\": 1,\n    \"total\": 1\n  }\n}"
+            },
+            {
+              "name": "422 Status tidak valid",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Status harus salah satu dari: active, pending, expired, none.\",\n  \"errors\": {\n    \"status\": [\n      \"Status harus salah satu dari: active, pending, expired, none.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Admin - daftar member (status=none)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/members?status=none",
+            "description": "Member tanpa membership atau hanya punya pengajuan rejected."
+          },
+          "response": [
+            {
+              "name": "200 OK (none)",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 5,\n      \"name\": \"Rina Wati\",\n      \"email\": \"member4@revira.test\",\n      \"phone_number\": \"081234567893\",\n      \"membership_status\": \"none\",\n      \"plan\": null,\n      \"start_date\": null,\n      \"end_date\": null,\n      \"registered_at\": \"2026-10-20T08:30:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/members?status=none&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/members?status=none&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/members?status=none&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/members\",\n    \"per_page\": 15,\n    \"to\": 1,\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Admin - daftar member (filter paket)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/members?membership_plan_id=1",
+            "description": "Filter paket pada membership terkini (paket yang tampil di kolom plan), bukan riwayat lama. Bisa digabung dengan status."
+          },
+          "response": [
+            {
+              "name": "200 OK (paket 1)",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 4,\n      \"name\": \"Ahmad Fauzi\",\n      \"email\": \"member3@revira.test\",\n      \"phone_number\": \"081234567892\",\n      \"membership_status\": \"expired\",\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"1 Bulan Reguler\",\n        \"duration_days\": 30\n      },\n      \"start_date\": \"2026-09-01\",\n      \"end_date\": \"2026-09-30\",\n      \"registered_at\": \"2026-08-28T14:00:00+08:00\"\n    },\n    {\n      \"id\": 2,\n      \"name\": \"Andi Pratama\",\n      \"email\": \"member1@revira.test\",\n      \"phone_number\": \"081234567890\",\n      \"membership_status\": \"active\",\n      \"plan\": {\n        \"id\": 1,\n        \"name\": \"1 Bulan Reguler\",\n        \"duration_days\": 30\n      },\n      \"start_date\": \"2026-10-15\",\n      \"end_date\": \"2026-11-13\",\n      \"registered_at\": \"2026-10-01T09:00:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/members?membership_plan_id=1&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/members?membership_plan_id=1&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/members?membership_plan_id=1&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/members\",\n    \"per_page\": 15,\n    \"to\": 2,\n    \"total\": 2\n  }\n}"
+            },
+            {
+              "name": "422 Paket tidak ditemukan",
+              "status": "Unprocessable Content",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"Paket membership tidak ditemukan.\",\n  \"errors\": {\n    \"membership_plan_id\": [\n      \"Paket membership tidak ditemukan.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Admin - cari member (nama/email/HP)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/admin/members?search=siti",
+            "description": "Cari teks di nama, email, atau nomor HP (mis. search=0812). % dan _ dicari apa adanya."
+          },
+          "response": [
+            {
+              "name": "200 OK (search)",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 3,\n      \"name\": \"Siti Rahmah\",\n      \"email\": \"member2@revira.test\",\n      \"phone_number\": \"081234567891\",\n      \"membership_status\": \"pending\",\n      \"plan\": {\n        \"id\": 2,\n        \"name\": \"3 Bulan Reguler\",\n        \"duration_days\": 90\n      },\n      \"start_date\": \"2026-11-05\",\n      \"end_date\": null,\n      \"registered_at\": \"2026-10-02T10:15:00+08:00\"\n    }\n  ],\n  \"links\": {\n    \"first\": \"http://localhost:8000/api/v1/admin/members?search=siti&page=1\",\n    \"last\": \"http://localhost:8000/api/v1/admin/members?search=siti&page=1\",\n    \"prev\": null,\n    \"next\": null\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"from\": 1,\n    \"last_page\": 1,\n    \"links\": [\n      {\n        \"url\": null,\n        \"label\": \"&laquo; Previous\",\n        \"active\": false\n      },\n      {\n        \"url\": \"http://localhost:8000/api/v1/admin/members?search=siti&page=1\",\n        \"label\": \"1\",\n        \"active\": true\n      },\n      {\n        \"url\": null,\n        \"label\": \"Next &raquo;\",\n        \"active\": false\n      }\n    ],\n    \"path\": \"http://localhost:8000/api/v1/admin/members\",\n    \"per_page\": 15,\n    \"to\": 1,\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
