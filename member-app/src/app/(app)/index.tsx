@@ -13,10 +13,12 @@ import { useRouter } from 'expo-router';
 import api from '../../lib/api';
 import { MOCK_PLANS, MOCK_HOURS, MembershipPlan, OperationalHour } from '../../mocks/homeData';
 import { formatRupiah } from '../../utils/formatCurrency';
+import { useAuth } from '../../context/AuthContext'; // Tambahan import useAuth
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth(); // Ambil data user untuk cek status membership
 
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [hours, setHours] = useState<OperationalHour[]>([]);
@@ -84,12 +86,9 @@ export default function HomeScreen() {
     loadData(true);
   }, []);
 
+  // Hubungkan ke halaman Apply Membership (SCRUM-74)
   const handleSelectPlan = (plan: MembershipPlan) => {
-    Alert.alert(
-      'Pilih Paket',
-      `Anda memilih paket ${plan.name}. Alur pendaftaran akan tersedia di SCRUM-74 (Sprint 3).`,
-      [{ text: 'OK' }]
-    );
+    router.push('/membership/apply' as any);
   };
 
   // State Loading Awal (Skeleton/ActivityIndicator)
@@ -188,7 +187,10 @@ export default function HomeScreen() {
                 accessibilityLabel={`Pilih paket ${plan.name}, ${formatRupiah(plan.price)}`}
                 className="bg-amber-500 min-h-[52px] rounded-xl items-center justify-center"
               >
-                <Text className="text-zinc-950 font-bold text-base">Pilih Paket</Text>
+                {/* Teks tombol dinamis berdasarkan status membership user */}
+                <Text className="text-zinc-950 font-bold text-base">
+                  {user?.membership ? 'Perpanjang Paket' : 'Pilih Paket'}
+                </Text>
               </TouchableOpacity>
             </View>
           ))

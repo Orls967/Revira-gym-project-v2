@@ -8,6 +8,19 @@ export const apiClient = axios.create({
   },
 });
 
+// Tambahan Interceptor Request untuk mendukung upload gambar (FormData)
+apiClient.interceptors.request.use(
+  (config) => {
+    // Jika body adalah FormData, hapus Content-Type agar fetch/browser
+    // otomatis mengisinya dengan boundary multipart yang benar.
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 export class ApiError extends Error {
   status: number;
 
