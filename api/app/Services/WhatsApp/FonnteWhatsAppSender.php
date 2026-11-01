@@ -48,11 +48,11 @@ class FonnteWhatsAppSender implements WhatsAppSender
             return WhatsAppResult::failure('Gagal terhubung ke gateway WhatsApp: '.Str::limit($e->getMessage(), 150));
         }
 
-        // Contoh respons gagal Fonnte memakai kunci "Status" (huruf besar) untuk token tidak valid
-        $status = $response->json('status') ?? $response->json('Status');
+        if ($response->successful() && $response->json('status') === true) {
+            // Fonnte mengembalikan id sebagai array (satu id per target)
+            $messageId = $response->json('id.0');
 
-        if ($response->successful() && $status === true) {
-            return WhatsAppResult::success();
+            return WhatsAppResult::success(is_scalar($messageId) ? (string) $messageId : null);
         }
 
         $reason = $response->json('reason') ?? $response->json('detail');

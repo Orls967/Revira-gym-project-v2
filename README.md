@@ -104,12 +104,14 @@ Semua notifikasi WhatsApp (SCRUM-84, SCRUM-79) mengirim lewat satu antarmuka `Ap
 
 Alasan: volume notifikasi gym (pengingat membership dan perubahan jadwal) masih di bawah 1.000 pesan/bulan, jadi paket Free Fonnte cukup untuk staging dan awal produksi tanpa biaya. Integrasinya juga paling sederhana (satu token). Bila volume naik, cukup naik ke paket Regular. Kebutuhan lampiran (gambar/dokumen) tidak ada, jadi paket teks saja sudah memadai.
 
+> **Sebelum produksi**: harga dan kuota di atas diambil dari situs resmi pada 1 November 2026 dan bisa berubah. Cek ulang paket Fonnte (terutama kuota paket Free) sebelum menyalakan driver `fonnte` di produksi.
+
 **Aturan nomor pengirim**: device Fonnte di-scan dengan **nomor WhatsApp khusus gym/tim yang disepakati**, bukan nomor pribadi anggota tim atau member. Token device hanya disimpan di variabel Railway, tidak di repo.
 
 **Perilaku klien** (`App\Services\WhatsApp`):
 - Nomor `08xx` / `+62xx` / `62xx` (boleh dengan spasi atau tanda hubung) dinormalisasi menjadi `62xx`. Nomor kosong atau bukan nomor seluler Indonesia langsung menghasilkan hasil gagal tanpa memanggil gateway.
-- Timeout request 10 detik. Error jaringan, HTTP error, atau `status: false` dari gateway dikembalikan sebagai `WhatsAppResult` gagal (berisi pesan error singkat), tidak melempar exception.
-- Driver `log` dipakai di lokal, CI (`phpunit.xml`), dan staging sebelum device siap.
+- Timeout request 10 detik. Error jaringan, HTTP error, atau `status: false` dari gateway dikembalikan sebagai `WhatsAppResult` gagal (berisi pesan error singkat), tidak melempar exception. Bila berhasil, `messageId` berisi ID pesan dari Fonnte untuk dicatat di `notification_logs`.
+- Driver `log` dipakai di lokal, CI (`phpunit.xml`), dan staging sebelum device siap. Di luar lingkungan `local`, nomor di log disamarkan (mis. `62812*****890`).
 
 ### Penyimpanan Persisten Bukti Transfer (SCRUM-48)
 

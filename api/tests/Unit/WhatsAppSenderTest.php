@@ -36,6 +36,7 @@ class WhatsAppSenderTest extends TestCase
         Http::fake([
             FonnteWhatsAppSender::ENDPOINT => Http::response([
                 'detail' => 'success! message in queue',
+                'id' => ['80367170'],
                 'process' => 'pending',
                 'status' => true,
                 'target' => ['6281234567890'],
@@ -46,6 +47,7 @@ class WhatsAppSenderTest extends TestCase
 
         $this->assertTrue($result->successful);
         $this->assertNull($result->error);
+        $this->assertSame('80367170', $result->messageId);
 
         Http::assertSent(function (Request $request) {
             return $request->url() === FonnteWhatsAppSender::ENDPOINT
@@ -72,7 +74,7 @@ class WhatsAppSenderTest extends TestCase
     }
 
     /**
-     * Respons token tidak valid memakai kunci "Status" huruf besar dan tetap dibaca sebagai gagal.
+     * Respons token tidak valid (kunci "Status" huruf besar) tetap dibaca sebagai gagal karena "status" tidak bernilai true.
      */
     public function test_fonnte_invalid_token_returns_failed_result(): void
     {
@@ -144,9 +146,9 @@ class WhatsAppSenderTest extends TestCase
     }
 
     /**
-     * Driver log menulis pesan ke log dan tidak memanggil HTTP sama sekali.
+     * Driver log menulis pesan ke log dengan nomor disamarkan (di luar lokal) dan tidak memanggil HTTP sama sekali.
      */
-    public function test_log_driver_writes_log_without_http(): void
+    public function test_log_driver_writes_masked_log_without_http(): void
     {
         Http::fake();
         Log::spy();
@@ -154,9 +156,25 @@ class WhatsAppSenderTest extends TestCase
         $result = (new LogWhatsAppSender)->send('+62 812 3456 7890', 'Halo');
 
         $this->assertTrue($result->successful);
+        $this->assertNull($result->messageId);
         Http::assertNothingSent();
         Log::shouldHaveReceived('info')->once()->withArgs(
-            fn (string $message, array $context) => $context === ['phone' => '6281234567890', 'message' => 'Halo']
+            fn (string $message, array $context) => $context === ['phone' => '62812*****890', 'message' => 'Halo']
+        );
+    }
+
+    /**
+     * Di lingkungan lokal nomor ditulis lengkap agar mudah dicek developer.
+     */
+    public function test_log_driver_writes_full_phone_in_local(): void
+    {
+        $this->app['env'] = 'local';
+        Log::spy();
+
+        (new LogWhatsAppSender)->send('081234567890', 'Halo');
+
+        Log::shouldHaveReceived('info')->once()->withArgs(
+            fn (string $message, array $context) => $context['phone'] === '6281234567890'
         );
     }
 
