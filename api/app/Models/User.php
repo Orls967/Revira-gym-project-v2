@@ -7,8 +7,10 @@ use App\Enums\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -35,6 +37,39 @@ class User extends Authenticatable
     public function memberships(): HasMany
     {
         return $this->hasMany(Membership::class);
+    }
+
+    /**
+     * Membership yang berlaku hari ini (aturan B6, SCRUM-71); bila ada dua, yang end_date-nya paling akhir.
+     */
+    public function currentActiveMembership(): HasOne
+    {
+        return $this->hasOne(Membership::class)->ofMany(
+            ['end_date' => 'max', 'id' => 'max'],
+            fn (Builder $query) => $query->activeOn(today()),
+        );
+    }
+
+    /**
+     * Membership menunggu terbaru: pengajuan pending atau membership active yang belum mulai.
+     */
+    public function awaitingMembership(): HasOne
+    {
+        return $this->hasOne(Membership::class)->ofMany(
+            ['id' => 'max'],
+            fn (Builder $query) => $query->awaiting(),
+        );
+    }
+
+    /**
+     * Membership kedaluwarsa dengan end_date paling akhir.
+     */
+    public function lapsedMembership(): HasOne
+    {
+        return $this->hasOne(Membership::class)->ofMany(
+            ['end_date' => 'max', 'id' => 'max'],
+            fn (Builder $query) => $query->lapsed(),
+        );
     }
 
     /**

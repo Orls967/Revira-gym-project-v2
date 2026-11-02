@@ -1,0 +1,131 @@
+adminMembers:
+  get:
+    operationId: getAdminMembers
+    tags: [Members]
+    summary: Daftar member dengan status membership terkini
+    description: |
+      Daftar akun ber-role member untuk halaman daftar member Admin Web (US-13, SCRUM-68). Hanya untuk peran admin.
+      Diurutkan berdasarkan nama (`name` asc, lalu `id` asc). Paginasi tetap 15 data per halaman.
+
+      **Status terkini (`membership_status`, aturan B11 SCRUM-104)** dengan prioritas `active` > `pending` > `expired` > `none`:
+      - `active`: punya membership `status=active` dengan `start_date <= hari ini <= end_date` (WITA, aturan B6 / SCRUM-71).
+      - `pending`: punya pengajuan yang menunggu verifikasi, atau membership yang sudah disetujui tetapi `start_date`-nya belum tiba.
+      - `expired`: punya membership `status=expired`, atau `status=active` dengan `end_date` sudah lewat.
+      - `none`: belum pernah mengajukan, atau hanya punya pengajuan `rejected`.
+
+      Contoh: member aktif yang sedang mengajukan perpanjangan tetap `active`; member expired yang mengajukan lagi menjadi `pending`.
+
+      `plan`, `start_date`, dan `end_date` diambil dari membership yang menentukan status tersebut
+      (semuanya `null` untuk `none`; `start_date` dan `end_date` bisa `null` pada pengajuan pending).
+      Filter `status` dan `membership_plan_id` dijalankan di database, jadi `meta.total` dan paginasi sesuai hasil filter.
+    parameters:
+      - name: status
+        in: query
+        required: false
+        description: Filter status membership terkini. Tanpa parameter (atau kosong) menampilkan semua status.
+        schema:
+          type: string
+          enum: [active, pending, expired, none]
+      - name: membership_plan_id
+        in: query
+        required: false
+        description: |
+          Filter paket pada membership terkini (paket yang tampil di kolom `plan`), bukan paket lama di riwayat.
+          Bila digabung dengan `status=none`, hasilnya selalu kosong.
+        schema:
+          type: integer
+          minimum: 1
+      - name: search
+        in: query
+        required: false
+        description: Cari teks yang terkandung di nama, email, atau nomor HP. `%` dan `_` dicari apa adanya.
+        schema:
+          type: string
+          maxLength: 100
+      - $ref: ../components/parameters.yaml#/Page
+    responses:
+      '200':
+        description: Daftar member berhasil diambil dengan format paginasi Laravel.
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AdminMemberListResponse
+            examples:
+              allMembers:
+                summary: Contoh daftar member dengan berbagai status
+                value:
+                  data:
+                    - id: 2
+                      name: Andi Pratama
+                      email: member1@revira.test
+                      phone_number: '081234567890'
+                      membership_status: active
+                      plan:
+                        id: 1
+                        name: 1 Bulan Reguler
+                        duration_days: 30
+                      start_date: '2026-10-15'
+                      end_date: '2026-11-13'
+                      registered_at: '2026-10-01T09:00:00+08:00'
+                    - id: 3
+                      name: Siti Rahmah
+                      email: member2@revira.test
+                      phone_number: '081234567891'
+                      membership_status: pending
+                      plan:
+                        id: 2
+                        name: 3 Bulan Reguler
+                        duration_days: 90
+                      start_date: '2026-11-05'
+                      end_date: null
+                      registered_at: '2026-10-02T10:15:00+08:00'
+                    - id: 4
+                      name: Ahmad Fauzi
+                      email: member3@revira.test
+                      phone_number: '081234567892'
+                      membership_status: expired
+                      plan:
+                        id: 1
+                        name: 1 Bulan Reguler
+                        duration_days: 30
+                      start_date: '2026-09-01'
+                      end_date: '2026-09-30'
+                      registered_at: '2026-08-28T14:00:00+08:00'
+                    - id: 5
+                      name: Rina Wati
+                      email: member4@revira.test
+                      phone_number: '081234567893'
+                      membership_status: none
+                      plan: null
+                      start_date: null
+                      end_date: null
+                      registered_at: '2026-10-20T08:30:00+08:00'
+                  links:
+                    first: http://localhost:8000/api/v1/admin/members?page=1
+                    last: http://localhost:8000/api/v1/admin/members?page=1
+                    prev: null
+                    next: null
+                  meta:
+                    current_page: 1
+                    from: 1
+                    last_page: 1
+                    links:
+                      - url: null
+                        label: '&laquo; Previous'
+                        active: false
+                      - url: http://localhost:8000/api/v1/admin/members?page=1
+                        label: '1'
+                        active: true
+                      - url: null
+                        label: 'Next &raquo;'
+                        active: false
+                    path: http://localhost:8000/api/v1/admin/members
+                    per_page: 15
+                    to: 4
+                    total: 4
+      '401':
+        $ref: ../components/responses.yaml#/Unauthorized
+      '403':
+        $ref: ../components/responses.yaml#/Forbidden
+      '422':
+        $ref: ../components/responses.yaml#/MemberListValidationError

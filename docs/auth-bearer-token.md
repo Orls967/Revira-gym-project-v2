@@ -591,6 +591,41 @@ Kode status respons:
 | 403 | Login sebagai non-admin (mis. role member) | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
 | 422 | Query tidak valid (mis. `status` selain pending/verified/rejected atau `page` bukan integer positif) | `{ "message": "...", "errors": { ... } }` |
 
+## Daftar member (admin, SCRUM-68)
+
+Data halaman daftar member Admin Web (US-13). Dilindungi `auth:sanctum` + `role:admin` (tamu 401, member 403). Kontrak lengkap di `api/docs/openapi/paths/members.yaml`.
+
+| Method | Endpoint | Respons sukses |
+|--------|----------|----------------|
+| GET    | `/api/v1/admin/members` | 200, paginasi Laravel `{ "data": [...], "links": {...}, "meta": {...} }`, 15 per halaman, urut nama |
+
+Query string (semua opsional, bisa digabung):
+
+| Parameter | Tipe | Keterangan |
+|-----------|------|------------|
+| `status` | string | Status membership terkini: `active`, `pending`, `expired`, atau `none`. Kosong = semua. |
+| `membership_plan_id` | integer | Paket pada membership terkini (paket yang tampil di kolom `plan`). ID tidak ada di `membership_plans` menghasilkan 422. |
+| `search` | string | Teks yang terkandung di nama, email, atau nomor HP (maks 100 karakter). |
+| `page` | integer | Nomor halaman (minimal 1). |
+
+`membership_status` mengikuti B11 (SCRUM-104), prioritas `active` > `pending` > `expired` > `none`:
+
+- `active`: ada membership yang berlaku hari ini (`status=active`, `start_date <= hari ini <= end_date`, aturan B6 / SCRUM-71).
+- `pending`: ada pengajuan yang menunggu verifikasi, atau membership yang sudah disetujui tetapi belum mulai.
+- `expired`: ada membership `expired`, atau `active` yang `end_date`-nya sudah lewat.
+- `none`: tidak punya membership, atau hanya punya pengajuan `rejected`.
+
+Item: `id`, `name`, `email`, `phone_number`, `membership_status`, `plan` (`{ id, name, duration_days }` atau `null`), `start_date`, `end_date`, `registered_at` (waktu akun dibuat, ISO 8601 `+08:00`). `plan` dan tanggal diambil dari membership yang menentukan status, dan bernilai `null` untuk `none` (`end_date` juga `null` pada pengajuan pending).
+
+| Status | Kapan | Body |
+|--------|-------|------|
+| 200 | Sukses | Paginasi daftar member |
+| 401 | Token tidak ada, salah, atau sudah dicabut | `{ "message": "Unauthenticated." }` |
+| 403 | Login sebagai non-admin | `{ "message": "Anda tidak memiliki akses ke sumber daya ini." }` |
+| 422 | `status` di luar daftar, `membership_plan_id` tidak ditemukan, `search` > 100 karakter, atau `page` bukan integer positif | `{ "message": "...", "errors": { ... } }` |
+
+Untuk backend lain: query ada di `App\Services\Members\MemberListing`. Scope `Membership::awaiting()` dan `Membership::lapsed()` serta relasi `User::currentActiveMembership()`, `awaitingMembership()`, `lapsedMembership()` bisa dipakai ulang.
+
 ## Pengajuan membership (member, SCRUM-69)
 
 Endpoint pengajuan membership baru atau perpanjangan oleh member. Dilindungi oleh `auth:sanctum` + `role:member` dan rate limiter `throttle:10,1` (maksimal 10 request per menit per user).
