@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\BookingConflictException;
+use App\Exceptions\TransactionConflictException;
 use App\Http\Middleware\EnsureRole;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Kesalahan wajar dari sisi user (mis. booking ganda 409), bukan error server; tidak dicatat ke laravel.log
         $exceptions->dontReport([
             BookingConflictException::class,
+            TransactionConflictException::class,
         ]);
 
         // Memastikan request api/* selalu menerima respons error berformat JSON
