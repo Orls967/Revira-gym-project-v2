@@ -610,10 +610,12 @@ Query string (semua opsional, bisa digabung):
 
 `membership_status` mengikuti B11 (SCRUM-104), prioritas `active` > `pending` > `expired` > `none`:
 
-- `active`: ada membership yang berlaku hari ini (`status=active`, `start_date <= hari ini <= end_date`, aturan B6 / SCRUM-71).
-- `pending`: ada pengajuan yang menunggu verifikasi, atau membership yang sudah disetujui tetapi belum mulai.
+- `active`: ada membership yang berlaku hari ini (`status=active`, `start_date <= hari ini <= end_date`, definisi "member aktif" B6 SCRUM-25).
+- `pending`: ada pengajuan `status=pending` yang menunggu verifikasi admin.
 - `expired`: ada membership `expired`, atau `active` yang `end_date`-nya sudah lewat.
 - `none`: tidak punya membership, atau hanya punya pengajuan `rejected`.
+
+Membership yang sudah disetujui tetapi belum mulai (`upcoming` di `/me`) tidak dihitung di status mana pun, karena B11 tidak mengaturnya dan member tersebut tidak lagi menunggu verifikasi. Member seperti itu tampil `expired` bila punya riwayat yang sudah habis, selain itu `none`.
 
 Item: `id`, `name`, `email`, `phone_number`, `membership_status`, `plan` (`{ id, name, duration_days }` atau `null`), `start_date`, `end_date`, `registered_at` (waktu akun dibuat, ISO 8601 `+08:00`). `plan` dan tanggal diambil dari membership yang menentukan status, dan bernilai `null` untuk `none` (`end_date` juga `null` pada pengajuan pending).
 

@@ -3446,7 +3446,7 @@
               ]
             },
             "url": "{{baseUrl}}/admin/members?status=active",
-            "description": "Filter status dijalankan di database: hanya member dengan membership yang berlaku hari ini (B6/SCRUM-71). Nilai lain: pending, expired, none."
+            "description": "Filter status dijalankan di database: hanya member dengan membership yang berlaku hari ini (B6 SCRUM-25). Nilai lain: pending (pengajuan menunggu verifikasi), expired, none."
           },
           "response": [
             {
