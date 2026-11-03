@@ -40,7 +40,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Membership yang berlaku hari ini (aturan B6, SCRUM-71); bila ada dua, yang end_date-nya paling akhir.
+     * Membership yang berlaku hari ini (aturan B6 SCRUM-25, diimplementasikan di SCRUM-71); bila ada dua, yang end_date-nya paling akhir.
      */
     public function currentActiveMembership(): HasOne
     {
@@ -51,7 +51,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Membership menunggu terbaru: pengajuan pending atau membership active yang belum mulai.
+     * Pengajuan terbaru yang menunggu verifikasi (status pending).
      */
     public function awaitingMembership(): HasOne
     {
