@@ -8,7 +8,7 @@ import {
   AppState,
   AppStateStatus,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "@/lib/api";
@@ -56,6 +56,7 @@ const groupSchedulesByDay = (items: ClassSchedule[]): ScheduleSection[] => {
 };
 
 export default function ClassSchedulesScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [schedules, setSchedules] = useState<ClassSchedule[]>(MOCK_SCHEDULES);
   const [refreshing, setRefreshing] = useState(false);
@@ -177,7 +178,14 @@ export default function ClassSchedulesScreen() {
           const isFull = item.current_participants >= item.max_participants;
 
           return (
-            <View
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() =>
+                router.push({
+                  pathname: `/schedule/${item.id}`,
+                  params: { scheduleData: JSON.stringify(item) },
+                } as any)
+              }
               className={`p-4 mb-3 rounded-2xl border ${
                 isCancelled
                   ? "bg-red-950/20 border-red-900/40"
@@ -254,7 +262,7 @@ export default function ClassSchedulesScreen() {
                   </Text>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }}
       />
