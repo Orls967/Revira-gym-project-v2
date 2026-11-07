@@ -6,9 +6,20 @@ import {
   getUserData,
   saveUserData,
   clearUserData,
-  UserData,
+  UserData as BaseUserData, // Ubah nama impor agar bisa di-extend
 } from "@/lib/auth";
 import { apiClient, registerUnauthorizedHandler, ApiError } from "@/lib/api";
+
+// 1. Extend tipe UserData untuk menambahkan membership agar garis merah hilang
+export interface UserData extends BaseUserData {
+  phone?: string;
+  membership?: {
+    id: number;
+    status: string;
+    start_date?: string;
+    end_date?: string;
+  } | null;
+}
 
 interface AuthContextType {
   isLoading: boolean;
@@ -16,6 +27,7 @@ interface AuthContextType {
   user: UserData | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>; // 2. Tambahkan refreshUser ke Context
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (storedToken) {
           setUserToken(storedToken);
-          setUser(storedUser);
+          setUser(storedUser as UserData); // Casting ke tipe yang sudah di-extend
         }
       } catch {
         // Abaikan error pembacaan storage awal
@@ -54,42 +66,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const login = async (email: string, password: string) => {
-    // Sesuai Kontrak SCRUM-41: POST /api/v1/login dengan device_name: "mobile"
-    // ✅ SINTAKS AXIOS (Benar):
-  const result = await apiClient.post("/api/v1/login", {
-    email,
-    password,
-    device_name: "mobile",
-  });
+    const result = await apiClient.post("/api/v1/login", {
+      email,
+      password,
+      device_name: "mobile",
+    });
 
-  const token = result.data?.token || result.data?.data?.token;
-  const profile = result.data?.user || result.data?.data?.user;
+    const token = result.data?.token || result.data?.data?.token;
+    const profile = result.data?.user || result.data?.data?.user;
 
-  if (!token) {
-    throw new ApiError(500, "Format data respon tidak memiliki token.");
-  }
+    if (!token) {
+      throw new ApiError(500, "Format data respon tidak memiliki token.");
+    }
 
     await saveToken(token);
     if (profile) {
       await saveUserData(profile);
-      setUser(profile);
+      setUser(profile as UserData);
     }
     setUserToken(token);
   };
 
   const logout = async () => {
     try {
-      // POST /api/v1/logout ke backend
       await apiClient("api/v1/logout", {
         method: "POST",
       });
     } catch {
-      // Jika jaringan gagal, logout lokal tetap dieksekusi sesuai AC
+      // Jika jaringan gagal, logout lokal tetap dieksekusi
     } finally {
       await clearToken();
       await clearUserData();
       setUserToken(null);
       setUser(null);
+    }
+  };
+
+  // 3. Implementasi refreshUser untuk mengambil ulang data /me dari API
+  const refreshUser = async () => {
+    try {
+      const result = await apiClient.get("/api/v1/me");
+      const profile = result.data?.data || result.data;
+      if (profile) {
+        await saveUserData(profile);
+        setUser(profile as UserData);
+      }
+    } catch (error) {
+      console.error("Gagal merefresh data user:", error);
     }
   };
 
@@ -101,6 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         user,
         login,
         logout,
+        refreshUser, // Expose fungsi refreshUser agar bisa dipakai di apply.tsx
       }}
     >
       {children}

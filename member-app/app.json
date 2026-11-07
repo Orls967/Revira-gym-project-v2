@@ -34,7 +34,15 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Aplikasi membutuhkan akses ke galeri foto untuk mengunggah bukti transfer pembayaran.",
+          "cameraPermission": "Aplikasi membutuhkan akses ke kamera untuk mengambil foto bukti transfer pembayaran."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
