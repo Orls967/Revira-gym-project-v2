@@ -3,7 +3,9 @@
 - **Tanggal Penyusunan**: 19 Oktober 2026
 - **Tanggal Eksekusi**: Belum diisi
 - **Branch**: `feature/SCRUM-107-qa-sprint-3-test-cases`
-- **Dev SHA yang Diuji**: `b203b3a` (origin/dev yang di-merge)
+- **SHA Target Pengujian**: `ef092903249c6f9a87edce648f8220473bbf0b67` (snapshot `origin/dev` untuk acuan kontrak; deployment harus dikonfirmasi sebelum eksekusi)
+- **SHA yang Benar-benar Telah Diuji**: Belum diisi; belum ada hasil eksekusi yang dicatat.
+- **Basis Branch Dokumen**: `b203b3a` (dev yang sebelumnya di-merge; bukan bukti pengujian).
 - **Staging API URL**: https://revira-gym-project-production.up.railway.app/api/v1
 - **Sumber Requirement**: Jira (https://orlandosss.atlassian.net) — diekstrak 19 Oktober 2026
 - **Cakupan Tiket**: SCRUM-103, SCRUM-24, SCRUM-25, SCRUM-104, SCRUM-105, SCRUM-26, SCRUM-27, SCRUM-31
@@ -21,7 +23,7 @@
 | Tiket | Judul Singkat | AC | TC yang Mencakup |
 |-------|---------------|----|-----------------|
 | SCRUM-103 | API Pengajuan Membership & Upload Bukti | AC1–AC4 | TC3-01, TC3-01b, TC3-02–TC3-09 (10 TC) |
-| SCRUM-24 | API List Transaksi & Approve/Reject | AC1–AC4 | TC3-10–TC3-16, TC3-15b, TC3-15c, TC3-16b (10 TC) |
+| SCRUM-24 | API List Transaksi & Approve/Reject | AC1–AC4 | TC3-10–TC3-16, TC3-15b, TC3-15c, TC3-16b, TC3-16c, TC3-16d (12 TC) |
 | SCRUM-25 | API Booking, Validasi Member Aktif & Cancel | AC1–AC4 | TC3-17–TC3-23, TC3-17b, TC3-19b, TC3-20b, TC3-21b, TC3-21c, TC3-23b (13 TC) |
 | SCRUM-104 | Daftar & Filter Member: API + Admin Web | AC1–AC3 | TC3-24–TC3-27, TC3-25b, TC3-25c, TC3-25d (7 TC) |
 | SCRUM-105 | UI Pendaftaran & Upload Bukti (Mobile) | AC1–AC5 | TC3-28–TC3-32, TC3-31b (6 TC) |
@@ -29,7 +31,9 @@
 | SCRUM-27 | Admin Web FE Verifikasi & Cancel Kelas | AC1–AC3 | TC3-38, TC3-38b, TC3-39, TC3-40 (4 TC) |
 | SCRUM-31 | WA Smart Button CTA & Optimasi Mobile | AC1–AC3 | TC3-41–TC3-43 (3 TC) |
 
-**Total Test Case: 60**
+**Total Test Case: 62**
+
+Status rencana: **49 Belum** dan **13 Menunggu deploy staging** (TC3-17 sampai TC3-23b beserta suffix terkait). Belum ada hasil eksekusi Lulus/Gagal yang dicatat.
 
 ---
 
@@ -55,15 +59,23 @@ Catatan: endpoint GET `/api/v1/admin/members` (SCRUM-104) masih perlu deploy/ver
 
 ## Data Uji
 
-Akun seed:
-- admin@revira.test
-- member1@revira.test
-- member2@revira.test
-- member3@revira.test
-- member4@revira.test
-- member5@revira.test
+Kondisi berikut berdasarkan `api/database/seeders/MembershipSeeder.php` dan `api/database/seeders/TransactionSeeder.php` pada branch dokumen (commit `3963228`); paket mengacu ke `api/database/seeders/MembershipPlanSeeder.php`. **H** adalah tanggal seeding dalam WITA (`Asia/Makassar`, awal hari), bukan tanggal penyusunan atau eksekusi QA. H−n/H+n berarti n hari sebelum/sesudah H. Periode ditulis sesuai nilai seeder, bukan diubah menjadi tanggal tetap.
 
-Kondisi awal akun mengikuti MembershipSeeder/TransactionSeeder. Password minta ke Orlando lewat chat pribadi.
+| Akun | Membership (record_type, status, paket) | start_date | end_date | Transaksi (verification_status, payment_method) |
+|------|---------------------------------------|------------|----------|------------------------------------------------|
+| admin@revira.test | Tidak dibuatkan membership oleh seeder | Tidak ditetapkan | Tidak ditetapkan | Tidak dibuatkan transaksi milik admin; admin digunakan sebagai verifier |
+| member1@revira.test | `registration`, `active`, Bulanan | H−27 | H+3 | `verified`, `transfer` |
+| member2@revira.test | `registration`, `pending`, Bulanan | `null` | `null` | `pending`, `transfer` |
+| member3@revira.test | `registration`, `expired`, Bulanan | H−60 | H−30 | `verified`, `on_the_spot` |
+| member3@revira.test | `extension`, `rejected`, Triwulan | `null` | `null` | `rejected`, `transfer` |
+| member4@revira.test | `registration`, `active`, Bulanan | H−5 | H+25 | `verified`, `transfer` |
+| member5@revira.test | `registration`, `active`, Bulanan | H−10 | H+20 | `verified`, `transfer` |
+
+Perbedaan pada snapshot target `origin/dev` (`ef092903249c6f9a87edce648f8220473bbf0b67`): kedua seeder menambahkan membership `extension` Bulanan untuk member4 berstatus `pending`, `start_date = H+26`, `end_date = null`, dengan transaksi `pending`, `on_the_spot`, dan `receipt_image = null`. Baris tambahan ini belum ada pada seeder branch dokumen; jangan menyamakan kedua snapshot.
+
+Catatan data: nilai `null` berarti seeder memang tidak mengisi tanggal; tanggal akhir pengajuan pending/rejected tidak boleh diperkirakan sebagai nilai tersimpan. Rentang Bulanan yang terisi di atas mencakup 31 tanggal secara inklusif, sesuai seeder, berbeda dari rumus approve `start_date + duration_days − 1`. Member2 dengan tanggal awal `null` memerlukan fixture bertanggal untuk memenuhi prasyarat TC3-13/TC3-14. Tabel ini menjelaskan data seed, bukan hasil verifikasi DB staging; `updateOrCreate` tidak menghapus record tambahan yang sudah ada.
+
+Password minta ke Orlando lewat chat pribadi.
 
 Bukti transfer dummy: `api/database/seeders/assets/dummy_transfer_pending.jpg`. File ini digunakan sebagai bukti transfer dummy; foto bukti pembayaran nyata dilarang digunakan.
 
@@ -107,8 +119,10 @@ Jadwal kelas mengikuti ClassScheduleSeeder.
 | **TC3-15** | SCRUM-24 · AC3 · B5 | Admin login. Ada transaksi `pending`. | POST `/api/v1/admin/transactions/{transaction}/reject` dengan `{reject_reason: "Bukti transfer tidak jelas"}`. | 200 OK. Transaksi dan membership berstatus `rejected`; `reject_reason` tersimpan. | API | Belum | B5: reject flow dengan alasan. |
 | **TC3-15b** | SCRUM-24 · AC3 · B5 | Admin login. Ada transaksi `pending`. | POST `/api/v1/admin/transactions/{transaction}/reject` tanpa `reject_reason` (field tidak ada atau kosong). | 422 Unprocessable Content. Pesan: "Alasan penolakan wajib diisi." | API | Belum | B5: alasan wajib. |
 | **TC3-15c** | SCRUM-24 · B5 | Prasyarat: TC3-15 telah Lulus dan transaksi/membership terkait berstatus rejected. Member mengajukan membership baru sebagai baris baru. | 1. Member POST pengajuan membership baru (baris baru) ke `/api/v1/member/memberships` dengan data valid. | 201 Created. Membership baru terbuat (baris baru, bukan update baris lama). `record_type` sesuai B1. | API | Belum | B5: "member boleh mengajukan ulang (baris baru)" setelah reject |
-| **TC3-16** | SCRUM-24 · B4 · B5 | Ada transaksi yang sudah `verified` atau `rejected`, serta transaksi `pending` yang periode membership-nya overlap dengan masa aktif. | 1. POST approve/reject transaksi yang sudah diproses melalui `/api/v1/admin/transactions/{transaction}/approve` atau `/reject`. 2. POST approve transaksi pending yang overlap melalui `/api/v1/admin/transactions/{transaction}/approve`. | Pemrosesan ulang ditolak dengan 409 Conflict dan pesan "Transaksi ini sudah diproses (status: ...)." Approve transaksi yang overlap ditolak dengan 409 Conflict. | API | Belum | B4 dan B5: proses ulang ditolak; overlap saat approve menghasilkan 409. |
+| **TC3-16** | SCRUM-24 · B4 · B5 | Admin login. Tersedia transaksi `verified` dan `rejected`, serta fixture khusus transaksi `pending` dengan membership `pending` yang periode efektif saat approve bertabrakan dengan membership `active` lain milik member yang sama. Akses DB/backend tersedia untuk membandingkan data. | 1. Catat data transaksi dan membership sebelum setiap request, termasuk status, `start_date`, `end_date`, `verified_by`, `verified_at`, dan `reject_reason`. 2. POST `/api/v1/admin/transactions/{transaction}/approve` dan `/reject` masing-masing pada transaksi `verified` dan `rejected` (empat kombinasi); setiap reject memakai `{reject_reason: "Uji konflik transaksi"}` yang valid. 3. POST approve pada fixture pending yang overlap. 4. Bandingkan data tersimpan setelah setiap request dengan catatan awal. | Semua request menghasilkan 409 Conflict. Transaksi `verified`: "Transaksi ini sudah disetujui sebelumnya." Transaksi `rejected`: "Transaksi ini sudah ditolak sebelumnya." Approve overlap: "Periode membership bertabrakan dengan masa aktif lain milik member ini." Body berisi `message` sesuai kondisi. Data transaksi dan membership tidak berubah, termasuk status, tanggal, serta metadata verifikasi/alasan; fixture overlap tetap pending. | API | Belum | Kontrak SCRUM-67 pada `origin/dev`: `TransactionConflictException`, `TransactionVerificationService`, dan `AdminTransactionDecisionTest`. Verifikasi data tersimpan wajib; respons saja tidak membuktikan data tidak berubah. |
 | **TC3-16b** | SCRUM-24 · B5 | Admin login. Ada transaksi `pending`. | POST `/api/v1/admin/transactions/{transaction}/reject` dengan `reject_reason` sepanjang 256 karakter. | 422 Unprocessable Content. Pesan: "Alasan penolakan maksimal 255 karakter." | API | Belum | B5: validasi maksimal 255 karakter. |
+| **TC3-16c** | SCRUM-24 · AC2 · B4 | Admin login. Fixture khusus (bukan seed normal): transaksi `pending` terhubung ke membership `active` dengan tanggal awal/akhir terisi. `verified_by`, `verified_at`, dan `reject_reason` transaksi `null`. Akses DB/backend tersedia. | 1. Catat status transaksi/membership, `start_date`, `end_date`, `verified_by`, `verified_at`, dan `reject_reason`. 2. POST `/api/v1/admin/transactions/{transaction}/approve`. 3. Bandingkan seluruh field tersebut pada data tersimpan sebelum/sesudah request. | 409 Conflict dengan body `{"message":"Membership ini sudah aktif."}`. Transaksi tetap `pending`, membership tetap `active`; tanggal membership tidak berubah; `verified_by`, `verified_at`, dan `reject_reason` tetap `null`. | API | Belum | Fixture tidak konsisten disengaja untuk menguji guard status membership SCRUM-67; transaksi harus pending agar tidak berhenti pada konflik transaksi. |
+| **TC3-16d** | SCRUM-24 · AC3 · B5 | Admin login. Fixture khusus (bukan seed normal): transaksi `pending` terhubung ke membership `rejected`, `start_date` terisi dan `end_date = null`. `verified_by`, `verified_at`, dan `reject_reason` transaksi `null`. Akses DB/backend tersedia. | 1. Catat status transaksi/membership, `start_date`, `end_date`, `verified_by`, `verified_at`, dan `reject_reason`. 2. POST `/api/v1/admin/transactions/{transaction}/reject` dengan `{reject_reason: "Uji konflik membership"}` yang valid. 3. Bandingkan seluruh field tersebut pada data tersimpan sebelum/sesudah request. | 409 Conflict dengan body `{"message":"Membership ini sudah ditolak."}`. Transaksi tetap `pending`, membership tetap `rejected`; tanggal awal tidak berubah dan tanggal akhir tetap `null`; `verified_by`, `verified_at`, dan `reject_reason` tetap `null`, alasan baru tidak tersimpan. | API | Belum | Fixture tidak konsisten disengaja untuk menguji guard status membership SCRUM-67; alasan valid menghindari kegagalan validasi 422. |
 
 ---
 
@@ -217,8 +231,8 @@ Aturan tindak lanjut:
 | SCRUM-103 | AC3 | TC3-06, TC3-07, TC3-08 |
 | SCRUM-103 | AC4 | TC3-09 |
 | SCRUM-24 | AC1 | TC3-10 |
-| SCRUM-24 | AC2 | TC3-13, TC3-14 |
-| SCRUM-24 | AC3 | TC3-15, TC3-15b, TC3-16b |
+| SCRUM-24 | AC2 | TC3-13, TC3-14, TC3-16c |
+| SCRUM-24 | AC3 | TC3-15, TC3-15b, TC3-16b, TC3-16d |
 | SCRUM-24 | AC4 | TC3-11, TC3-12 |
 | SCRUM-25 | AC1 | TC3-17, TC3-18, TC3-19 |
 | SCRUM-25 | AC2 | TC3-20, TC3-20b |
@@ -253,8 +267,8 @@ Aturan tindak lanjut:
 | **B1** | record_type registration vs extension; satu transaksi DB untuk memberships + transactions | SCRUM-103 | TC3-01, TC3-01b |
 | **B2** | Pengajuan ditolak 422 bila member masih punya membership pending | SCRUM-103 | TC3-06 |
 | **B3** | start_date minimal hari ini; tidak overlap dengan membership active | SCRUM-103 | TC3-07, TC3-08 |
-| **B4** | Approve: verified, verified_by, verified_at, membership active, end_date; start_date lampau digeser; transaksi yang sudah diputuskan tidak diproses ulang | SCRUM-24 | TC3-13, TC3-14, TC3-16, TC3-38 |
-| **B5** | Reject: alasan wajib (maks 255 kar), membership/transaksi rejected; pengajuan ulang dengan baris baru; transaksi yang sudah diputuskan tidak diproses ulang | SCRUM-24 | TC3-15, TC3-15b, TC3-15c, TC3-16, TC3-16b, TC3-38b |
+| **B4** | Approve: verified, verified_by, verified_at, membership active, end_date; start_date lampau digeser; transaksi yang sudah diputuskan tidak diproses ulang | SCRUM-24 | TC3-13, TC3-14, TC3-16, TC3-16c, TC3-38 |
+| **B5** | Reject: alasan wajib (maks 255 kar), membership/transaksi rejected; pengajuan ulang dengan baris baru; transaksi yang sudah diputuskan tidak diproses ulang | SCRUM-24 | TC3-15, TC3-15b, TC3-15c, TC3-16, TC3-16b, TC3-16d, TC3-38b |
 | **B6** | Definisi member aktif (start_date ≤ hari ini ≤ end_date WITA); boleh 2 active tidak overlap | SCRUM-25 | TC3-17, TC3-17b, TC3-18, TC3-33, TC3-34 |
 | **B7** | Booking hanya member aktif pada tanggal sesi; sesi scheduled belum dimulai; tanpa batas kapasitas; rebook aktifkan baris lama | SCRUM-25 | TC3-17, TC3-19, TC3-19b, TC3-33 |
 | **B8** | Batal booking milik sendiri hanya sampai sesi dimulai; tidak bisa batal setelah sesi mulai atau booking milik member lain | SCRUM-25 | TC3-21, TC3-21b, TC3-21c, TC3-36 |
@@ -284,9 +298,9 @@ Aturan tindak lanjut:
 
 ## Tindak Lanjut
 
-1. **Lengkapi metadata perangkat Android** sebelum eksekusi; Dev SHA dan Staging URL sudah dicantumkan.
+1. **Lengkapi metadata perangkat Android** sebelum eksekusi; konfirmasi SHA yang ter-deploy terhadap SHA target, lalu isi SHA yang benar-benar diuji dan tanggal eksekusi saat pengujian dilakukan. Staging URL sudah dicantumkan.
 2. **Gunakan kontrak SCRUM-24** pada Endpoint Table dan test case untuk list transaksi, approve, dan reject.
-3. **Eksekusi TC3-01 s/d TC3-27 beserta seluruh suffix (b/c) pada bagian API**: Lakukan setelah endpoint SCRUM-103, SCRUM-24, SCRUM-25, SCRUM-104 selesai di-implement dan ter-deploy (lokal atau staging).
+3. **Eksekusi TC3-01 s/d TC3-27 beserta seluruh suffix (b/c/d) pada bagian API**: Lakukan setelah endpoint SCRUM-103, SCRUM-24, SCRUM-25, SCRUM-104 selesai di-implement dan ter-deploy (lokal atau staging).
 4. **Eksekusi TC3-28 s/d TC3-37b (Mobile)**: Lakukan setelah UI SCRUM-105 dan SCRUM-26 selesai di HP Android nyata.
 5. **Eksekusi TC3-38 s/d TC3-40 (Admin Web)**: Lakukan setelah UI SCRUM-27 selesai dan dapat diakses di browser.
 6. **Eksekusi TC3-41 s/d TC3-43 (WA Button)**: Lakukan setelah SCRUM-31 selesai, minimal pada 2 HP Android nyata dan 2 versi Android.
