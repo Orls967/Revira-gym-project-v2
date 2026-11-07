@@ -8,3 +8,4 @@ node_modules/
 .claude/
 api-docs.html
 openapi.bundled.yaml
+.env
