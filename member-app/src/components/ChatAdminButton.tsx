@@ -1,5 +1,6 @@
 import React from "react";
 import { Alert, Text, TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 
 import {
@@ -48,9 +49,14 @@ export const ChatAdminButton: React.FC<ChatAdminButtonProps> = ({
     <TouchableOpacity
       activeOpacity={0.8}
       onPress={handlePress}
-      className="w-full py-4 rounded-xl items-center justify-center bg-emerald-500 active:bg-emerald-600"
+      accessibilityRole="button"
+      accessibilityLabel="Chat Admin melalui WhatsApp"
+      className="w-full min-h-[52px] px-4 py-4 rounded-xl flex-row items-center justify-center bg-zinc-900 border border-emerald-500/40 active:bg-zinc-800"
     >
-      <Text className="text-white font-bold text-base">Chat Admin</Text>
+      <Ionicons name="logo-whatsapp" size={20} color="#34d399" />
+      <Text className="ml-2 shrink text-center text-emerald-400 font-bold text-base">
+        Chat Admin
+      </Text>
     </TouchableOpacity>
   );
 };
