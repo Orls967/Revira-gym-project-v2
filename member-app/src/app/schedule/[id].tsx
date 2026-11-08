@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -6,8 +12,11 @@ import {
   Modal,
   ActivityIndicator,
   ScrollView,
+  RefreshControl,
+  AppState,
+  AppStateStatus,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "@/lib/api";
@@ -36,6 +45,19 @@ type ExtendedSchedule = Omit<ClassSchedule, "status"> & {
   max_capacity?: number;
 };
 
+// Polling item structure from GET /api/v1/class-schedules/status (SCRUM-56 & SCRUM-73)
+interface ScheduleStatusPollItem {
+  id?: number;
+  schedule_id?: number;
+  status?: "scheduled" | "active" | "cancelled" | "completed" | "full";
+  cancel_reason?: string | null;
+  current_participants?: number;
+  participants_count?: number;
+  min_participants?: number;
+  max_participants?: number;
+  max_capacity?: number;
+}
+
 // Extended UserData type for B6 membership period validation without altering src/lib/auth.ts
 type ExtendedUserData = UserData & {
   is_active?: boolean;
@@ -61,9 +83,13 @@ interface BookingResourceItem {
   class_schedule_id?: number;
   schedule?: {
     id?: number;
+    status?: string;
+    cancel_reason?: string | null;
   };
   class_schedule?: {
     id?: number;
+    status?: string;
+    cancel_reason?: string | null;
   };
 }
 
@@ -73,6 +99,14 @@ type PopupState = {
   title: string;
   message: string;
 };
+
+interface LiveScheduleState {
+  status: "scheduled" | "active" | "cancelled" | "completed" | "full";
+  current_participants: number;
+  min_participants: number;
+  max_participants: number;
+  cancel_reason: string;
+}
 
 // Helper: Normalize HH:mm or HH:mm:ss into HH:mm:ss
 function normalizeTimeString(timeStr: string): string {
@@ -204,10 +238,38 @@ export default function ScheduleDetailScreen() {
 
   const initialParticipants =
     schedule?.current_participants ?? schedule?.participants_count ?? 0;
+  const initialMinParticipants =
+    typeof schedule?.min_participants === "number"
+      ? schedule.min_participants
+      : 0;
+  const initialMaxParticipants =
+    schedule?.max_participants ?? schedule?.max_capacity ?? 0;
 
-  // Local state for AC2 (Reactive counter & booking status without reload)
-  const [localParticipants, setLocalParticipants] =
-    useState<number>(initialParticipants);
+  // --- SCRUM-73: Reactive & Polled Live State (No Flickering) ---
+  const [liveSchedule, setLiveSchedule] = useState<LiveScheduleState>({
+    status: schedule?.status ?? "scheduled",
+    current_participants: initialParticipants,
+    min_participants: initialMinParticipants,
+    max_participants: initialMaxParticipants,
+    cancel_reason: schedule?.cancel_reason ?? "",
+  });
+
+  // Sync initial schedule changes if route params change
+  useEffect(() => {
+    if (!schedule) return;
+    setLiveSchedule({
+      status: schedule.status ?? "scheduled",
+      current_participants:
+        schedule.current_participants ?? schedule.participants_count ?? 0,
+      min_participants:
+        typeof schedule.min_participants === "number"
+          ? schedule.min_participants
+          : 0,
+      max_participants: schedule.max_participants ?? schedule.max_capacity ?? 0,
+      cancel_reason: schedule.cancel_reason ?? "",
+    });
+  }, [schedule]);
+
   const [hasBooked, setHasBooked] = useState(false);
 
   // Loading & Error states for GET /api/v1/member/bookings (Temuan 11 & 12)
@@ -217,15 +279,12 @@ export default function ScheduleDetailScreen() {
   );
   const [isBooking, setIsBooking] = useState(false);
 
+  // SCRUM-73: Pull-to-refresh & AppState tracking
+  const [refreshing, setRefreshing] = useState(false);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+
   // Real-time clock state to re-evaluate WITA session start eligibility (Temuan 5 & 6)
   const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowTimestamp(Date.now());
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Custom Themed Popup Modal state
   const [popup, setPopup] = useState<PopupState>({
@@ -241,54 +300,230 @@ export default function ScheduleDetailScreen() {
   };
 
   // --- TEMUAN 1, 2, 11, 12: Check existing booking with nested schedule.id & retry support ---
-  const checkUserBooking = useCallback(async () => {
-    if (!scheduleId) {
-      setIsCheckingBooking(false);
-      return;
-    }
+  const checkUserBooking = useCallback(
+    async (isSilent = false) => {
+      if (!scheduleId) {
+        if (!isSilent) setIsCheckingBooking(false);
+        return;
+      }
 
-    setIsCheckingBooking(true);
-    setBookingCheckError(null);
+      if (!isSilent) {
+        setIsCheckingBooking(true);
+        setBookingCheckError(null);
+      }
 
-    try {
-      const token = userToken || (await getToken());
-      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-      const res = await api.get("/api/v1/member/bookings", { headers });
+      try {
+        const token = userToken || (await getToken());
+        const headers = token
+          ? { Authorization: `Bearer ${token}` }
+          : undefined;
+        const res = await api.get("/api/v1/member/bookings", { headers });
 
-      const rawList = res.data?.data ?? res.data;
-      const bookings: BookingResourceItem[] = Array.isArray(rawList)
-        ? rawList
-        : [];
+        const rawList = res.data?.data ?? res.data;
+        const bookings: BookingResourceItem[] = Array.isArray(rawList)
+          ? rawList
+          : [];
 
-      const alreadyBooked = bookings.some((b) => {
-        const bookedScheduleId =
-          b.schedule?.id ??
-          b.class_schedule?.id ??
-          b.schedule_id ??
-          b.class_schedule_id;
+        const matchedBooking = bookings.find((b) => {
+          const bookedScheduleId =
+            b.schedule?.id ??
+            b.class_schedule?.id ??
+            b.schedule_id ??
+            b.class_schedule_id;
 
-        // Ignore cancelled bookings so member can re-book if allowed
-        const isBookingActive =
-          !b.status || b.status.toLowerCase() !== "cancelled";
+          // Ignore cancelled bookings so member can re-book if allowed
+          const isBookingActive =
+            !b.status || b.status.toLowerCase() !== "cancelled";
 
-        return Number(bookedScheduleId) === scheduleId && isBookingActive;
-      });
+          return Number(bookedScheduleId) === scheduleId && isBookingActive;
+        });
 
-      setHasBooked(alreadyBooked);
-    } catch (err: unknown) {
-      const error = err as AxiosErrorResponse;
-      setBookingCheckError(
-        error.response?.data?.message ||
-          "Gagal memeriksa status booking Anda. Silakan coba lagi."
-      );
-    } finally {
-      setIsCheckingBooking(false);
-    }
-  }, [scheduleId, userToken]);
+        setHasBooked(Boolean(matchedBooking));
+        setBookingCheckError(null);
+      } catch (err: unknown) {
+        if (!isSilent) {
+          const error = err as AxiosErrorResponse;
+          setBookingCheckError(
+            error.response?.data?.message ||
+              "Gagal memeriksa status booking Anda. Silakan coba lagi."
+          );
+        }
+      } finally {
+        if (!isSilent) {
+          setIsCheckingBooking(false);
+        }
+      }
+    },
+    [scheduleId, userToken]
+  );
 
   useEffect(() => {
-    checkUserBooking();
+    checkUserBooking(false);
   }, [checkUserBooking]);
+
+  // --- SCRUM-73: Poll GET /api/v1/class-schedules/status and merge by id without flicker ---
+  const fetchLiveScheduleStatus = useCallback(
+    async (isSilentPolling = true) => {
+      if (!scheduleId) {
+        if (!isSilentPolling) setRefreshing(false);
+        return;
+      }
+
+      // Always update real-time clock so WITA session start/end stays accurate
+      setNowTimestamp(Date.now());
+
+      try {
+        const token = userToken || (await getToken());
+        const headers = token
+          ? { Authorization: `Bearer ${token}` }
+          : undefined;
+
+        const res = await api.get("/api/v1/class-schedules/status", {
+          headers,
+        });
+        const rawPayload = res.data?.data ?? res.data;
+
+        let matchedItem: ScheduleStatusPollItem | undefined;
+
+        if (Array.isArray(rawPayload)) {
+          matchedItem = rawPayload.find(
+            (item: ScheduleStatusPollItem) =>
+              Number(item.id ?? item.schedule_id) === scheduleId
+          );
+        } else if (
+          rawPayload &&
+          typeof rawPayload === "object" &&
+          Number(rawPayload.id ?? rawPayload.schedule_id) === scheduleId
+        ) {
+          matchedItem = rawPayload as ScheduleStatusPollItem;
+        }
+
+        // Fallback: if /class-schedules/status doesn't contain it, try /class-schedules
+        if (!matchedItem) {
+          try {
+            const fallbackRes = await api.get("/api/v1/class-schedules", {
+              headers,
+            });
+            const fallbackList = fallbackRes.data?.data ?? fallbackRes.data;
+            if (Array.isArray(fallbackList)) {
+              matchedItem = fallbackList.find(
+                (item: ScheduleStatusPollItem) =>
+                  Number(item.id ?? item.schedule_id) === scheduleId
+              );
+            }
+          } catch {
+            // Ignore fallback error silently
+          }
+        }
+
+        if (matchedItem) {
+          setLiveSchedule((prev) => {
+            const nextStatus = matchedItem?.status ?? prev.status;
+            const nextParticipants =
+              matchedItem?.current_participants ??
+              matchedItem?.participants_count ??
+              prev.current_participants;
+            const nextMin =
+              typeof matchedItem?.min_participants === "number"
+                ? matchedItem.min_participants
+                : prev.min_participants;
+            const nextMax =
+              matchedItem?.max_participants ??
+              matchedItem?.max_capacity ??
+              prev.max_participants;
+            const nextCancelReason =
+              matchedItem?.cancel_reason !== undefined &&
+              matchedItem?.cancel_reason !== null
+                ? matchedItem.cancel_reason
+                : prev.cancel_reason;
+
+            // Avoid unnecessary re-render if values are identical
+            if (
+              prev.status === nextStatus &&
+              prev.current_participants === nextParticipants &&
+              prev.min_participants === nextMin &&
+              prev.max_participants === nextMax &&
+              prev.cancel_reason === nextCancelReason
+            ) {
+              return prev;
+            }
+
+            return {
+              status: nextStatus,
+              current_participants: nextParticipants,
+              min_participants: nextMin,
+              max_participants: nextMax,
+              cancel_reason: nextCancelReason,
+            };
+          });
+        }
+      } catch {
+        // Silent failure during background polling so UI never flickers
+      } finally {
+        if (!isSilentPolling) {
+          setRefreshing(false);
+        }
+      }
+    },
+    [scheduleId, userToken]
+  );
+
+  // --- SCRUM-73: Focus & Foreground-Only Polling (15s Interval) + Cleanup ---
+  useFocusEffect(
+    useCallback(() => {
+      if (!scheduleId) return;
+
+      let intervalId: ReturnType<typeof setInterval> | null = null;
+
+      const startInterval = () => {
+        if (intervalId) clearInterval(intervalId);
+        intervalId = setInterval(() => {
+          if (appState.current === "active") {
+            fetchLiveScheduleStatus(true);
+            checkUserBooking(true);
+          }
+        }, 15000);
+      };
+
+      const stopInterval = () => {
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      };
+
+      // Initial silent fetch when screen gains focus
+      fetchLiveScheduleStatus(true);
+      startInterval();
+
+      const subscription = AppState.addEventListener(
+        "change",
+        (nextAppState: AppStateStatus) => {
+          appState.current = nextAppState;
+          if (nextAppState === "active") {
+            fetchLiveScheduleStatus(true);
+            checkUserBooking(true);
+            startInterval();
+          } else {
+            // Stop interval immediately when app goes to background/inactive
+            stopInterval();
+          }
+        }
+      );
+
+      return () => {
+        stopInterval();
+        subscription.remove();
+      };
+    }, [scheduleId, fetchLiveScheduleStatus, checkUserBooking])
+  );
+
+  // --- SCRUM-73: Pull-to-Refresh Handler ---
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchLiveScheduleStatus(false);
+    checkUserBooking(true);
+  }, [fetchLiveScheduleStatus, checkUserBooking]);
 
   if (!schedule || !scheduleId) {
     return (
@@ -325,8 +560,13 @@ export default function ScheduleDetailScreen() {
     year: "numeric",
   });
 
-  // --- BOOKING VALIDATION LOGIC (Temuan 3, 4, 5, 6, 7, 8) ---
-  const rawStatus = schedule.status;
+  // --- BOOKING & STATUS VALIDATION LOGIC (SCRUM-72 & SCRUM-73) ---
+  const rawStatus = liveSchedule.status;
+  const localParticipants = liveSchedule.current_participants;
+  const minParticipants = liveSchedule.min_participants;
+  const maxCapacity = liveSchedule.max_participants;
+  const cancelReason = liveSchedule.cancel_reason;
+
   const isCancelled = rawStatus === "cancelled";
 
   // Check WITA session start & end times
@@ -348,7 +588,6 @@ export default function ScheduleDetailScreen() {
     rawStatus === "scheduled" || rawStatus === "active";
 
   // Capacity check (only if max_participants is a positive number)
-  const maxCapacity = schedule.max_participants ?? schedule.max_capacity ?? 0;
   const isFull =
     rawStatus === "full" || (maxCapacity > 0 && localParticipants >= maxCapacity);
 
@@ -384,12 +623,6 @@ export default function ScheduleDetailScreen() {
 
   const canBook =
     buttonDisabledReason === "" && !isCheckingBooking && !bookingCheckError;
-
-  // Minimum participants from API (0 if not provided by API)
-  const minParticipants =
-    typeof schedule.min_participants === "number"
-      ? schedule.min_participants
-      : 0;
 
   // --- BOOKING ACTION HANDLERS (AC2 & AC3) ---
   const handleBooking = () => {
@@ -433,7 +666,10 @@ export default function ScheduleDetailScreen() {
       );
 
       // AC2: Update participant counter & booking status without reloading
-      setLocalParticipants((prev) => prev + 1);
+      setLiveSchedule((prev) => ({
+        ...prev,
+        current_participants: prev.current_participants + 1,
+      }));
       setHasBooked(true);
 
       setPopup({
@@ -500,8 +736,16 @@ export default function ScheduleDetailScreen() {
           paddingBottom: 40,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#fbbf24"
+            colors={["#fbbf24"]}
+          />
+        }
       >
-        {/* Cancellation Banner (AC4) */}
+        {/* Cancellation Banner (AC4 SCRUM-26 & B9 SCRUM-25) */}
         {isCancelled && (
           <View className="mb-5 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 flex-row items-start">
             <Ionicons
@@ -515,7 +759,7 @@ export default function ScheduleDetailScreen() {
                 Sesi Dibatalkan
               </Text>
               <Text className="text-red-300 text-xs italic">
-                Ket: {schedule.cancel_reason || "Tidak ada alasan spesifik."}
+                Ket: {cancelReason || "Tidak ada alasan spesifik."}
               </Text>
             </View>
           </View>
@@ -600,87 +844,93 @@ export default function ScheduleDetailScreen() {
           </View>
         </View>
 
-        {/* --- BOOKING BUTTON SECTION --- */}
-        {isCheckingBooking ? (
-          <View className="py-6 items-center justify-center">
-            <ActivityIndicator size="small" color="#fbbf24" />
-            <Text className="text-zinc-400 text-xs mt-2">
-              Memeriksa status booking...
-            </Text>
-          </View>
-        ) : bookingCheckError ? (
-          /* Temuan 11 & 12: Error & Retry UI when GET /api/v1/member/bookings fails */
-          <View className="mb-6 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 items-center">
-            <Ionicons name="cloud-offline-outline" size={28} color="#f87171" />
-            <Text className="text-red-400 text-xs font-medium text-center mt-2 mb-3">
-              {bookingCheckError}
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={checkUserBooking}
-              className="px-5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 flex-row items-center"
-            >
-              <Ionicons name="refresh-outline" size={16} color="#fbbf24" />
-              <Text className="text-amber-400 text-xs font-bold ml-1.5">
-                Coba Lagi
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View className="mb-6">
-            {!isCancelled && (
-              <TouchableOpacity
-                activeOpacity={0.8}
-                disabled={!canBook || isBooking}
-                onPress={handleBooking}
-                className={`w-full min-h-[52px] py-4 rounded-xl flex-row justify-center items-center ${
-                  !canBook || isBooking
-                    ? "bg-zinc-800 border border-zinc-700/60"
-                    : "bg-amber-400 active:bg-amber-500"
-                }`}
-              >
-                {isBooking ? (
-                  <ActivityIndicator color="#09090b" size="small" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name={
-                        hasBooked
-                          ? "checkmark-circle-outline"
-                          : "bookmark-outline"
-                      }
-                      size={18}
-                      color={!canBook ? "#71717a" : "#09090b"}
-                    />
-                    <Text
-                      className={`text-base font-bold ml-2 ${
-                        !canBook ? "text-zinc-500" : "text-zinc-950"
-                      }`}
-                    >
-                      {hasBooked ? "Sudah Terdaftar" : "Booking Kelas"}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            {/* Helper Reason when Button is Disabled (AC1) */}
-            {!canBook && !isCancelled && (
-              <View className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex-row items-center justify-center">
-                <Ionicons
-                  name="information-circle-outline"
-                  size={16}
-                  color="#f87171"
-                />
-                <Text className="text-red-400 text-xs font-medium ml-1.5">
-                  {buttonDisabledReason}
+        {/* --- BOOKING BUTTON SECTION (Hidden entirely if isCancelled per AC4/B9) --- */}
+        {!isCancelled && (
+          <>
+            {isCheckingBooking ? (
+              <View className="py-6 items-center justify-center">
+                <ActivityIndicator size="small" color="#fbbf24" />
+                <Text className="text-zinc-400 text-xs mt-2">
+                  Memeriksa status booking...
                 </Text>
               </View>
-            )}
+            ) : bookingCheckError ? (
+              /* Temuan 11 & 12: Error & Retry UI when GET /api/v1/member/bookings fails */
+              <View className="mb-6 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 items-center">
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={28}
+                  color="#f87171"
+                />
+                <Text className="text-red-400 text-xs font-medium text-center mt-2 mb-3">
+                  {bookingCheckError}
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => checkUserBooking(false)}
+                  className="px-5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 flex-row items-center"
+                >
+                  <Ionicons name="refresh-outline" size={16} color="#fbbf24" />
+                  <Text className="text-amber-400 text-xs font-bold ml-1.5">
+                    Coba Lagi
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View className="mb-6">
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  disabled={!canBook || isBooking}
+                  onPress={handleBooking}
+                  className={`w-full min-h-[52px] py-4 rounded-xl flex-row justify-center items-center ${
+                    !canBook || isBooking
+                      ? "bg-zinc-800 border border-zinc-700/60"
+                      : "bg-amber-400 active:bg-amber-500"
+                  }`}
+                >
+                  {isBooking ? (
+                    <ActivityIndicator color="#09090b" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={
+                          hasBooked
+                            ? "checkmark-circle-outline"
+                            : "bookmark-outline"
+                        }
+                        size={18}
+                        color={!canBook ? "#71717a" : "#09090b"}
+                      />
+                      <Text
+                        className={`text-base font-bold ml-2 ${
+                          !canBook ? "text-zinc-500" : "text-zinc-950"
+                        }`}
+                      >
+                        {hasBooked ? "Sudah Terdaftar" : "Booking Kelas"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
 
-            {/* TODO (Amel - SCRUM-97): Tambahkan tombol "Batalkan Booking" di sini jika hasBooked === true */}
-            {/* if (hasBooked) { <CancelBookingButton scheduleId={scheduleId} /> } */}
-          </View>
+                {/* Helper Reason when Button is Disabled (AC1) */}
+                {!canBook && (
+                  <View className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex-row items-center justify-center">
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={16}
+                      color="#f87171"
+                    />
+                    <Text className="text-red-400 text-xs font-medium ml-1.5">
+                      {buttonDisabledReason}
+                    </Text>
+                  </View>
+                )}
+
+                {/* TODO (Amel - SCRUM-97): Tambahkan tombol "Batalkan Booking" di sini jika hasBooked === true && !isCancelled */}
+                {/* if (hasBooked && !isCancelled) { <CancelBookingButton scheduleId={scheduleId} /> } */}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
 
