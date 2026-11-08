@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,10 +14,10 @@ import api from "@/lib/api";
 import { getToken, UserData } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
 import { ParticipantCounter } from "@/components/ParticipantCounter";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, ScheduleStatus } from "@/components/StatusBadge";
 import { ClassSchedule } from "@/types/schedule";
 
-// Definisikan tipe error lokal untuk Axios
+// Local Axios error interface to avoid TypeScript errors on .response
 interface AxiosErrorResponse {
   response?: {
     status?: number;
@@ -28,6 +28,45 @@ interface AxiosErrorResponse {
   message?: string;
 }
 
+// Extended schedule type matching backend contract without altering src/types/schedule.ts
+type ExtendedSchedule = Omit<ClassSchedule, "status"> & {
+  status: "scheduled" | "active" | "cancelled" | "completed" | "full";
+  min_participants?: number;
+  participants_count?: number;
+  max_capacity?: number;
+};
+
+// Extended UserData type for B6 membership period validation without altering src/lib/auth.ts
+type ExtendedUserData = UserData & {
+  is_active?: boolean;
+  membership_status?: string;
+  membership_start_date?: string;
+  membership_end_date?: string;
+  active_until?: string;
+  expires_at?: string;
+  membership?: {
+    status?: string;
+    is_active?: boolean;
+    start_date?: string;
+    end_date?: string;
+    expires_at?: string;
+  };
+};
+
+// MemberBookingResource item structure from GET /api/v1/member/bookings
+interface BookingResourceItem {
+  id?: number;
+  status?: string;
+  schedule_id?: number;
+  class_schedule_id?: number;
+  schedule?: {
+    id?: number;
+  };
+  class_schedule?: {
+    id?: number;
+  };
+}
+
 type PopupState = {
   visible: boolean;
   type: "confirm" | "success" | "error" | "unauthorized";
@@ -35,26 +74,160 @@ type PopupState = {
   message: string;
 };
 
+// Helper: Normalize HH:mm or HH:mm:ss into HH:mm:ss
+function normalizeTimeString(timeStr: string): string {
+  const clean = timeStr.trim();
+  if (/^\d{2}:\d{2}$/.test(clean)) return `${clean}:00`;
+  if (/^\d{2}:\d{2}:\d{2}$/.test(clean)) return clean;
+  return "00:00:00";
+}
+
+// Helper: Parse YYYY-MM-DD + HH:mm explicitly in WITA (UTC+08:00)
+function parseWitaDateTime(dateStr: string, timeStr: string): Date {
+  const normalizedTime = normalizeTimeString(timeStr);
+  return new Date(`${dateStr}T${normalizedTime}+08:00`);
+}
+
+// Helper: Extract YYYY-MM-DD from any ISO/date string
+function extractDateOnly(dateInput?: string | null): string | null {
+  if (!dateInput || typeof dateInput !== "string") return null;
+  const match = dateInput.match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : null;
+}
+
+// Helper: Validate B6 Membership Eligibility on Session Date
+function checkMemberEligibility(
+  user: UserData | null,
+  sessionDate: string
+): { eligible: boolean; reason: string } {
+  if (!user) {
+    return { eligible: false, reason: "Membership Anda belum aktif." };
+  }
+
+  const u = user as ExtendedUserData;
+  const endDateRaw =
+    u.membership?.end_date ||
+    u.membership?.expires_at ||
+    u.membership_end_date ||
+    u.active_until ||
+    u.expires_at;
+  const startDateRaw = u.membership?.start_date || u.membership_start_date;
+
+  const endDate = extractDateOnly(endDateRaw);
+  const startDate = extractDateOnly(startDateRaw);
+
+  const explicitActive =
+    u.is_active === true ||
+    u.membership?.is_active === true ||
+    u.membership_status === "active" ||
+    u.membership?.status === "active";
+
+  const explicitInactive =
+    u.is_active === false ||
+    u.membership?.is_active === false ||
+    (u.membership_status !== undefined && u.membership_status !== "active") ||
+    (u.membership?.status !== undefined && u.membership?.status !== "active");
+
+  if (explicitInactive) {
+    return { eligible: false, reason: "Membership Anda belum aktif." };
+  }
+
+  // Check if session date falls within [startDate, endDate]
+  if (startDate && sessionDate < startDate) {
+    return {
+      eligible: false,
+      reason: "Membership Anda belum berlaku pada tanggal sesi ini.",
+    };
+  }
+
+  if (endDate) {
+    if (sessionDate > endDate) {
+      return {
+        eligible: false,
+        reason: "Masa aktif membership Anda berakhir sebelum tanggal sesi ini.",
+      };
+    }
+    return { eligible: true, reason: "" };
+  }
+
+  if (explicitActive) {
+    return { eligible: true, reason: "" };
+  }
+
+  // Strict fallback: if neither active flag nor valid period exists, treat as inactive
+  return { eligible: false, reason: "Membership Anda belum aktif." };
+}
+
 export default function ScheduleDetailScreen() {
-  const { scheduleData } = useLocalSearchParams<{ scheduleData: string }>();
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    scheduleData?: string | string[];
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, userToken } = useAuth();
 
-  // Parse data dari halaman sebelumnya
-  const schedule: ClassSchedule = scheduleData ? JSON.parse(scheduleData) : null;
+  const rawIdParam = Array.isArray(params.id) ? params.id[0] : params.id;
+  const rawScheduleData = Array.isArray(params.scheduleData)
+    ? params.scheduleData[0]
+    : params.scheduleData;
 
-  // Local State untuk AC2 (Update counter & status tanpa reload)
-  const [localParticipants, setLocalParticipants] = useState(
-    schedule?.current_participants || 0
-  );
+  // --- TEMUAN 9 & 10: Safe JSON Parsing, Payload Validation & Route ID Matching ---
+  const schedule = useMemo<ExtendedSchedule | null>(() => {
+    if (!rawScheduleData) return null;
+    try {
+      const parsed = JSON.parse(rawScheduleData) as Partial<ExtendedSchedule>;
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        typeof parsed.id !== "number" ||
+        typeof parsed.title !== "string" ||
+        typeof parsed.date !== "string" ||
+        typeof parsed.start_time !== "string" ||
+        typeof parsed.end_time !== "string"
+      ) {
+        return null;
+      }
+
+      // Ensure route param [id] matches parsed schedule.id
+      if (rawIdParam !== undefined && Number(rawIdParam) !== parsed.id) {
+        return null;
+      }
+
+      return parsed as ExtendedSchedule;
+    } catch {
+      return null;
+    }
+  }, [rawScheduleData, rawIdParam]);
+
+  const scheduleId = schedule?.id;
+
+  const initialParticipants =
+    schedule?.current_participants ?? schedule?.participants_count ?? 0;
+
+  // Local state for AC2 (Reactive counter & booking status without reload)
+  const [localParticipants, setLocalParticipants] =
+    useState<number>(initialParticipants);
   const [hasBooked, setHasBooked] = useState(false);
 
-  // Loading States
+  // Loading & Error states for GET /api/v1/member/bookings (Temuan 11 & 12)
   const [isCheckingBooking, setIsCheckingBooking] = useState(true);
+  const [bookingCheckError, setBookingCheckError] = useState<string | null>(
+    null
+  );
   const [isBooking, setIsBooking] = useState(false);
 
-  // Custom Themed Popup State
+  // Real-time clock state to re-evaluate WITA session start eligibility (Temuan 5 & 6)
+  const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTimestamp(Date.now());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Custom Themed Popup Modal state
   const [popup, setPopup] = useState<PopupState>({
     visible: false,
     type: "confirm",
@@ -67,50 +240,68 @@ export default function ScheduleDetailScreen() {
     setPopup((prev) => ({ ...prev, visible: false }));
   };
 
-  // Cek Status Booking Sendiri (SCRUM-70)
-  useEffect(() => {
-    let ignore = false;
-    if (!schedule) return;
-
-    async function checkUserBooking() {
-      try {
-        const token = userToken || (await getToken());
-        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-        const res = await api.get("/api/v1/member/bookings", { headers });
-        if (!ignore) {
-          const bookings = res.data?.data || [];
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const alreadyBooked = bookings.some(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (b: any) =>
-              b.schedule_id === schedule.id ||
-              b.class_schedule_id === schedule.id
-          );
-          setHasBooked(alreadyBooked);
-        }
-      } catch {
-        // Abaikan error fetch, anggap belum booking
-      } finally {
-        if (!ignore) setIsCheckingBooking(false);
-      }
+  // --- TEMUAN 1, 2, 11, 12: Check existing booking with nested schedule.id & retry support ---
+  const checkUserBooking = useCallback(async () => {
+    if (!scheduleId) {
+      setIsCheckingBooking(false);
+      return;
     }
 
+    setIsCheckingBooking(true);
+    setBookingCheckError(null);
+
+    try {
+      const token = userToken || (await getToken());
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const res = await api.get("/api/v1/member/bookings", { headers });
+
+      const rawList = res.data?.data ?? res.data;
+      const bookings: BookingResourceItem[] = Array.isArray(rawList)
+        ? rawList
+        : [];
+
+      const alreadyBooked = bookings.some((b) => {
+        const bookedScheduleId =
+          b.schedule?.id ??
+          b.class_schedule?.id ??
+          b.schedule_id ??
+          b.class_schedule_id;
+
+        // Ignore cancelled bookings so member can re-book if allowed
+        const isBookingActive =
+          !b.status || b.status.toLowerCase() !== "cancelled";
+
+        return Number(bookedScheduleId) === scheduleId && isBookingActive;
+      });
+
+      setHasBooked(alreadyBooked);
+    } catch (err: unknown) {
+      const error = err as AxiosErrorResponse;
+      setBookingCheckError(
+        error.response?.data?.message ||
+          "Gagal memeriksa status booking Anda. Silakan coba lagi."
+      );
+    } finally {
+      setIsCheckingBooking(false);
+    }
+  }, [scheduleId, userToken]);
+
+  useEffect(() => {
     checkUserBooking();
+  }, [checkUserBooking]);
 
-    return () => {
-      ignore = true;
-    };
-  }, [schedule, userToken]);
-
-  if (!schedule) {
+  if (!schedule || !scheduleId) {
     return (
       <View
         className="flex-1 items-center justify-center bg-zinc-950 px-6"
         style={{ paddingTop: insets.top }}
       >
         <Ionicons name="alert-circle-outline" size={48} color="#f87171" />
-        <Text className="text-white text-lg font-bold mt-3">
-          Data Sesi Tidak Ditemukan
+        <Text className="text-white text-lg font-bold mt-3 text-center">
+          Data Sesi Tidak Valid atau Tidak Ditemukan
+        </Text>
+        <Text className="text-zinc-400 text-xs text-center mt-1">
+          Parameter jadwal tidak sesuai. Silakan pilih ulang dari daftar jadwal.
         </Text>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -122,63 +313,126 @@ export default function ScheduleDetailScreen() {
     );
   }
 
-  // Format Tanggal Indonesia (Contoh: Sabtu, 10 Oktober 2026)
-  const formattedDate = new Date(
-    `${schedule.date}T00:00:00`
+  // Format date in WITA timezone
+  const formattedDate = parseWitaDateTime(
+    schedule.date,
+    "00:00:00"
   ).toLocaleDateString("id-ID", {
+    timeZone: "Asia/Makassar",
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
 
-  // --- LOGIKA VALIDASI TOMBOL (AC1 & AC4) ---
-  const isCancelled = schedule.status === "cancelled";
-  const isFull = localParticipants >= schedule.max_participants;
+  // --- BOOKING VALIDATION LOGIC (Temuan 3, 4, 5, 6, 7, 8) ---
+  const rawStatus = schedule.status;
+  const isCancelled = rawStatus === "cancelled";
 
-  // Cek apakah sesi sudah lewat (menggabungkan date dan start_time)
-  const sessionDateTime = new Date(`${schedule.date}T${schedule.start_time}`);
-  const isSessionStarted = new Date() >= sessionDateTime;
+  // Check WITA session start & end times
+  const sessionStartMs = parseWitaDateTime(
+    schedule.date,
+    schedule.start_time
+  ).getTime();
+  const sessionEndMs = parseWitaDateTime(
+    schedule.date,
+    schedule.end_time
+  ).getTime();
 
-  // Type casting agar TypeScript mengenali properti is_active
-  const currentUser = user as UserData & { is_active?: boolean };
-  const isMemberActive = currentUser?.is_active !== false;
+  const isSessionStarted = nowTimestamp >= sessionStartMs;
+  const isSessionCompleted =
+    rawStatus === "completed" || nowTimestamp >= sessionEndMs;
 
+  // Backend contract: only "scheduled" (or frontend mock "active") is bookable
+  const isScheduledStatus =
+    rawStatus === "scheduled" || rawStatus === "active";
+
+  // Capacity check (only if max_participants is a positive number)
+  const maxCapacity = schedule.max_participants ?? schedule.max_capacity ?? 0;
+  const isFull =
+    rawStatus === "full" || (maxCapacity > 0 && localParticipants >= maxCapacity);
+
+  // Membership eligibility check on session date (B6)
+  const membershipCheck = checkMemberEligibility(user, schedule.date);
+
+  // Determine StatusBadge prop strictly matching ScheduleStatus
+  const badgeStatus: ScheduleStatus = isCancelled
+    ? "cancelled"
+    : isSessionCompleted
+    ? "completed"
+    : isFull
+    ? "full"
+    : "scheduled";
+
+  // Determine disabled reason in priority order
   let buttonDisabledReason = "";
-  if (isCancelled) buttonDisabledReason = "Sesi telah dibatalkan.";
-  else if (!isMemberActive)
-    buttonDisabledReason = "Membership Anda belum aktif.";
-  else if (isSessionStarted)
+  if (isCancelled) {
+    buttonDisabledReason = "Sesi telah dibatalkan.";
+  } else if (isSessionCompleted) {
+    buttonDisabledReason = "Sesi kelas telah selesai.";
+  } else if (!isScheduledStatus) {
+    buttonDisabledReason = "Sesi tidak dalam status terjadwal untuk dibooking.";
+  } else if (hasBooked) {
+    buttonDisabledReason = "Anda sudah mem-booking sesi ini.";
+  } else if (isSessionStarted) {
     buttonDisabledReason = "Sesi kelas sudah dimulai/berakhir.";
-  else if (hasBooked) buttonDisabledReason = "Anda sudah mem-booking sesi ini.";
-  else if (isFull) buttonDisabledReason = "Kapasitas kelas sudah penuh.";
+  } else if (!membershipCheck.eligible) {
+    buttonDisabledReason = membershipCheck.reason;
+  } else if (isFull) {
+    buttonDisabledReason = "Kapasitas kelas sudah penuh.";
+  }
 
-  const canBook = buttonDisabledReason === "";
+  const canBook =
+    buttonDisabledReason === "" && !isCheckingBooking && !bookingCheckError;
 
-  // --- HANDLER BOOKING (AC3) ---
+  // Minimum participants from API (0 if not provided by API)
+  const minParticipants =
+    typeof schedule.min_participants === "number"
+      ? schedule.min_participants
+      : 0;
+
+  // --- BOOKING ACTION HANDLERS (AC2 & AC3) ---
   const handleBooking = () => {
+    // Re-verify WITA time right when user taps the button
+    if (Date.now() >= sessionStartMs) {
+      setNowTimestamp(Date.now());
+      return;
+    }
+
     setPopup({
       visible: true,
       type: "confirm",
       title: "Konfirmasi Booking",
-      message: `Apakah Anda yakin ingin mem-booking sesi kelas ini?`,
+      message: "Apakah Anda yakin ingin mem-booking sesi kelas ini?",
     });
   };
 
   const confirmBookingAction = async () => {
+    // Guard against time passing while modal was open
+    if (Date.now() >= sessionStartMs) {
+      setNowTimestamp(Date.now());
+      setPopup({
+        visible: true,
+        type: "error",
+        title: "Waktu Habis",
+        message: "Sesi kelas sudah dimulai sehingga tidak dapat dibooking.",
+      });
+      return;
+    }
+
     setIsBooking(true);
     try {
       const token = userToken || (await getToken());
       const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-      // POST /api/v1/member/class-schedules/{id}/booking
+      // Use validated scheduleId
       await api.post(
-        `/api/v1/member/class-schedules/${schedule.id}/booking`,
+        `/api/v1/member/class-schedules/${scheduleId}/booking`,
         {},
         { headers }
       );
 
-      // AC2: Update counter & status tombol tanpa reload
+      // AC2: Update participant counter & booking status without reloading
       setLocalParticipants((prev) => prev + 1);
       setHasBooked(true);
 
@@ -220,7 +474,7 @@ export default function ScheduleDetailScreen() {
       className="flex-1 bg-zinc-950"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      {/* Header Selaras dengan Jadwal Kelas */}
+      {/* Top Header */}
       <View className="px-5 py-4 border-b border-zinc-800/60 flex-row items-center justify-between">
         <View className="flex-row items-center">
           <TouchableOpacity
@@ -235,9 +489,7 @@ export default function ScheduleDetailScreen() {
           </View>
         </View>
 
-        <StatusBadge
-          status={isCancelled ? "cancelled" : isFull ? "full" : "scheduled"}
-        />
+        <StatusBadge status={badgeStatus} />
       </View>
 
       <ScrollView
@@ -249,7 +501,7 @@ export default function ScheduleDetailScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Banner Pembatalan (AC4) */}
+        {/* Cancellation Banner (AC4) */}
         {isCancelled && (
           <View className="mb-5 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 flex-row items-start">
             <Ionicons
@@ -269,7 +521,7 @@ export default function ScheduleDetailScreen() {
           </View>
         )}
 
-        {/* Kartu Utama Informasi Kelas */}
+        {/* Main Class Info Card */}
         <View
           className={`p-5 rounded-2xl border mb-6 ${
             isCancelled
@@ -277,7 +529,7 @@ export default function ScheduleDetailScreen() {
               : "bg-zinc-900 border-zinc-800"
           }`}
         >
-          {/* Judul & Instruktur */}
+          {/* Title & Instructor */}
           <View className="pb-4 border-b border-zinc-800/60">
             <Text className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1">
               Program Kelas
@@ -293,7 +545,7 @@ export default function ScheduleDetailScreen() {
             </View>
           </View>
 
-          {/* Detail Tanggal & Waktu */}
+          {/* Date & Time (WITA) */}
           <View className="py-4 border-b border-zinc-800/60">
             <View className="flex-row items-center mb-3.5">
               <View className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 items-center justify-center mr-3">
@@ -324,38 +576,55 @@ export default function ScheduleDetailScreen() {
             </View>
           </View>
 
-          {/* Kuota & Counter Peserta (Komponen SCRUM-59 dari Amel) */}
+          {/* Participant Counter (Amel's SCRUM-59 Component) */}
           <View className="pt-4 flex-row items-center justify-between">
             <ParticipantCounter
               current={localParticipants}
-              min={
-                (schedule as ClassSchedule & { min_participants?: number })
-                  .min_participants || 5
-              }
+              min={minParticipants}
             />
 
-            <View className="items-end">
-              <Text className="text-[11px] text-zinc-400 font-medium">
-                Kapasitas Maksimal
-              </Text>
-              <Text
-                className={`text-xs font-bold mt-0.5 ${
-                  isFull ? "text-red-400" : "text-white"
-                }`}
-              >
-                {localParticipants} / {schedule.max_participants} Peserta
-              </Text>
-            </View>
+            {maxCapacity > 0 && (
+              <View className="items-end">
+                <Text className="text-[11px] text-zinc-400 font-medium">
+                  Kapasitas Maksimal
+                </Text>
+                <Text
+                  className={`text-xs font-bold mt-0.5 ${
+                    isFull ? "text-red-400" : "text-white"
+                  }`}
+                >
+                  {localParticipants} / {maxCapacity} Peserta
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* --- AREA TOMBOL BOOKING --- */}
+        {/* --- BOOKING BUTTON SECTION --- */}
         {isCheckingBooking ? (
           <View className="py-6 items-center justify-center">
             <ActivityIndicator size="small" color="#fbbf24" />
             <Text className="text-zinc-400 text-xs mt-2">
               Memeriksa status booking...
             </Text>
+          </View>
+        ) : bookingCheckError ? (
+          /* Temuan 11 & 12: Error & Retry UI when GET /api/v1/member/bookings fails */
+          <View className="mb-6 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 items-center">
+            <Ionicons name="cloud-offline-outline" size={28} color="#f87171" />
+            <Text className="text-red-400 text-xs font-medium text-center mt-2 mb-3">
+              {bookingCheckError}
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={checkUserBooking}
+              className="px-5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 flex-row items-center"
+            >
+              <Ionicons name="refresh-outline" size={16} color="#fbbf24" />
+              <Text className="text-amber-400 text-xs font-bold ml-1.5">
+                Coba Lagi
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View className="mb-6">
@@ -395,7 +664,7 @@ export default function ScheduleDetailScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Pesan Alasan Tombol Nonaktif (AC1) */}
+            {/* Helper Reason when Button is Disabled (AC1) */}
             {!canBook && !isCancelled && (
               <View className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex-row items-center justify-center">
                 <Ionicons
@@ -410,7 +679,7 @@ export default function ScheduleDetailScreen() {
             )}
 
             {/* TODO (Amel - SCRUM-97): Tambahkan tombol "Batalkan Booking" di sini jika hasBooked === true */}
-            {/* if (hasBooked) { <CancelBookingButton scheduleId={schedule.id} /> } */}
+            {/* if (hasBooked) { <CancelBookingButton scheduleId={scheduleId} /> } */}
           </View>
         )}
       </ScrollView>
@@ -424,7 +693,7 @@ export default function ScheduleDetailScreen() {
       >
         <View className="flex-1 bg-black/80 items-center justify-center px-6">
           <View className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-            {/* Icon Header Popup */}
+            {/* Popup Top Icon */}
             <View className="items-center mb-4">
               {popup.type === "confirm" && (
                 <View className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 items-center justify-center">
@@ -451,7 +720,7 @@ export default function ScheduleDetailScreen() {
               )}
             </View>
 
-            {/* Judul & Pesan Popup */}
+            {/* Popup Title & Message */}
             <Text className="text-xl font-extrabold text-white text-center mb-2">
               {popup.title}
             </Text>
@@ -459,7 +728,7 @@ export default function ScheduleDetailScreen() {
               {popup.message}
             </Text>
 
-            {/* Box Ringkasan Sesi (Hanya saat Konfirmasi atau Sukses) */}
+            {/* Session Summary Box inside Popup */}
             {(popup.type === "confirm" || popup.type === "success") && (
               <View className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 mb-6">
                 <Text className="text-base font-bold text-white mb-1">
@@ -492,7 +761,7 @@ export default function ScheduleDetailScreen() {
               </View>
             )}
 
-            {/* Tombol Aksi Popup */}
+            {/* Popup Action Buttons */}
             {popup.type === "confirm" ? (
               <View className="flex-row gap-3">
                 <TouchableOpacity
