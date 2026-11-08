@@ -11,10 +11,11 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
-import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,12 +58,8 @@ export default function LoginScreen() {
     setApiError(null);
 
     try {
-      // Menghubungi API Railway dengan mengirimkan device_name
-      await api.post("/api/v1/login", {
-        email: email.trim(),
-        password: password,
-        device_name: "mobile",
-      });
+      // Menghubungi API Railway dan menyimpan sesi lewat AuthContext
+      await login(email.trim(), password);
 
       // Pindah ke Beranda jika sukses
       router.replace("/(app)");
