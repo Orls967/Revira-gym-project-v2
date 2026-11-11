@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import api from '../../lib/api';
 import { MOCK_PLANS, MOCK_HOURS, MembershipPlan, OperationalHour } from '../../mocks/homeData';
 import { formatRupiah } from '../../utils/formatCurrency';
+import { ChatAdminButton } from '../../components/ChatAdminButton';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -217,6 +218,11 @@ export default function HomeScreen() {
             </View>
           ))}
         </View>
+      </View>
+
+      {/* Tombol Chat Admin */}
+      <View className="mt-8">
+        <ChatAdminButton context="home" />
       </View>
     </ScrollView>
   );
