@@ -34,7 +34,14 @@ interface AxiosErrorResponse {
 // Exact structure returned by MeController::membershipSummary (GET /api/v1/me)
 interface MeMembershipSummary {
   is_active: boolean;
-  status: "active" | "upcoming" | "pending" | "rejected" | "expired" | "none" | string;
+  status:
+    | "active"
+    | "upcoming"
+    | "pending"
+    | "rejected"
+    | "expired"
+    | "none"
+    | string;
   plan: {
     id: number;
     name: string;
@@ -115,7 +122,9 @@ function isValidNormalizedSchedule(
 }
 
 // --- F2: Extract & Validate MeController membership object from GET /api/v1/me ---
-function parseMeMembershipResponse(payload: unknown): MeMembershipSummary | null {
+function parseMeMembershipResponse(
+  payload: unknown
+): MeMembershipSummary | null {
   if (!payload || typeof payload !== "object") return null;
   const root = payload as Record<string, unknown>;
   const dataObj =
@@ -146,7 +155,6 @@ function parseMeMembershipResponse(payload: unknown): MeMembershipSummary | null
 }
 
 // --- F2: Evaluate B6 Membership Eligibility against Session Date ---
-// Handles both "active" (active today) and "upcoming" (approved active membership starting in the future)
 function evaluateMembershipOnSessionDate(
   membership: MeMembershipSummary | null,
   sessionDate: string
@@ -184,7 +192,6 @@ function evaluateMembershipOnSessionDate(
   const startDate = extractDateOnly(membership.start_date);
   const endDate = extractDateOnly(membership.end_date);
 
-  // For "active", "upcoming", or "expired", check exact date range against sessionDate (Rule B6)
   if (status === "active" || status === "upcoming" || status === "expired") {
     if (!startDate || !endDate) {
       return {
@@ -207,7 +214,6 @@ function evaluateMembershipOnSessionDate(
       };
     }
 
-    // If status was "expired" even though sessionDate <= endDate, block it
     if (status === "expired") {
       return {
         eligible: false,
@@ -250,7 +256,7 @@ export default function ScheduleDetailScreen() {
     if (!rawScheduleData || !routeScheduleId) return null;
     try {
       const rawObj = JSON.parse(rawScheduleData);
-      const normalized = normalizeScheduleItem(rawObj);
+      const normalized = normalizeScheduleItem(rawObj, false);
       if (!isValidNormalizedSchedule(normalized)) return null;
       if (normalized.id !== routeScheduleId) return null;
       return normalized;
@@ -306,7 +312,9 @@ export default function ScheduleDetailScreen() {
         (item: { id?: number | string }) => Number(item?.id) === routeScheduleId
       );
 
-      const normalized = foundRaw ? normalizeScheduleItem(foundRaw) : null;
+      const normalized = foundRaw
+        ? normalizeScheduleItem(foundRaw, false)
+        : null;
       if (
         !isValidNormalizedSchedule(normalized) ||
         normalized.id !== routeScheduleId
@@ -422,7 +430,6 @@ export default function ScheduleDetailScreen() {
 
         if (bookedScheduleId === scheduleId && isBookingActive) {
           foundActiveBooking = true;
-          // Also sync latest participants_count from MemberBookingResource if available
           if (typeof b.schedule?.participants_count === "number") {
             setLocalParticipants(b.schedule.participants_count);
           }
@@ -510,7 +517,7 @@ export default function ScheduleDetailScreen() {
     year: "numeric",
   });
 
-  // --- BOOKING VALIDATION LOGIC (F2, F4, F7, F8) ---
+  // --- BOOKING VALIDATION LOGIC (F2, F4, F7, F8 & Temuan 7 Ongoing) ---
   const rawStatus = schedule.status;
   const isCancelled = rawStatus === "cancelled";
 
@@ -527,6 +534,9 @@ export default function ScheduleDetailScreen() {
   const isSessionStarted = nowTimestamp >= sessionStartMs;
   const isSessionCompleted =
     rawStatus === "completed" || nowTimestamp >= sessionEndMs;
+  const isSessionOngoing =
+    rawStatus === "ongoing" ||
+    (!isCancelled && !isSessionCompleted && isSessionStarted);
 
   // F4: Strictly only "scheduled" status is allowed to book per backend contract
   const isScheduledStatus = rawStatus === "scheduled";
@@ -537,12 +547,23 @@ export default function ScheduleDetailScreen() {
     schedule.date
   );
 
-  // Determine StatusBadge prop strictly matching ScheduleStatus
-  const badgeStatus: ScheduleStatus = isCancelled
-    ? "cancelled"
-    : isSessionCompleted
-    ? "completed"
-    : "scheduled";
+  // Determine StatusBadge prop & customText for "ongoing" and "unknown" (Temuan 7)
+  let badgeStatus: ScheduleStatus = "scheduled";
+  let badgeCustomText: string | undefined = undefined;
+
+  if (isCancelled) {
+    badgeStatus = "cancelled";
+  } else if (isSessionCompleted) {
+    badgeStatus = "completed";
+  } else if (rawStatus === "ongoing") {
+    badgeStatus = "scheduled";
+    badgeCustomText = "Berlangsung";
+  } else if (rawStatus === "full") {
+    badgeStatus = "full";
+  } else if (rawStatus === "unknown") {
+    badgeStatus = "completed";
+    badgeCustomText = "Tidak Diketahui";
+  }
 
   // Determine disabled reason in priority order
   let buttonDisabledReason = "";
@@ -550,6 +571,8 @@ export default function ScheduleDetailScreen() {
     buttonDisabledReason = "Sesi telah dibatalkan.";
   } else if (isSessionCompleted) {
     buttonDisabledReason = "Sesi kelas telah selesai.";
+  } else if (rawStatus === "ongoing" || isSessionOngoing) {
+    buttonDisabledReason = "Sesi kelas sedang berlangsung.";
   } else if (!isScheduledStatus) {
     buttonDisabledReason = "Sesi tidak dalam status terjadwal untuk dibooking.";
   } else if (hasBooked) {
@@ -574,7 +597,7 @@ export default function ScheduleDetailScreen() {
   const handleBooking = () => {
     const currentNow = Date.now();
     setNowTimestamp(currentNow);
-    if (currentNow >= sessionStartMs) {
+    if (currentNow >= sessionStartMs || !canBook) {
       return;
     }
 
@@ -589,12 +612,14 @@ export default function ScheduleDetailScreen() {
   const confirmBookingAction = async () => {
     const currentNow = Date.now();
     setNowTimestamp(currentNow);
-    if (currentNow >= sessionStartMs) {
+    if (currentNow >= sessionStartMs || !canBook) {
       setPopup({
         visible: true,
         type: "error",
-        title: "Waktu Habis",
-        message: "Sesi kelas sudah dimulai sehingga tidak dapat dibooking.",
+        title: "Tidak Dapat Booking",
+        message:
+          buttonDisabledReason ||
+          "Sesi kelas sudah dimulai atau status sesi telah berubah.",
       });
       return;
     }
@@ -611,7 +636,7 @@ export default function ScheduleDetailScreen() {
         { headers }
       );
 
-      // AC2: Update participant counter & booking status without reloading
+      // AC2: Update participant counter & booking status using authoritative server response
       const returnedParticipantsCount =
         postRes.data?.data?.schedule?.participants_count;
       if (typeof returnedParticipantsCount === "number") {
@@ -676,7 +701,7 @@ export default function ScheduleDetailScreen() {
           </View>
         </View>
 
-        <StatusBadge status={badgeStatus} />
+        <StatusBadge status={badgeStatus} customText={badgeCustomText} />
       </View>
 
       <ScrollView

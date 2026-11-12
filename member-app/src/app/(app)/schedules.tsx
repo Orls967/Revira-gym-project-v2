@@ -12,18 +12,28 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "@/lib/api";
-import { ClassSchedule, ScheduleSection } from "@/types/schedule";
+import { ClassSchedule } from "@/types/schedule";
 import { MOCK_SCHEDULES } from "@/mocks/schedules";
 
-// Extended frontend model carrying normalized backend fields for SCRUM-72
+export type NormalizedScheduleStatus =
+  | "scheduled"
+  | "ongoing"
+  | "cancelled"
+  | "completed"
+  | "full"
+  | "unknown";
+
+// Extended frontend model carrying normalized backend fields for SCRUM-72 & SCRUM-73
 export type NormalizedSchedule = Omit<ClassSchedule, "status"> & {
-  status: "scheduled" | "cancelled" | "completed" | "full";
+  status: NormalizedScheduleStatus;
+  raw_backend_status?: string;
   min_participants?: number | null;
   has_max_capacity?: boolean;
+  updated_at?: string | null;
 };
 
 // Raw backend payload shape from GET /api/v1/class-schedules
-interface RawBackendSchedule {
+export interface RawBackendSchedule {
   id?: number | string;
   title?: string;
   class_name?: string;
@@ -40,6 +50,7 @@ interface RawBackendSchedule {
   start_time?: string;
   end_time?: string;
   status?: string;
+  backend_status?: string;
   cancel_reason?: string | null;
   current_participants?: number;
   participants_count?: number;
@@ -47,7 +58,7 @@ interface RawBackendSchedule {
   min_participants?: number | null;
   max_participants?: number | null;
   max_capacity?: number | null;
-  backend_status?: string;
+  updated_at?: string | null;
 }
 
 // Helper: Extract YYYY-MM-DD safely
@@ -64,10 +75,29 @@ function normalizeTime(raw?: string): string {
   return match ? match[1] : raw.trim();
 }
 
+// Helper: Map raw status string to NormalizedScheduleStatus (F4 & Temuan 7 ongoing)
+export function mapBackendScheduleStatus(
+  rawStatusInput?: string | null,
+  isMockSource = false
+): NormalizedScheduleStatus {
+  const raw = (rawStatusInput ?? "").trim().toLowerCase();
+  if (raw === "scheduled" || (isMockSource && raw === "active")) {
+    return "scheduled";
+  }
+  if (raw === "ongoing") return "ongoing";
+  if (raw === "cancelled") return "cancelled";
+  if (raw === "completed") return "completed";
+  if (raw === "full") return "full";
+  return "unknown";
+}
+
 // --- F7 & F4: Adapter to normalize Backend API & Mock into a consistent model ---
 export function normalizeScheduleItem(
-  raw: RawBackendSchedule
+  raw: RawBackendSchedule,
+  isMockSource = false
 ): NormalizedSchedule | null {
+  if (!raw || typeof raw !== "object") return null;
+
   const numericId = Number(raw.id);
   if (!Number.isInteger(numericId) || numericId <= 0) {
     return null;
@@ -90,18 +120,8 @@ export function normalizeScheduleItem(
   const startTime = normalizeTime(raw.start_time);
   const endTime = normalizeTime(raw.end_time);
 
-  // F4: Normalize mock "active" -> "scheduled" so downstream strictly uses "scheduled"
-  const rawStatus = (raw.backend_status ?? raw.status ?? "scheduled").toLowerCase();
-  let normalizedStatus: NormalizedSchedule["status"] = "scheduled";
-  if (rawStatus === "scheduled" || rawStatus === "active") {
-    normalizedStatus = "scheduled";
-  } else if (rawStatus === "cancelled") {
-    normalizedStatus = "cancelled";
-  } else if (rawStatus === "completed") {
-    normalizedStatus = "completed";
-  } else if (rawStatus === "full") {
-    normalizedStatus = "full";
-  }
+  const statusSource = raw.backend_status ?? raw.status;
+  const normalizedStatus = mapBackendScheduleStatus(statusSource, isMockSource);
 
   const participantsCount = Number(
     raw.participants_count ??
@@ -132,25 +152,33 @@ export function normalizeScheduleItem(
     start_time: startTime,
     end_time: endTime,
     status: normalizedStatus,
-    cancel_reason: raw.cancel_reason ?? undefined,
+    raw_backend_status: statusSource,
+    cancel_reason:
+      raw.cancel_reason !== undefined && raw.cancel_reason !== null
+        ? String(raw.cancel_reason)
+        : undefined,
     current_participants: Number.isNaN(participantsCount)
       ? 0
       : participantsCount,
     max_participants: maxParticipants,
     min_participants: minParticipants,
     has_max_capacity: hasMaxCapacity,
+    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
   };
 }
 
-// Normalize initial mock data so even offline fallback uses "scheduled"
+// Normalize initial mock data so offline fallback uses normalized contract
 const INITIAL_NORMALIZED_MOCKS: NormalizedSchedule[] = MOCK_SCHEDULES.map((m) =>
-  normalizeScheduleItem({
-    ...m,
-    max_participants: undefined, // Do not force mock max capacity unless backend sends it
-  })
+  normalizeScheduleItem(
+    {
+      ...(m as RawBackendSchedule),
+      max_participants: undefined,
+    },
+    true
+  )
 ).filter((item): item is NormalizedSchedule => item !== null);
 
-// Helper pengelompokan 7 hari
+// Helper pengelompokan 7 hari dalam WITA
 const groupSchedulesByDay = (
   items: NormalizedSchedule[]
 ): { title: string; date: string; data: NormalizedSchedule[] }[] => {
@@ -165,7 +193,12 @@ const groupSchedulesByDay = (
   });
 
   const sortedDates = Object.keys(groups).sort();
-  const todayStr = new Date().toISOString().split("T")[0];
+
+  const nowWitaMs = Date.now() + 8 * 60 * 60 * 1000;
+  const todayStr = new Date(nowWitaMs).toISOString().split("T")[0];
+  const tomorrowStr = new Date(nowWitaMs + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split("T")[0];
 
   return sortedDates.map((dateStr) => {
     const dateObj = new Date(`${dateStr}T00:00:00+08:00`);
@@ -178,12 +211,8 @@ const groupSchedulesByDay = (
 
     if (dateStr === todayStr) {
       dayLabel = `Hari Ini • ${dayLabel}`;
-    } else {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      if (dateStr === tomorrow.toISOString().split("T")[0]) {
-        dayLabel = `Besok • ${dayLabel}`;
-      }
+    } else if (dateStr === tomorrowStr) {
+      dayLabel = `Besok • ${dayLabel}`;
     }
 
     return {
@@ -221,16 +250,17 @@ export default function ClassSchedulesScreen() {
       }
 
       const normalizedList = rawList
-        .map((item: RawBackendSchedule) => normalizeScheduleItem(item))
+        .map((item: RawBackendSchedule) => normalizeScheduleItem(item, false))
         .filter((item): item is NormalizedSchedule => item !== null);
 
-      // Replace mock data with real normalized API data (merge smoothly if already displaying API data)
       setSchedules((prev) => {
         const scheduleMap = new Map<number, NormalizedSchedule>();
-        // Keep previous items only if they share IDs with fresh backend list or merge updates
         normalizedList.forEach((newItem) => {
           const existing = prev.find((p) => p.id === newItem.id);
-          scheduleMap.set(newItem.id, existing ? { ...existing, ...newItem } : newItem);
+          scheduleMap.set(
+            newItem.id,
+            existing ? { ...existing, ...newItem } : newItem
+          );
         });
         return Array.from(scheduleMap.values());
       });
@@ -248,10 +278,14 @@ export default function ClassSchedulesScreen() {
   // Polling (15 Detik) hanya saat Screen Active & Focused
   useFocusEffect(
     useCallback(() => {
-      let intervalId: ReturnType<typeof setInterval>;
+      let intervalId: ReturnType<typeof setInterval> | null = null;
+      appState.current = AppState.currentState;
 
       const startPolling = () => {
-        fetchSchedules(true);
+        if (intervalId) clearInterval(intervalId);
+        if (appState.current === "active") {
+          fetchSchedules(true);
+        }
         intervalId = setInterval(() => {
           if (appState.current === "active") {
             fetchSchedules(true);
@@ -272,7 +306,7 @@ export default function ClassSchedulesScreen() {
       startPolling();
 
       return () => {
-        clearInterval(intervalId);
+        if (intervalId) clearInterval(intervalId);
         subscription.remove();
       };
     }, [])
@@ -330,6 +364,8 @@ export default function ClassSchedulesScreen() {
         renderItem={({ item }) => {
           const isCancelled = item.status === "cancelled";
           const isCompleted = item.status === "completed";
+          const isOngoing = item.status === "ongoing";
+          const isUnknown = item.status === "unknown";
           const isFull =
             item.status === "full" ||
             (Boolean(item.has_max_capacity) &&
@@ -369,8 +405,10 @@ export default function ClassSchedulesScreen() {
                   className={`px-2.5 py-1 rounded-full ${
                     isCancelled
                       ? "bg-red-500/20 border border-red-500/40"
-                      : isCompleted
+                      : isCompleted || isUnknown
                       ? "bg-zinc-800 border border-zinc-700"
+                      : isOngoing
+                      ? "bg-amber-500/20 border border-amber-500/40"
                       : isFull
                       ? "bg-rose-500/20 border border-rose-500/40"
                       : "bg-emerald-500/20 border border-emerald-500/40"
@@ -380,8 +418,10 @@ export default function ClassSchedulesScreen() {
                     className={`text-[10px] font-bold ${
                       isCancelled
                         ? "text-red-400"
-                        : isCompleted
+                        : isCompleted || isUnknown
                         ? "text-zinc-400"
+                        : isOngoing
+                        ? "text-amber-400"
                         : isFull
                         ? "text-rose-400"
                         : "text-emerald-400"
@@ -391,8 +431,12 @@ export default function ClassSchedulesScreen() {
                       ? "DIBATALKAN"
                       : isCompleted
                       ? "SELESAI"
+                      : isOngoing
+                      ? "BERLANGSUNG"
                       : isFull
                       ? "PENUH"
+                      : isUnknown
+                      ? "TIDAK DIKETAHUI"
                       : "TERJADWAL"}
                   </Text>
                 </View>

@@ -9,7 +9,7 @@ export interface MockScheduleItem extends Omit<ClassSchedule, "status"> {
   schedule_date: string;
   participants_count: number;
   min_participants: number | null;
-  backend_status?: "scheduled" | "cancelled" | "completed";
+  backend_status?: "scheduled" | "ongoing" | "cancelled" | "completed";
 }
 
 // Helper membuat tanggal offset dalam zona waktu WITA (UTC+08:00) (0 = Hari ini, 1 = Besok, dst)
@@ -38,7 +38,7 @@ const rawMocks: MockScheduleItem[] = [
     current_participants: 8,
     participants_count: 8,
     min_participants: 5,
-    max_participants: 0, // Backend tidak memakai max_participants (SCRUM-52)
+    max_participants: 0,
   },
   {
     id: 102,
@@ -91,7 +91,7 @@ const rawMocks: MockScheduleItem[] = [
     backend_status: "scheduled",
     current_participants: 3,
     participants_count: 3,
-    min_participants: 8, // Contoh kuota minimum belum terpenuhi
+    min_participants: 8,
     max_participants: 0,
   },
   {
@@ -221,7 +221,7 @@ const rawMocks: MockScheduleItem[] = [
     backend_status: "scheduled",
     current_participants: 4,
     participants_count: 4,
-    min_participants: 0, // Contoh eksplisit min_participants = 0 (F8)
+    min_participants: 0,
     max_participants: 0,
   },
 ];
