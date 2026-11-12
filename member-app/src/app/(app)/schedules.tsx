@@ -15,11 +15,149 @@ import api from "@/lib/api";
 import { ClassSchedule, ScheduleSection } from "@/types/schedule";
 import { MOCK_SCHEDULES } from "@/mocks/schedules";
 
+// Extended frontend model carrying normalized backend fields for SCRUM-72
+export type NormalizedSchedule = Omit<ClassSchedule, "status"> & {
+  status: "scheduled" | "cancelled" | "completed" | "full";
+  min_participants?: number | null;
+  has_max_capacity?: boolean;
+};
+
+// Raw backend payload shape from GET /api/v1/class-schedules
+interface RawBackendSchedule {
+  id?: number | string;
+  title?: string;
+  class_name?: string;
+  name?: string;
+  gym_class?: {
+    name?: string;
+    min_participants?: number | null;
+    max_participants?: number | null;
+  };
+  instructor?: string | { name?: string };
+  instructor_name?: string;
+  date?: string;
+  schedule_date?: string;
+  start_time?: string;
+  end_time?: string;
+  status?: string;
+  cancel_reason?: string | null;
+  current_participants?: number;
+  participants_count?: number;
+  bookings_count?: number;
+  min_participants?: number | null;
+  max_participants?: number | null;
+  max_capacity?: number | null;
+  backend_status?: string;
+}
+
+// Helper: Extract YYYY-MM-DD safely
+function normalizeDate(raw?: string): string {
+  if (!raw || typeof raw !== "string") return "";
+  const match = raw.trim().match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : raw.trim();
+}
+
+// Helper: Extract HH:mm safely from HH:mm:ss or HH:mm
+function normalizeTime(raw?: string): string {
+  if (!raw || typeof raw !== "string") return "";
+  const match = raw.trim().match(/^(\d{2}:\d{2})/);
+  return match ? match[1] : raw.trim();
+}
+
+// --- F7 & F4: Adapter to normalize Backend API & Mock into a consistent model ---
+export function normalizeScheduleItem(
+  raw: RawBackendSchedule
+): NormalizedSchedule | null {
+  const numericId = Number(raw.id);
+  if (!Number.isInteger(numericId) || numericId <= 0) {
+    return null;
+  }
+
+  const title = (
+    raw.class_name ??
+    raw.title ??
+    raw.gym_class?.name ??
+    raw.name ??
+    ""
+  ).trim();
+
+  const instructorStr =
+    typeof raw.instructor === "string"
+      ? raw.instructor
+      : raw.instructor_name ?? raw.instructor?.name ?? "-";
+
+  const date = normalizeDate(raw.schedule_date ?? raw.date);
+  const startTime = normalizeTime(raw.start_time);
+  const endTime = normalizeTime(raw.end_time);
+
+  // F4: Normalize mock "active" -> "scheduled" so downstream strictly uses "scheduled"
+  const rawStatus = (raw.backend_status ?? raw.status ?? "scheduled").toLowerCase();
+  let normalizedStatus: NormalizedSchedule["status"] = "scheduled";
+  if (rawStatus === "scheduled" || rawStatus === "active") {
+    normalizedStatus = "scheduled";
+  } else if (rawStatus === "cancelled") {
+    normalizedStatus = "cancelled";
+  } else if (rawStatus === "completed") {
+    normalizedStatus = "completed";
+  } else if (rawStatus === "full") {
+    normalizedStatus = "full";
+  }
+
+  const participantsCount = Number(
+    raw.participants_count ??
+      raw.current_participants ??
+      raw.bookings_count ??
+      0
+  );
+
+  // F8: Distinguish between explicit number (including 0) and undefined/null
+  const rawMin = raw.min_participants ?? raw.gym_class?.min_participants;
+  const minParticipants =
+    typeof rawMin === "number" && !Number.isNaN(rawMin) ? rawMin : null;
+
+  // F7: Do not invent max_participants if backend does not provide it
+  const rawMax =
+    raw.max_participants ??
+    raw.max_capacity ??
+    raw.gym_class?.max_participants;
+  const hasMaxCapacity =
+    typeof rawMax === "number" && !Number.isNaN(rawMax) && rawMax > 0;
+  const maxParticipants = hasMaxCapacity ? rawMax : 0;
+
+  return {
+    id: numericId,
+    title: title || "Kelas Gym",
+    instructor: instructorStr.trim() || "-",
+    date,
+    start_time: startTime,
+    end_time: endTime,
+    status: normalizedStatus,
+    cancel_reason: raw.cancel_reason ?? undefined,
+    current_participants: Number.isNaN(participantsCount)
+      ? 0
+      : participantsCount,
+    max_participants: maxParticipants,
+    min_participants: minParticipants,
+    has_max_capacity: hasMaxCapacity,
+  };
+}
+
+// Normalize initial mock data so even offline fallback uses "scheduled"
+const INITIAL_NORMALIZED_MOCKS: NormalizedSchedule[] = MOCK_SCHEDULES.map((m) =>
+  normalizeScheduleItem({
+    ...m,
+    max_participants: undefined, // Do not force mock max capacity unless backend sends it
+  })
+).filter((item): item is NormalizedSchedule => item !== null);
+
 // Helper pengelompokan 7 hari
-const groupSchedulesByDay = (items: ClassSchedule[]): ScheduleSection[] => {
-  const groups: { [dateKey: string]: ClassSchedule[] } = {};
+const groupSchedulesByDay = (
+  items: NormalizedSchedule[]
+): { title: string; date: string; data: NormalizedSchedule[] }[] => {
+  const groups: { [dateKey: string]: NormalizedSchedule[] } = {};
 
   items.forEach((item) => {
+    if (!item.date) return;
     if (!groups[item.date]) {
       groups[item.date] = [];
     }
@@ -30,8 +168,9 @@ const groupSchedulesByDay = (items: ClassSchedule[]): ScheduleSection[] => {
   const todayStr = new Date().toISOString().split("T")[0];
 
   return sortedDates.map((dateStr) => {
-    const dateObj = new Date(dateStr + "T00:00:00");
+    const dateObj = new Date(`${dateStr}T00:00:00+08:00`);
     let dayLabel = dateObj.toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       weekday: "long",
       day: "numeric",
       month: "short",
@@ -58,7 +197,9 @@ const groupSchedulesByDay = (items: ClassSchedule[]): ScheduleSection[] => {
 export default function ClassSchedulesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [schedules, setSchedules] = useState<ClassSchedule[]>(MOCK_SCHEDULES);
+  const [schedules, setSchedules] = useState<NormalizedSchedule[]>(
+    INITIAL_NORMALIZED_MOCKS
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [isOfflineOrError, setIsOfflineOrError] = useState(false);
 
@@ -67,17 +208,30 @@ export default function ClassSchedulesScreen() {
   // Grouping data dinamis 7 hari
   const sections = useMemo(() => groupSchedulesByDay(schedules), [schedules]);
 
-  // Fetch & Merge Data tanpa flicker
+  // Fetch & Normalize Data tanpa flicker
   const fetchSchedules = async (isBackgroundPolling = false) => {
     try {
       if (!isBackgroundPolling) setIsOfflineOrError(false);
 
       const res = await api.get("/api/v1/class-schedules");
-      const freshData: ClassSchedule[] = res.data.data;
+      const rawList = res.data?.data ?? res.data;
 
+      if (!Array.isArray(rawList)) {
+        throw new Error("Invalid schedule list format");
+      }
+
+      const normalizedList = rawList
+        .map((item: RawBackendSchedule) => normalizeScheduleItem(item))
+        .filter((item): item is NormalizedSchedule => item !== null);
+
+      // Replace mock data with real normalized API data (merge smoothly if already displaying API data)
       setSchedules((prev) => {
-        const scheduleMap = new Map(prev.map((item) => [item.id, item]));
-        freshData.forEach((newItem) => scheduleMap.set(newItem.id, newItem));
+        const scheduleMap = new Map<number, NormalizedSchedule>();
+        // Keep previous items only if they share IDs with fresh backend list or merge updates
+        normalizedList.forEach((newItem) => {
+          const existing = prev.find((p) => p.id === newItem.id);
+          scheduleMap.set(newItem.id, existing ? { ...existing, ...newItem } : newItem);
+        });
         return Array.from(scheduleMap.values());
       });
 
@@ -175,7 +329,12 @@ export default function ClassSchedulesScreen() {
         )}
         renderItem={({ item }) => {
           const isCancelled = item.status === "cancelled";
-          const isFull = item.current_participants >= item.max_participants;
+          const isCompleted = item.status === "completed";
+          const isFull =
+            item.status === "full" ||
+            (Boolean(item.has_max_capacity) &&
+              item.max_participants > 0 &&
+              item.current_participants >= item.max_participants);
 
           return (
             <TouchableOpacity
@@ -210,6 +369,8 @@ export default function ClassSchedulesScreen() {
                   className={`px-2.5 py-1 rounded-full ${
                     isCancelled
                       ? "bg-red-500/20 border border-red-500/40"
+                      : isCompleted
+                      ? "bg-zinc-800 border border-zinc-700"
                       : isFull
                       ? "bg-rose-500/20 border border-rose-500/40"
                       : "bg-emerald-500/20 border border-emerald-500/40"
@@ -219,12 +380,20 @@ export default function ClassSchedulesScreen() {
                     className={`text-[10px] font-bold ${
                       isCancelled
                         ? "text-red-400"
+                        : isCompleted
+                        ? "text-zinc-400"
                         : isFull
                         ? "text-rose-400"
                         : "text-emerald-400"
                     }`}
                   >
-                    {isCancelled ? "DIBATALKAN" : isFull ? "PENUH" : "TERSEDIA"}
+                    {isCancelled
+                      ? "DIBATALKAN"
+                      : isCompleted
+                      ? "SELESAI"
+                      : isFull
+                      ? "PENUH"
+                      : "TERJADWAL"}
                   </Text>
                 </View>
               </View>
@@ -258,7 +427,11 @@ export default function ClassSchedulesScreen() {
                       isFull ? "text-red-400" : "text-zinc-400"
                     }`}
                   >
-                    {item.current_participants}/{item.max_participants} Peserta
+                    {item.has_max_capacity && item.max_participants > 0
+                      ? `${item.current_participants}/${item.max_participants} Peserta`
+                      : typeof item.min_participants === "number"
+                      ? `${item.current_participants} (Min. ${item.min_participants}) Peserta`
+                      : `${item.current_participants} Peserta`}
                   </Text>
                 </View>
               </View>

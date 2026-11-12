@@ -11,11 +11,14 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "@/lib/api";
-import { getToken, UserData } from "@/lib/auth";
+import { getToken } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
 import { ParticipantCounter } from "@/components/ParticipantCounter";
 import { StatusBadge, ScheduleStatus } from "@/components/StatusBadge";
-import { ClassSchedule } from "@/types/schedule";
+import {
+  NormalizedSchedule,
+  normalizeScheduleItem,
+} from "@/app/(app)/schedules";
 
 // Local Axios error interface to avoid TypeScript errors on .response
 interface AxiosErrorResponse {
@@ -28,42 +31,37 @@ interface AxiosErrorResponse {
   message?: string;
 }
 
-// Extended schedule type matching backend contract without altering src/types/schedule.ts
-type ExtendedSchedule = Omit<ClassSchedule, "status"> & {
-  status: "scheduled" | "active" | "cancelled" | "completed" | "full";
-  min_participants?: number;
-  participants_count?: number;
-  max_capacity?: number;
-};
+// Exact structure returned by MeController::membershipSummary (GET /api/v1/me)
+interface MeMembershipSummary {
+  is_active: boolean;
+  status: "active" | "upcoming" | "pending" | "rejected" | "expired" | "none" | string;
+  plan: {
+    id: number;
+    name: string;
+    duration_days: number;
+  } | null;
+  start_date: string | null;
+  end_date: string | null;
+}
 
-// Extended UserData type for B6 membership period validation without altering src/lib/auth.ts
-type ExtendedUserData = UserData & {
-  is_active?: boolean;
-  membership_status?: string;
-  membership_start_date?: string;
-  membership_end_date?: string;
-  active_until?: string;
-  expires_at?: string;
-  membership?: {
-    status?: string;
-    is_active?: boolean;
-    start_date?: string;
-    end_date?: string;
-    expires_at?: string;
-  };
-};
-
-// MemberBookingResource item structure from GET /api/v1/member/bookings
+// Exact structure returned by MemberBookingResource (GET /api/v1/member/bookings)
 interface BookingResourceItem {
-  id?: number;
-  status?: string;
-  schedule_id?: number;
-  class_schedule_id?: number;
+  id: number;
+  status: "booked" | "attended" | "cancelled" | string;
+  booked_at?: string | null;
+  updated_at?: string | null;
   schedule?: {
     id?: number;
-  };
-  class_schedule?: {
-    id?: number;
+    class_id?: number;
+    class_name?: string;
+    instructor_name?: string;
+    schedule_date?: string;
+    start_time?: string;
+    end_time?: string;
+    status?: string;
+    cancel_reason?: string | null;
+    participants_count?: number;
+    min_participants?: number | null;
   };
 }
 
@@ -73,6 +71,9 @@ type PopupState = {
   title: string;
   message: string;
 };
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_REGEX = /^\d{2}:\d{2}(:\d{2})?$/;
 
 // Helper: Normalize HH:mm or HH:mm:ss into HH:mm:ss
 function normalizeTimeString(timeStr: string): string {
@@ -88,74 +89,139 @@ function parseWitaDateTime(dateStr: string, timeStr: string): Date {
   return new Date(`${dateStr}T${normalizedTime}+08:00`);
 }
 
-// Helper: Extract YYYY-MM-DD from any ISO/date string
+// Helper: Extract YYYY-MM-DD safely
 function extractDateOnly(dateInput?: string | null): string | null {
   if (!dateInput || typeof dateInput !== "string") return null;
-  const match = dateInput.match(/^\d{4}-\d{2}-\d{2}/);
+  const match = dateInput.trim().match(/^\d{4}-\d{2}-\d{2}/);
   return match ? match[0] : null;
 }
 
-// Helper: Validate B6 Membership Eligibility on Session Date
-function checkMemberEligibility(
-  user: UserData | null,
+// --- F5: Strict validator for normalized schedule object ---
+function isValidNormalizedSchedule(
+  item: NormalizedSchedule | null
+): item is NormalizedSchedule {
+  if (!item || typeof item !== "object") return false;
+  if (!Number.isInteger(item.id) || item.id <= 0) return false;
+  if (!item.title || typeof item.title !== "string") return false;
+  if (!DATE_REGEX.test(item.date)) return false;
+  if (!TIME_REGEX.test(item.start_time) || !TIME_REGEX.test(item.end_time)) {
+    return false;
+  }
+  const startMs = parseWitaDateTime(item.date, item.start_time).getTime();
+  const endMs = parseWitaDateTime(item.date, item.end_time).getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return false;
+
+  return true;
+}
+
+// --- F2: Extract & Validate MeController membership object from GET /api/v1/me ---
+function parseMeMembershipResponse(payload: unknown): MeMembershipSummary | null {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as Record<string, unknown>;
+  const dataObj =
+    root.data && typeof root.data === "object"
+      ? (root.data as Record<string, unknown>)
+      : null;
+
+  if (!dataObj) return null;
+
+  const membershipRaw = dataObj.membership;
+  if (!membershipRaw || typeof membershipRaw !== "object") return null;
+
+  const m = membershipRaw as Record<string, unknown>;
+  if (typeof m.is_active !== "boolean" || typeof m.status !== "string") {
+    return null;
+  }
+
+  return {
+    is_active: m.is_active,
+    status: m.status,
+    plan:
+      m.plan && typeof m.plan === "object"
+        ? (m.plan as MeMembershipSummary["plan"])
+        : null,
+    start_date: typeof m.start_date === "string" ? m.start_date : null,
+    end_date: typeof m.end_date === "string" ? m.end_date : null,
+  };
+}
+
+// --- F2: Evaluate B6 Membership Eligibility against Session Date ---
+// Handles both "active" (active today) and "upcoming" (approved active membership starting in the future)
+function evaluateMembershipOnSessionDate(
+  membership: MeMembershipSummary | null,
   sessionDate: string
 ): { eligible: boolean; reason: string } {
-  if (!user) {
-    return { eligible: false, reason: "Membership Anda belum aktif." };
-  }
-
-  const u = user as ExtendedUserData;
-  const endDateRaw =
-    u.membership?.end_date ||
-    u.membership?.expires_at ||
-    u.membership_end_date ||
-    u.active_until ||
-    u.expires_at;
-  const startDateRaw = u.membership?.start_date || u.membership_start_date;
-
-  const endDate = extractDateOnly(endDateRaw);
-  const startDate = extractDateOnly(startDateRaw);
-
-  const explicitActive =
-    u.is_active === true ||
-    u.membership?.is_active === true ||
-    u.membership_status === "active" ||
-    u.membership?.status === "active";
-
-  const explicitInactive =
-    u.is_active === false ||
-    u.membership?.is_active === false ||
-    (u.membership_status !== undefined && u.membership_status !== "active") ||
-    (u.membership?.status !== undefined && u.membership?.status !== "active");
-
-  if (explicitInactive) {
-    return { eligible: false, reason: "Membership Anda belum aktif." };
-  }
-
-  // Check if session date falls within [startDate, endDate]
-  if (startDate && sessionDate < startDate) {
+  if (!membership) {
     return {
       eligible: false,
-      reason: "Membership Anda belum berlaku pada tanggal sesi ini.",
+      reason: "Data membership belum tersedia.",
     };
   }
 
-  if (endDate) {
+  const status = membership.status.toLowerCase();
+
+  if (status === "none") {
+    return {
+      eligible: false,
+      reason: "Anda belum memiliki paket membership.",
+    };
+  }
+
+  if (status === "pending") {
+    return {
+      eligible: false,
+      reason: "Pengajuan membership Anda masih menunggu verifikasi admin.",
+    };
+  }
+
+  if (status === "rejected") {
+    return {
+      eligible: false,
+      reason: "Pengajuan membership Anda ditolak. Silakan ajukan ulang.",
+    };
+  }
+
+  const startDate = extractDateOnly(membership.start_date);
+  const endDate = extractDateOnly(membership.end_date);
+
+  // For "active", "upcoming", or "expired", check exact date range against sessionDate (Rule B6)
+  if (status === "active" || status === "upcoming" || status === "expired") {
+    if (!startDate || !endDate) {
+      return {
+        eligible: false,
+        reason: "Masa berlaku membership tidak lengkap.",
+      };
+    }
+
+    if (sessionDate < startDate) {
+      return {
+        eligible: false,
+        reason: `Membership Anda baru mulai berlaku pada ${startDate}.`,
+      };
+    }
+
     if (sessionDate > endDate) {
       return {
         eligible: false,
-        reason: "Masa aktif membership Anda berakhir sebelum tanggal sesi ini.",
+        reason: `Masa aktif membership Anda berakhir pada ${endDate} (sebelum tanggal sesi).`,
       };
     }
+
+    // If status was "expired" even though sessionDate <= endDate, block it
+    if (status === "expired") {
+      return {
+        eligible: false,
+        reason: "Masa aktif membership Anda telah berakhir.",
+      };
+    }
+
     return { eligible: true, reason: "" };
   }
 
-  if (explicitActive) {
-    return { eligible: true, reason: "" };
-  }
-
-  // Strict fallback: if neither active flag nor valid period exists, treat as inactive
-  return { eligible: false, reason: "Membership Anda belum aktif." };
+  return {
+    eligible: false,
+    reason: "Membership Anda belum aktif pada tanggal sesi ini.",
+  };
 }
 
 export default function ScheduleDetailScreen() {
@@ -165,67 +231,123 @@ export default function ScheduleDetailScreen() {
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, userToken } = useAuth();
+  const { userToken } = useAuth();
 
   const rawIdParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const rawScheduleData = Array.isArray(params.scheduleData)
     ? params.scheduleData[0]
     : params.scheduleData;
 
-  // --- TEMUAN 9 & 10: Safe JSON Parsing, Payload Validation & Route ID Matching ---
-  const schedule = useMemo<ExtendedSchedule | null>(() => {
-    if (!rawScheduleData) return null;
+  // F5: Validate route [id] parameter is a positive integer
+  const routeScheduleId = useMemo<number | null>(() => {
+    if (!rawIdParam) return null;
+    const parsedId = Number(rawIdParam);
+    return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
+  }, [rawIdParam]);
+
+  // F5 & F7: Parse & normalize scheduleData from route params if provided
+  const initialParsedSchedule = useMemo<NormalizedSchedule | null>(() => {
+    if (!rawScheduleData || !routeScheduleId) return null;
     try {
-      const parsed = JSON.parse(rawScheduleData) as Partial<ExtendedSchedule>;
-      if (
-        !parsed ||
-        typeof parsed !== "object" ||
-        typeof parsed.id !== "number" ||
-        typeof parsed.title !== "string" ||
-        typeof parsed.date !== "string" ||
-        typeof parsed.start_time !== "string" ||
-        typeof parsed.end_time !== "string"
-      ) {
-        return null;
-      }
-
-      // Ensure route param [id] matches parsed schedule.id
-      if (rawIdParam !== undefined && Number(rawIdParam) !== parsed.id) {
-        return null;
-      }
-
-      return parsed as ExtendedSchedule;
+      const rawObj = JSON.parse(rawScheduleData);
+      const normalized = normalizeScheduleItem(rawObj);
+      if (!isValidNormalizedSchedule(normalized)) return null;
+      if (normalized.id !== routeScheduleId) return null;
+      return normalized;
     } catch {
       return null;
     }
-  }, [rawScheduleData, rawIdParam]);
+  }, [rawScheduleData, routeScheduleId]);
 
-  const scheduleId = schedule?.id;
+  const [schedule, setSchedule] = useState<NormalizedSchedule | null>(
+    initialParsedSchedule
+  );
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState<boolean>(
+    !initialParsedSchedule && routeScheduleId !== null
+  );
+  const [scheduleLoadError, setScheduleLoadError] = useState<string | null>(
+    null
+  );
 
-  const initialParticipants =
-    schedule?.current_participants ?? schedule?.participants_count ?? 0;
+  // Reactive participant counter state (AC2)
+  const [localParticipants, setLocalParticipants] = useState<number>(
+    initialParsedSchedule?.current_participants ?? 0
+  );
 
-  // Local state for AC2 (Reactive counter & booking status without reload)
-  const [localParticipants, setLocalParticipants] =
-    useState<number>(initialParticipants);
+  useEffect(() => {
+    if (initialParsedSchedule) {
+      setSchedule(initialParsedSchedule);
+      setLocalParticipants(initialParsedSchedule.current_participants);
+      setIsLoadingSchedule(false);
+      setScheduleLoadError(null);
+    }
+  }, [initialParsedSchedule]);
+
+  // --- F5: Fallback fetch from GET /api/v1/class-schedules if opened without scheduleData ---
+  const fetchScheduleDetailFallback = useCallback(async () => {
+    if (!routeScheduleId) {
+      setScheduleLoadError("ID jadwal tidak sah.");
+      setIsLoadingSchedule(false);
+      return;
+    }
+
+    setIsLoadingSchedule(true);
+    setScheduleLoadError(null);
+
+    try {
+      const res = await api.get("/api/v1/class-schedules");
+      const rawList = res.data?.data;
+
+      if (!Array.isArray(rawList)) {
+        throw new Error("Format daftar jadwal dari server tidak valid.");
+      }
+
+      const foundRaw = rawList.find(
+        (item: { id?: number | string }) => Number(item?.id) === routeScheduleId
+      );
+
+      const normalized = foundRaw ? normalizeScheduleItem(foundRaw) : null;
+      if (
+        !isValidNormalizedSchedule(normalized) ||
+        normalized.id !== routeScheduleId
+      ) {
+        throw new Error("Sesi jadwal tidak ditemukan.");
+      }
+
+      setSchedule(normalized);
+      setLocalParticipants(normalized.current_participants);
+    } catch (err: unknown) {
+      const error = err as AxiosErrorResponse;
+      setScheduleLoadError(
+        error.response?.data?.message ||
+          error.message ||
+          "Gagal memuat detail jadwal dari server."
+      );
+    } finally {
+      setIsLoadingSchedule(false);
+    }
+  }, [routeScheduleId]);
+
+  useEffect(() => {
+    if (!initialParsedSchedule && routeScheduleId !== null) {
+      fetchScheduleDetailFallback();
+    }
+  }, [initialParsedSchedule, routeScheduleId, fetchScheduleDetailFallback]);
+
+  const scheduleId = schedule?.id ?? null;
+
+  // --- F2 & F6: Verification states for GET /api/v1/me & GET /api/v1/member/bookings ---
   const [hasBooked, setHasBooked] = useState(false);
-
-  // Loading & Error states for GET /api/v1/member/bookings (Temuan 11 & 12)
-  const [isCheckingBooking, setIsCheckingBooking] = useState(true);
-  const [bookingCheckError, setBookingCheckError] = useState<string | null>(
+  const [membershipInfo, setMembershipInfo] =
+    useState<MeMembershipSummary | null>(null);
+  const [isVerifyingEligibility, setIsVerifyingEligibility] = useState(true);
+  const [verificationError, setVerificationError] = useState<string | null>(
     null
   );
   const [isBooking, setIsBooking] = useState(false);
 
-  // Real-time clock state to re-evaluate WITA session start eligibility (Temuan 5 & 6)
+  // Real-time WITA clock timestamp
   const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowTimestamp(Date.now());
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Custom Themed Popup Modal state
   const [popup, setPopup] = useState<PopupState>({
@@ -240,57 +362,109 @@ export default function ScheduleDetailScreen() {
     setPopup((prev) => ({ ...prev, visible: false }));
   };
 
-  // --- TEMUAN 1, 2, 11, 12: Check existing booking with nested schedule.id & retry support ---
-  const checkUserBooking = useCallback(async () => {
+  // --- F2 & F6: Verify Membership (/api/v1/me) AND Existing Bookings (/api/v1/member/bookings) ---
+  const verifyBookingAndMembership = useCallback(async () => {
     if (!scheduleId) {
-      setIsCheckingBooking(false);
+      setIsVerifyingEligibility(false);
       return;
     }
 
-    setIsCheckingBooking(true);
-    setBookingCheckError(null);
+    setIsVerifyingEligibility(true);
+    setVerificationError(null);
+    setNowTimestamp(Date.now());
 
     try {
       const token = userToken || (await getToken());
       const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-      const res = await api.get("/api/v1/member/bookings", { headers });
 
-      const rawList = res.data?.data ?? res.data;
-      const bookings: BookingResourceItem[] = Array.isArray(rawList)
-        ? rawList
-        : [];
+      const [meRes, bookingsRes] = await Promise.all([
+        api.get("/api/v1/me", { headers }),
+        api.get("/api/v1/member/bookings", { headers }),
+      ]);
 
-      const alreadyBooked = bookings.some((b) => {
-        const bookedScheduleId =
-          b.schedule?.id ??
-          b.class_schedule?.id ??
-          b.schedule_id ??
-          b.class_schedule_id;
+      // 1. Validate GET /api/v1/me response (F2)
+      const parsedMembership = parseMeMembershipResponse(meRes.data);
+      if (!parsedMembership) {
+        throw new Error(
+          "Format data membership dari server (/api/v1/me) tidak valid."
+        );
+      }
 
-        // Ignore cancelled bookings so member can re-book if allowed
-        const isBookingActive =
-          !b.status || b.status.toLowerCase() !== "cancelled";
+      // 2. Strictly Validate GET /api/v1/member/bookings response (F1 & F6)
+      const rawBookingsData =
+        bookingsRes.data &&
+        typeof bookingsRes.data === "object" &&
+        "data" in bookingsRes.data
+          ? (bookingsRes.data as { data: unknown }).data
+          : null;
 
-        return Number(bookedScheduleId) === scheduleId && isBookingActive;
-      });
+      if (!Array.isArray(rawBookingsData)) {
+        throw new Error(
+          "Format daftar booking dari server (/api/v1/member/bookings) tidak valid."
+        );
+      }
 
-      setHasBooked(alreadyBooked);
+      let foundActiveBooking = false;
+      for (const item of rawBookingsData) {
+        if (!item || typeof item !== "object") {
+          throw new Error("Item pada daftar booking tidak valid.");
+        }
+        const b = item as BookingResourceItem;
+        const bookedScheduleId = Number(b.schedule?.id);
+
+        if (!Number.isInteger(bookedScheduleId) || bookedScheduleId <= 0) {
+          throw new Error("ID jadwal pada riwayat booking tidak valid.");
+        }
+
+        // MemberBookingResource status: "booked" | "attended" | "cancelled"
+        const bookingStatus = (b.status ?? "").toLowerCase();
+        const isBookingActive = bookingStatus !== "cancelled";
+
+        if (bookedScheduleId === scheduleId && isBookingActive) {
+          foundActiveBooking = true;
+          // Also sync latest participants_count from MemberBookingResource if available
+          if (typeof b.schedule?.participants_count === "number") {
+            setLocalParticipants(b.schedule.participants_count);
+          }
+          break;
+        }
+      }
+
+      setMembershipInfo(parsedMembership);
+      setHasBooked(foundActiveBooking);
     } catch (err: unknown) {
       const error = err as AxiosErrorResponse;
-      setBookingCheckError(
+      setVerificationError(
         error.response?.data?.message ||
-          "Gagal memeriksa status booking Anda. Silakan coba lagi."
+          error.message ||
+          "Gagal memuat status membership atau riwayat booking Anda."
       );
     } finally {
-      setIsCheckingBooking(false);
+      setIsVerifyingEligibility(false);
     }
   }, [scheduleId, userToken]);
 
   useEffect(() => {
-    checkUserBooking();
-  }, [checkUserBooking]);
+    verifyBookingAndMembership();
+  }, [verifyBookingAndMembership]);
 
-  if (!schedule || !scheduleId) {
+  // Loading screen while fallback schedule detail is loading
+  if (isLoadingSchedule) {
+    return (
+      <View
+        className="flex-1 items-center justify-center bg-zinc-950 px-6"
+        style={{ paddingTop: insets.top }}
+      >
+        <ActivityIndicator size="large" color="#fbbf24" />
+        <Text className="text-zinc-400 text-sm mt-3">
+          Memuat detail sesi kelas...
+        </Text>
+      </View>
+    );
+  }
+
+  // Error screen if schedule payload or ID is invalid (F5)
+  if (!schedule || !scheduleId || scheduleLoadError) {
     return (
       <View
         className="flex-1 items-center justify-center bg-zinc-950 px-6"
@@ -301,14 +475,25 @@ export default function ScheduleDetailScreen() {
           Data Sesi Tidak Valid atau Tidak Ditemukan
         </Text>
         <Text className="text-zinc-400 text-xs text-center mt-1">
-          Parameter jadwal tidak sesuai. Silakan pilih ulang dari daftar jadwal.
+          {scheduleLoadError ||
+            "Parameter jadwal tidak sesuai. Silakan pilih ulang dari daftar jadwal."}
         </Text>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="mt-5 bg-zinc-900 px-6 py-3 rounded-xl border border-zinc-800"
-        >
-          <Text className="text-amber-400 font-semibold">Kembali</Text>
-        </TouchableOpacity>
+        <View className="flex-row gap-3 mt-5">
+          {routeScheduleId !== null && (
+            <TouchableOpacity
+              onPress={fetchScheduleDetailFallback}
+              className="bg-amber-400 px-5 py-3 rounded-xl"
+            >
+              <Text className="text-zinc-950 font-bold">Coba Lagi</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="bg-zinc-900 px-6 py-3 rounded-xl border border-zinc-800"
+          >
+            <Text className="text-amber-400 font-semibold">Kembali</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -325,7 +510,7 @@ export default function ScheduleDetailScreen() {
     year: "numeric",
   });
 
-  // --- BOOKING VALIDATION LOGIC (Temuan 3, 4, 5, 6, 7, 8) ---
+  // --- BOOKING VALIDATION LOGIC (F2, F4, F7, F8) ---
   const rawStatus = schedule.status;
   const isCancelled = rawStatus === "cancelled";
 
@@ -343,25 +528,20 @@ export default function ScheduleDetailScreen() {
   const isSessionCompleted =
     rawStatus === "completed" || nowTimestamp >= sessionEndMs;
 
-  // Backend contract: only "scheduled" (or frontend mock "active") is bookable
-  const isScheduledStatus =
-    rawStatus === "scheduled" || rawStatus === "active";
+  // F4: Strictly only "scheduled" status is allowed to book per backend contract
+  const isScheduledStatus = rawStatus === "scheduled";
 
-  // Capacity check (only if max_participants is a positive number)
-  const maxCapacity = schedule.max_participants ?? schedule.max_capacity ?? 0;
-  const isFull =
-    rawStatus === "full" || (maxCapacity > 0 && localParticipants >= maxCapacity);
-
-  // Membership eligibility check on session date (B6)
-  const membershipCheck = checkMemberEligibility(user, schedule.date);
+  // F2: Check membership validity on schedule.date (Rule B6)
+  const membershipCheck = evaluateMembershipOnSessionDate(
+    membershipInfo,
+    schedule.date
+  );
 
   // Determine StatusBadge prop strictly matching ScheduleStatus
   const badgeStatus: ScheduleStatus = isCancelled
     ? "cancelled"
     : isSessionCompleted
     ? "completed"
-    : isFull
-    ? "full"
     : "scheduled";
 
   // Determine disabled reason in priority order
@@ -378,24 +558,23 @@ export default function ScheduleDetailScreen() {
     buttonDisabledReason = "Sesi kelas sudah dimulai/berakhir.";
   } else if (!membershipCheck.eligible) {
     buttonDisabledReason = membershipCheck.reason;
-  } else if (isFull) {
-    buttonDisabledReason = "Kapasitas kelas sudah penuh.";
   }
 
   const canBook =
-    buttonDisabledReason === "" && !isCheckingBooking && !bookingCheckError;
+    buttonDisabledReason === "" &&
+    !isVerifyingEligibility &&
+    !verificationError;
 
-  // Minimum participants from API (0 if not provided by API)
-  const minParticipants =
-    typeof schedule.min_participants === "number"
-      ? schedule.min_participants
-      : 0;
+  // F8: Distinguish explicit min_participants (including 0) vs unavailable (null/undefined)
+  const hasMinParticipants =
+    typeof schedule.min_participants === "number" &&
+    !Number.isNaN(schedule.min_participants);
 
   // --- BOOKING ACTION HANDLERS (AC2 & AC3) ---
   const handleBooking = () => {
-    // Re-verify WITA time right when user taps the button
-    if (Date.now() >= sessionStartMs) {
-      setNowTimestamp(Date.now());
+    const currentNow = Date.now();
+    setNowTimestamp(currentNow);
+    if (currentNow >= sessionStartMs) {
       return;
     }
 
@@ -408,9 +587,9 @@ export default function ScheduleDetailScreen() {
   };
 
   const confirmBookingAction = async () => {
-    // Guard against time passing while modal was open
-    if (Date.now() >= sessionStartMs) {
-      setNowTimestamp(Date.now());
+    const currentNow = Date.now();
+    setNowTimestamp(currentNow);
+    if (currentNow >= sessionStartMs) {
       setPopup({
         visible: true,
         type: "error",
@@ -425,22 +604,30 @@ export default function ScheduleDetailScreen() {
       const token = userToken || (await getToken());
       const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-      // Use validated scheduleId
-      await api.post(
+      // POST /api/v1/member/class-schedules/{classSchedule}/booking
+      const postRes = await api.post(
         `/api/v1/member/class-schedules/${scheduleId}/booking`,
         {},
         { headers }
       );
 
       // AC2: Update participant counter & booking status without reloading
-      setLocalParticipants((prev) => prev + 1);
+      const returnedParticipantsCount =
+        postRes.data?.data?.schedule?.participants_count;
+      if (typeof returnedParticipantsCount === "number") {
+        setLocalParticipants(returnedParticipantsCount);
+      } else {
+        setLocalParticipants((prev) => prev + 1);
+      }
       setHasBooked(true);
 
       setPopup({
         visible: true,
         type: "success",
         title: "Booking Berhasil!",
-        message: "Booking kelas berhasil tercatat. Sampai jumpa di kelas!",
+        message:
+          postRes.data?.message ||
+          "Booking kelas berhasil tercatat. Sampai jumpa di kelas!",
       });
     } catch (err: unknown) {
       const error = err as AxiosErrorResponse;
@@ -576,24 +763,23 @@ export default function ScheduleDetailScreen() {
             </View>
           </View>
 
-          {/* Participant Counter (Amel's SCRUM-59 Component) */}
+          {/* F8 & F7: Participant Counter (No invented max capacity) */}
           <View className="pt-4 flex-row items-center justify-between">
-            <ParticipantCounter
-              current={localParticipants}
-              min={minParticipants}
-            />
-
-            {maxCapacity > 0 && (
-              <View className="items-end">
-                <Text className="text-[11px] text-zinc-400 font-medium">
-                  Kapasitas Maksimal
-                </Text>
-                <Text
-                  className={`text-xs font-bold mt-0.5 ${
-                    isFull ? "text-red-400" : "text-white"
-                  }`}
-                >
-                  {localParticipants} / {maxCapacity} Peserta
+            {hasMinParticipants ? (
+              <ParticipantCounter
+                current={localParticipants}
+                min={schedule.min_participants as number}
+              />
+            ) : (
+              <View className="flex-col items-start">
+                <View className="flex-row items-center">
+                  <Ionicons name="people-outline" size={14} color="#a1a1aa" />
+                  <Text className="text-xs font-semibold text-zinc-300 ml-1.5">
+                    {localParticipants} peserta terdaftar
+                  </Text>
+                </View>
+                <Text className="text-[10px] font-medium text-zinc-500 mt-0.5">
+                  Kuota minimum belum tersedia
                 </Text>
               </View>
             )}
@@ -601,86 +787,92 @@ export default function ScheduleDetailScreen() {
         </View>
 
         {/* --- BOOKING BUTTON SECTION --- */}
-        {isCheckingBooking ? (
-          <View className="py-6 items-center justify-center">
-            <ActivityIndicator size="small" color="#fbbf24" />
-            <Text className="text-zinc-400 text-xs mt-2">
-              Memeriksa status booking...
-            </Text>
-          </View>
-        ) : bookingCheckError ? (
-          /* Temuan 11 & 12: Error & Retry UI when GET /api/v1/member/bookings fails */
-          <View className="mb-6 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 items-center">
-            <Ionicons name="cloud-offline-outline" size={28} color="#f87171" />
-            <Text className="text-red-400 text-xs font-medium text-center mt-2 mb-3">
-              {bookingCheckError}
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={checkUserBooking}
-              className="px-5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 flex-row items-center"
-            >
-              <Ionicons name="refresh-outline" size={16} color="#fbbf24" />
-              <Text className="text-amber-400 text-xs font-bold ml-1.5">
-                Coba Lagi
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View className="mb-6">
-            {!isCancelled && (
-              <TouchableOpacity
-                activeOpacity={0.8}
-                disabled={!canBook || isBooking}
-                onPress={handleBooking}
-                className={`w-full min-h-[52px] py-4 rounded-xl flex-row justify-center items-center ${
-                  !canBook || isBooking
-                    ? "bg-zinc-800 border border-zinc-700/60"
-                    : "bg-amber-400 active:bg-amber-500"
-                }`}
-              >
-                {isBooking ? (
-                  <ActivityIndicator color="#09090b" size="small" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name={
-                        hasBooked
-                          ? "checkmark-circle-outline"
-                          : "bookmark-outline"
-                      }
-                      size={18}
-                      color={!canBook ? "#71717a" : "#09090b"}
-                    />
-                    <Text
-                      className={`text-base font-bold ml-2 ${
-                        !canBook ? "text-zinc-500" : "text-zinc-950"
-                      }`}
-                    >
-                      {hasBooked ? "Sudah Terdaftar" : "Booking Kelas"}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            {/* Helper Reason when Button is Disabled (AC1) */}
-            {!canBook && !isCancelled && (
-              <View className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex-row items-center justify-center">
-                <Ionicons
-                  name="information-circle-outline"
-                  size={16}
-                  color="#f87171"
-                />
-                <Text className="text-red-400 text-xs font-medium ml-1.5">
-                  {buttonDisabledReason}
+        {!isCancelled && (
+          <>
+            {isVerifyingEligibility ? (
+              <View className="py-6 items-center justify-center">
+                <ActivityIndicator size="small" color="#fbbf24" />
+                <Text className="text-zinc-400 text-xs mt-2">
+                  Memverifikasi status membership & booking...
                 </Text>
               </View>
-            )}
+            ) : verificationError ? (
+              /* F2 & F6: Error & Retry UI when GET /me or GET /member/bookings fails */
+              <View className="mb-6 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 items-center">
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={28}
+                  color="#f87171"
+                />
+                <Text className="text-red-400 text-xs font-medium text-center mt-2 mb-3">
+                  {verificationError}
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={verifyBookingAndMembership}
+                  className="px-5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 flex-row items-center"
+                >
+                  <Ionicons name="refresh-outline" size={16} color="#fbbf24" />
+                  <Text className="text-amber-400 text-xs font-bold ml-1.5">
+                    Coba Lagi
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View className="mb-6">
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  disabled={!canBook || isBooking}
+                  onPress={handleBooking}
+                  className={`w-full min-h-[52px] py-4 rounded-xl flex-row justify-center items-center ${
+                    !canBook || isBooking
+                      ? "bg-zinc-800 border border-zinc-700/60"
+                      : "bg-amber-400 active:bg-amber-500"
+                  }`}
+                >
+                  {isBooking ? (
+                    <ActivityIndicator color="#09090b" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={
+                          hasBooked
+                            ? "checkmark-circle-outline"
+                            : "bookmark-outline"
+                        }
+                        size={18}
+                        color={!canBook ? "#71717a" : "#09090b"}
+                      />
+                      <Text
+                        className={`text-base font-bold ml-2 ${
+                          !canBook ? "text-zinc-500" : "text-zinc-950"
+                        }`}
+                      >
+                        {hasBooked ? "Sudah Terdaftar" : "Booking Kelas"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
 
-            {/* TODO (Amel - SCRUM-97): Tambahkan tombol "Batalkan Booking" di sini jika hasBooked === true */}
-            {/* if (hasBooked) { <CancelBookingButton scheduleId={scheduleId} /> } */}
-          </View>
+                {/* Helper Reason when Button is Disabled (AC1) */}
+                {!canBook && (
+                  <View className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex-row items-center justify-center">
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={16}
+                      color="#f87171"
+                    />
+                    <Text className="text-red-400 text-xs font-medium ml-1.5 text-center">
+                      {buttonDisabledReason}
+                    </Text>
+                  </View>
+                )}
+
+                {/* TODO (Amel - SCRUM-97): Tambahkan tombol "Batalkan Booking" di sini jika hasBooked === true */}
+                {/* if (hasBooked) { <CancelBookingButton scheduleId={scheduleId} /> } */}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
 
