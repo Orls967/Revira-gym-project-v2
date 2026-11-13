@@ -10,15 +10,19 @@ import {
 } from "@/lib/auth";
 import { apiClient, registerUnauthorizedHandler, ApiError } from "@/lib/api";
 
-// 1. Extend tipe UserData untuk menambahkan membership agar garis merah hilang
+export interface MembershipInfo {
+  id: number;
+  status: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+// Extend tipe UserData untuk menambahkan membership, nomor HP, dan pengajuan pending
 export interface UserData extends BaseUserData {
-  phone?: string;
-  membership?: {
-    id: number;
-    status: string;
-    start_date?: string;
-    end_date?: string;
-  } | null;
+  phone?: string; // lama, dipertahankan agar kode lain tidak rusak
+  membership?: MembershipInfo | null;
+  // TODO: sesuaikan nama/bentuk field ini dengan kesepakatan bersama PIC backend (Orlando)
+  pending_membership?: MembershipInfo | null;
 }
 
 interface AuthContextType {
@@ -27,7 +31,7 @@ interface AuthContextType {
   user: UserData | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>; // 2. Tambahkan refreshUser ke Context
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (storedToken) {
           setUserToken(storedToken);
-          setUser(storedUser as UserData); // Casting ke tipe yang sudah di-extend
+          setUser(storedUser as UserData);
         }
       } catch {
         // Abaikan error pembacaan storage awal
@@ -102,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // 3. Implementasi refreshUser untuk mengambil ulang data /me dari API
+  // Ambil ulang data /me dari API
   const refreshUser = async () => {
     try {
       const result = await apiClient.get("/api/v1/me");
@@ -124,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         user,
         login,
         logout,
-        refreshUser, // Expose fungsi refreshUser agar bisa dipakai di apply.tsx
+        refreshUser,
       }}
     >
       {children}

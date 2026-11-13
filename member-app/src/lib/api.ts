@@ -8,13 +8,17 @@ export const apiClient = axios.create({
   },
 });
 
-// Tambahan Interceptor Request untuk mendukung upload gambar (FormData)
+// Untuk upload gambar (FormData): jangan paksa Content-Type JSON, biarkan
+// boundary multipart diisi otomatis.
 apiClient.interceptors.request.use(
   (config) => {
-    // Jika body adalah FormData, hapus Content-Type agar fetch/browser
-    // otomatis mengisinya dengan boundary multipart yang benar.
     if (config.data instanceof FormData) {
-      delete config.headers["Content-Type"];
+      const headers: any = config.headers;
+      if (typeof headers?.delete === "function") {
+        headers.delete("Content-Type");
+      } else if (headers) {
+        delete headers["Content-Type"];
+      }
     }
     return config;
   },
@@ -23,11 +27,13 @@ apiClient.interceptors.request.use(
 
 export class ApiError extends Error {
   status: number;
+  errors?: Record<string, string[]>;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, errors?: Record<string, string[]>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.errors = errors;
   }
 }
 
