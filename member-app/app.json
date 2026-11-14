@@ -4,29 +4,27 @@
     "slug": "member-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.jpg",
+    "icon": "./assets/images/icon.png",
     "scheme": "memberapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/logo.jpg"
+      "icon": "./assets/images/icon.png"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#000000",
-        "foregroundImage": "./assets/images/logo.jpg",
-        "monochromeImage": "./assets/images/logo.jpg"
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.revira.gym",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "CAMERA"
       ]
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/logo.jpg"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -34,7 +32,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#000000",
-          "image": "./assets/images/logo.jpg",
+          "image": "./assets/images/splash-icon.png",
           "imageWidth": 200
         }
       ],
@@ -42,8 +40,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Aplikasi ini membutuhkan akses galeri untuk mengunggah bukti transfer.",
-          "cameraPermission": "Aplikasi ini membutuhkan akses kamera untuk mengambil foto bukti transfer."
+          "photosPermission": "Aplikasi membutuhkan akses ke galeri foto untuk mengunggah bukti transfer pembayaran.",
+          "cameraPermission": "Aplikasi membutuhkan akses ke kamera untuk mengambil foto bukti transfer pembayaran.",
+          "microphonePermission": false
         }
       ]
     ],
