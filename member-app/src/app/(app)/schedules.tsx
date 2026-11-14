@@ -34,53 +34,115 @@ export type NormalizedSchedule = Omit<ClassSchedule, "status"> & {
 
 // Raw backend payload shape from GET /api/v1/class-schedules
 export interface RawBackendSchedule {
-  id?: number | string;
-  title?: string;
-  class_name?: string;
-  name?: string;
+  id?: unknown;
+  title?: unknown;
+  class_name?: unknown;
+  name?: unknown;
   gym_class?: {
-    name?: string;
-    min_participants?: number | null;
-    max_participants?: number | null;
-  };
-  instructor?: string | { name?: string };
-  instructor_name?: string;
-  date?: string;
-  schedule_date?: string;
-  start_time?: string;
-  end_time?: string;
-  status?: string;
-  backend_status?: string;
-  cancel_reason?: string | null;
-  current_participants?: number;
-  participants_count?: number;
-  bookings_count?: number;
-  min_participants?: number | null;
-  max_participants?: number | null;
-  max_capacity?: number | null;
-  updated_at?: string | null;
+    name?: unknown;
+    min_participants?: unknown;
+    max_participants?: unknown;
+  } | null;
+  instructor?: unknown;
+  instructor_name?: unknown;
+  date?: unknown;
+  schedule_date?: unknown;
+  start_time?: unknown;
+  end_time?: unknown;
+  status?: unknown;
+  backend_status?: unknown;
+  cancel_reason?: unknown;
+  current_participants?: unknown;
+  participants_count?: unknown;
+  bookings_count?: unknown;
+  min_participants?: unknown;
+  max_participants?: unknown;
+  max_capacity?: unknown;
+  updated_at?: unknown;
 }
 
-// Helper: Extract YYYY-MM-DD safely
-function normalizeDate(raw?: string): string {
-  if (!raw || typeof raw !== "string") return "";
-  const match = raw.trim().match(/^\d{4}-\d{2}-\d{2}/);
-  return match ? match[0] : raw.trim();
+// --- F5: Safe runtime string helper (never calls .trim() on non-strings) ---
+export function toNonEmptyTrimmedString(val: unknown): string | null {
+  if (typeof val !== "string") return null;
+  const trimmed = val.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-// Helper: Extract HH:mm safely from HH:mm:ss or HH:mm
-function normalizeTime(raw?: string): string {
-  if (!raw || typeof raw !== "string") return "";
-  const match = raw.trim().match(/^(\d{2}:\d{2})/);
-  return match ? match[1] : raw.trim();
+// --- F5: Strict real calendar date validator (rejects 2026-02-31, 2026-13-01, etc.) ---
+export function isValidCalendarDateString(dateStr: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return (
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() === month - 1 &&
+    d.getUTCDate() === day
+  );
 }
 
-// Helper: Map raw status string to NormalizedScheduleStatus (F4 & Temuan 7 ongoing)
+// Extract & validate YYYY-MM-DD calendar date safely
+export function normalizeValidDate(raw: unknown): string | null {
+  const str = toNonEmptyTrimmedString(raw);
+  if (!str) return null;
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (!match) return null;
+  const candidate = match[1];
+  return isValidCalendarDateString(candidate) ? candidate : null;
+}
+
+// --- F5: Validate & normalize time string (preserves seconds if non-zero so precision is never lost) ---
+export function normalizeValidTime(raw: unknown): string | null {
+  const str = toNonEmptyTrimmedString(raw);
+  if (!str) return null;
+
+  const match = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(str);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = match[3] !== undefined ? Number(match[3]) : 0;
+
+  if (
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59 ||
+    seconds < 0 ||
+    seconds > 59
+  ) {
+    return null;
+  }
+
+  // Keep HH:mm for standard contract, but preserve HH:mm:ss if non-zero seconds exist
+  if (match[3] !== undefined && seconds > 0) {
+    return `${match[1]}:${match[2]}:${match[3]}`;
+  }
+  return `${match[1]}:${match[2]}`;
+}
+
+// --- F5 & F8: Parse finite non-negative integer (rejects null, NaN, floats, strings, negatives) ---
+export function parseNonNegativeInt(val: unknown): number | null {
+  if (typeof val !== "number" || !Number.isFinite(val) || !Number.isInteger(val)) {
+    return null;
+  }
+  return val >= 0 ? val : null;
+}
+
+// Helper: Map raw status string to NormalizedScheduleStatus (F4 & ongoing)
 export function mapBackendScheduleStatus(
-  rawStatusInput?: string | null,
+  rawStatusInput: unknown,
   isMockSource = false
 ): NormalizedScheduleStatus {
-  const raw = (rawStatusInput ?? "").trim().toLowerCase();
+  const str = toNonEmptyTrimmedString(rawStatusInput);
+  if (!str) return "unknown";
+  const raw = str.toLowerCase();
   if (raw === "scheduled" || (isMockSource && raw === "active")) {
     return "scheduled";
   }
@@ -91,79 +153,118 @@ export function mapBackendScheduleStatus(
   return "unknown";
 }
 
-// --- F7 & F4: Adapter to normalize Backend API & Mock into a consistent model ---
+// --- F5, F7, F8: Strict Adapter normalizing Backend API & Mock into a validated frontend model ---
 export function normalizeScheduleItem(
-  raw: RawBackendSchedule,
+  raw: unknown,
   isMockSource = false
 ): NormalizedSchedule | null {
   if (!raw || typeof raw !== "object") return null;
+  const item = raw as RawBackendSchedule;
 
-  const numericId = Number(raw.id);
-  if (!Number.isInteger(numericId) || numericId <= 0) {
+  // Validate positive integer ID
+  const numericId =
+    typeof item.id === "number"
+      ? item.id
+      : typeof item.id === "string" && /^\d+$/.test(item.id.trim())
+      ? Number(item.id.trim())
+      : NaN;
+
+  if (!Number.isInteger(numericId) || !Number.isFinite(numericId) || numericId <= 0) {
     return null;
   }
 
-  const title = (
-    raw.class_name ??
-    raw.title ??
-    raw.gym_class?.name ??
-    raw.name ??
-    ""
-  ).trim();
+  // Validate required class title
+  const gymClassObj =
+    item.gym_class && typeof item.gym_class === "object" ? item.gym_class : null;
+  const title =
+    toNonEmptyTrimmedString(item.class_name) ??
+    toNonEmptyTrimmedString(item.title) ??
+    toNonEmptyTrimmedString(gymClassObj?.name) ??
+    toNonEmptyTrimmedString(item.name);
 
-  const instructorStr =
-    typeof raw.instructor === "string"
-      ? raw.instructor
-      : raw.instructor_name ?? raw.instructor?.name ?? "-";
+  if (!title) return null;
 
-  const date = normalizeDate(raw.schedule_date ?? raw.date);
-  const startTime = normalizeTime(raw.start_time);
-  const endTime = normalizeTime(raw.end_time);
+  // Validate required instructor name
+  const instructorObj =
+    item.instructor && typeof item.instructor === "object"
+      ? (item.instructor as { name?: unknown })
+      : null;
+  const instructor =
+    toNonEmptyTrimmedString(item.instructor_name) ??
+    toNonEmptyTrimmedString(item.instructor) ??
+    toNonEmptyTrimmedString(instructorObj?.name);
 
-  const statusSource = raw.backend_status ?? raw.status;
+  if (!instructor) return null;
+
+  // Validate required calendar date & times
+  const date = normalizeValidDate(item.schedule_date ?? item.date);
+  const startTime = normalizeValidTime(item.start_time);
+  const endTime = normalizeValidTime(item.end_time);
+
+  if (!date || !startTime || !endTime) {
+    return null;
+  }
+
+  // Validate status
+  const statusSource =
+    toNonEmptyTrimmedString(item.backend_status) ??
+    toNonEmptyTrimmedString(item.status) ??
+    "scheduled";
   const normalizedStatus = mapBackendScheduleStatus(statusSource, isMockSource);
 
-  const participantsCount = Number(
-    raw.participants_count ??
-      raw.current_participants ??
-      raw.bookings_count ??
-      0
-  );
+  // Validate required participant counter (must be non-negative integer)
+  const rawCountSource =
+    item.participants_count !== undefined
+      ? item.participants_count
+      : item.current_participants !== undefined
+      ? item.current_participants
+      : item.bookings_count;
 
-  // F8: Distinguish between explicit number (including 0) and undefined/null
-  const rawMin = raw.min_participants ?? raw.gym_class?.min_participants;
-  const minParticipants =
-    typeof rawMin === "number" && !Number.isNaN(rawMin) ? rawMin : null;
+  const participantsCount = parseNonNegativeInt(rawCountSource);
+  if (participantsCount === null) {
+    return null;
+  }
 
-  // F7: Do not invent max_participants if backend does not provide it
-  const rawMax =
-    raw.max_participants ??
-    raw.max_capacity ??
-    raw.gym_class?.max_participants;
-  const hasMaxCapacity =
-    typeof rawMax === "number" && !Number.isNaN(rawMax) && rawMax > 0;
-  const maxParticipants = hasMaxCapacity ? rawMax : 0;
+  // F8: Validate min_participants (only finite integer >= 0 is valid; negative/null/invalid -> null/unknown)
+  const rawMinSource =
+    item.min_participants !== undefined
+      ? item.min_participants
+      : gymClassObj?.min_participants;
+  const minParticipants = parseNonNegativeInt(rawMinSource);
+
+  // F7: Do not invent max_participants unless explicitly provided as positive integer
+  const rawMaxSource =
+    item.max_participants !== undefined
+      ? item.max_participants
+      : item.max_capacity !== undefined
+      ? item.max_capacity
+      : gymClassObj?.max_participants;
+  const parsedMax = parseNonNegativeInt(rawMaxSource);
+  const hasMaxCapacity = parsedMax !== null && parsedMax > 0;
+  const maxParticipants = hasMaxCapacity ? parsedMax : 0;
+
+  const cancelReason =
+    typeof item.cancel_reason === "string"
+      ? item.cancel_reason.trim()
+      : undefined;
+
+  const updatedAt = toNonEmptyTrimmedString(item.updated_at);
 
   return {
     id: numericId,
-    title: title || "Kelas Gym",
-    instructor: instructorStr.trim() || "-",
+    title,
+    instructor,
     date,
     start_time: startTime,
     end_time: endTime,
     status: normalizedStatus,
     raw_backend_status: statusSource,
-    cancel_reason:
-      raw.cancel_reason !== undefined && raw.cancel_reason !== null
-        ? String(raw.cancel_reason)
-        : undefined,
-    current_participants: Number.isNaN(participantsCount)
-      ? 0
-      : participantsCount,
+    cancel_reason: cancelReason,
+    current_participants: participantsCount,
     max_participants: maxParticipants,
     min_participants: minParticipants,
     has_max_capacity: hasMaxCapacity,
-    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
+    updated_at: updatedAt,
   };
 }
 
@@ -171,7 +272,7 @@ export function normalizeScheduleItem(
 const INITIAL_NORMALIZED_MOCKS: NormalizedSchedule[] = MOCK_SCHEDULES.map((m) =>
   normalizeScheduleItem(
     {
-      ...(m as RawBackendSchedule),
+      ...(m as unknown as RawBackendSchedule),
       max_participants: undefined,
     },
     true
@@ -250,7 +351,7 @@ export default function ClassSchedulesScreen() {
       }
 
       const normalizedList = rawList
-        .map((item: RawBackendSchedule) => normalizeScheduleItem(item, false))
+        .map((item: unknown) => normalizeScheduleItem(item, false))
         .filter((item): item is NormalizedSchedule => item !== null);
 
       setSchedules((prev) => {
@@ -372,6 +473,11 @@ export default function ClassSchedulesScreen() {
               item.max_participants > 0 &&
               item.current_participants >= item.max_participants);
 
+          const hasValidMin =
+            typeof item.min_participants === "number" &&
+            Number.isInteger(item.min_participants) &&
+            item.min_participants >= 0;
+
           return (
             <TouchableOpacity
               activeOpacity={0.7}
@@ -473,7 +579,7 @@ export default function ClassSchedulesScreen() {
                   >
                     {item.has_max_capacity && item.max_participants > 0
                       ? `${item.current_participants}/${item.max_participants} Peserta`
-                      : typeof item.min_participants === "number"
+                      : hasValidMin
                       ? `${item.current_participants} (Min. ${item.min_participants}) Peserta`
                       : `${item.current_participants} Peserta`}
                   </Text>
