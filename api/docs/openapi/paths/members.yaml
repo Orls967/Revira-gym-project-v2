@@ -8,12 +8,16 @@ adminMembers:
       Diurutkan berdasarkan nama (`name` asc, lalu `id` asc). Paginasi tetap 15 data per halaman.
 
       **Status terkini (`membership_status`, aturan B11 SCRUM-104)** dengan prioritas `active` > `pending` > `expired` > `none`:
-      - `active`: punya membership `status=active` dengan `start_date <= hari ini <= end_date` (WITA, aturan B6 / SCRUM-71).
-      - `pending`: punya pengajuan yang menunggu verifikasi, atau membership yang sudah disetujui tetapi `start_date`-nya belum tiba.
+      - `active`: punya membership `status=active` dengan `start_date <= hari ini <= end_date` (WITA, definisi "member aktif" B6 SCRUM-25).
+      - `pending`: punya pengajuan `status=pending` yang menunggu verifikasi admin.
       - `expired`: punya membership `status=expired`, atau `status=active` dengan `end_date` sudah lewat.
       - `none`: belum pernah mengajukan, atau hanya punya pengajuan `rejected`.
 
       Contoh: member aktif yang sedang mengajukan perpanjangan tetap `active`; member expired yang mengajukan lagi menjadi `pending`.
+
+      Membership yang sudah disetujui tetapi `start_date`-nya belum tiba (upcoming) tidak dihitung di status mana pun,
+      karena B11 tidak mengaturnya dan member tersebut tidak lagi menunggu verifikasi. Member seperti itu tampil `expired`
+      bila punya riwayat yang sudah habis (paket dan tanggal dari riwayat itu), selain itu `none`.
 
       `plan`, `start_date`, dan `end_date` diambil dari membership yang menentukan status tersebut
       (semuanya `null` untuk `none`; `start_date` dan `end_date` bisa `null` pada pengajuan pending).

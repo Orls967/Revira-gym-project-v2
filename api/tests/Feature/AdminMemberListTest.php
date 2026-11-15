@@ -219,20 +219,43 @@ class AdminMemberListTest extends TestCase
     }
 
     /**
-     * Membership active yang belum mulai (mis. disetujui dengan start_date di depan) belum aktif, dihitung pending.
+     * Pending hanya untuk pengajuan yang menunggu verifikasi (B11). Membership yang sudah disetujui tetapi
+     * belum mulai diabaikan: member tanpa riwayat lain dihitung none.
      */
-    public function test_upcoming_membership_without_current_one_counts_as_pending(): void
+    public function test_upcoming_only_membership_counts_as_none(): void
     {
         $member = $this->member('Gita Upcoming');
         $this->membership($member, 'active', ['start_date' => '2026-11-10', 'end_date' => '2026-12-09']);
         $this->actingAsAdmin();
 
-        $this->getJson(self::URL.'?status=pending')
+        $this->getJson(self::URL.'?status=none')
             ->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.membership_status', 'pending')
-            ->assertJsonPath('data.0.start_date', '2026-11-10');
+            ->assertJsonPath('data.0.membership_status', 'none')
+            ->assertJsonPath('data.0.plan', null)
+            ->assertJsonPath('data.0.start_date', null);
         $this->assertSame([], $this->names('?status=active'));
+        $this->assertSame([], $this->names('?status=pending'));
+    }
+
+    /**
+     * Member yang masa lamanya sudah habis dan perpanjangannya disetujui tetapi belum mulai dihitung expired,
+     * dengan paket dan tanggal dari membership yang sudah habis.
+     */
+    public function test_upcoming_extension_after_lapsed_membership_counts_as_expired(): void
+    {
+        $member = $this->member('Hadi Jeda');
+        $this->membership($member, 'expired', ['start_date' => '2026-09-01', 'end_date' => '2026-09-30']);
+        $this->membership($member, 'active', ['start_date' => '2026-11-10', 'end_date' => '2026-12-09']);
+        $this->actingAsAdmin();
+
+        $this->getJson(self::URL.'?status=expired')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.membership_status', 'expired')
+            ->assertJsonPath('data.0.start_date', '2026-09-01')
+            ->assertJsonPath('data.0.end_date', '2026-09-30');
+        $this->assertSame([], $this->names('?status=pending'));
     }
 
     /**

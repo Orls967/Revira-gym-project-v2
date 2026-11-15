@@ -67,15 +67,13 @@ class Membership extends Model
     }
 
     /**
-     * Membership yang menunggu: pengajuan pending (belum diverifikasi) atau membership active yang belum mulai.
-     * Dipakai daftar member admin (B11, SCRUM-104) untuk status `pending`.
+     * Pengajuan yang menunggu verifikasi admin (status pending). Dipakai daftar member admin
+     * (B11, SCRUM-104) untuk status `pending`. Membership yang sudah disetujui tetapi belum mulai
+     * (upcoming) sengaja tidak termasuk, karena tidak lagi menunggu verifikasi.
      */
     public function scopeAwaiting(Builder $query): void
     {
-        $query->where(function (Builder $query) {
-            $query->where('status', 'pending')
-                ->orWhere(fn (Builder $query) => $query->upcoming());
-        });
+        $query->where('status', 'pending');
     }
 
     /**

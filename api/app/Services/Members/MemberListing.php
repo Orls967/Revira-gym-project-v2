@@ -12,10 +12,13 @@ use Illuminate\Database\Eloquent\Builder;
  * Daftar member untuk Admin Web (SCRUM-68) dengan status membership terkini (B11, SCRUM-104).
  *
  * Prioritas status: active > pending > expired > none.
- * - active: membership berlaku hari ini (scope activeOn, aturan B6 / SCRUM-71 yang sama dengan MembershipStatus).
- * - pending: pengajuan pending atau membership active yang belum mulai (scope awaiting).
+ * - active: membership berlaku hari ini (scope activeOn, aturan B6 SCRUM-25 yang sama dengan MembershipStatus SCRUM-71).
+ * - pending: punya pengajuan yang menunggu verifikasi (scope awaiting).
  * - expired: status expired atau active dengan end_date lewat (scope lapsed).
  * - none: tidak punya membership, atau hanya punya pengajuan rejected.
+ *
+ * Membership yang sudah disetujui tetapi belum mulai (upcoming) tidak dihitung di kategori mana pun,
+ * karena B11 tidak mengaturnya: member tampil expired bila punya riwayat yang sudah habis, selain itu none.
  *
  * Filter status dan paket dijalankan di query database supaya paginasi benar; ketiga relasi kategori
  * di-eager load sehingga jumlah query tetap berapa pun jumlah member di halaman.
