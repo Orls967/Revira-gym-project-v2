@@ -332,7 +332,7 @@ export default function ScheduleDetailScreen() {
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { userToken } = useAuth();
+  const { userToken, isLoading: isAuthLoading } = useAuth();
 
   const rawIdParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const rawScheduleData = Array.isArray(params.scheduleData)
@@ -386,6 +386,7 @@ export default function ScheduleDetailScreen() {
   const mutationEpochRef = useRef<number>(0);
   const verifySeqRef = useRef<number>(0);
   const isBookingInFlightRef = useRef<boolean>(false);
+  const bookingSeqRef = useRef(0);
 
   const verifyAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
@@ -435,6 +436,10 @@ export default function ScheduleDetailScreen() {
     mutationEpochRef.current += 1;
     verifySeqRef.current += 1;
     abortAllRequests();
+    // A new auth/session context owns its own submit lock and loading state.
+    bookingSeqRef.current += 1;
+    isBookingInFlightRef.current = false;
+    setIsBooking(false);
 
     setHasBooked(false);
     setMembershipData(null);
@@ -481,6 +486,7 @@ export default function ScheduleDetailScreen() {
   // --- F5: Fallback fetch from GET /api/v1/class-schedules if opened without scheduleData ---
   const fetchScheduleDetailFallback = useCallback(async () => {
     const targetSessionId = routeScheduleId;
+    if (isAuthLoading) return;
     if (!targetSessionId) {
       setScheduleLoadError("ID jadwal tidak sah.");
       setIsLoadingSchedule(false);
@@ -493,6 +499,12 @@ export default function ScheduleDetailScreen() {
     const controller = new AbortController();
     detailAbortRef.current = controller;
     const startEpoch = mutationEpochRef.current;
+    const isCurrentRequest = () =>
+      detailAbortRef.current === controller &&
+      !controller.signal.aborted &&
+      activeSessionIdRef.current === targetSessionId &&
+      activeTokenRef.current === (userToken ?? null) &&
+      mutationEpochRef.current === startEpoch;
 
     setIsLoadingSchedule(true);
     setScheduleLoadError(null);
@@ -502,11 +514,7 @@ export default function ScheduleDetailScreen() {
         signal: controller.signal,
       });
 
-      if (
-        controller.signal.aborted ||
-        activeSessionIdRef.current !== targetSessionId ||
-        mutationEpochRef.current !== startEpoch
-      ) {
+      if (!isCurrentRequest()) {
         return;
       }
 
@@ -539,7 +547,7 @@ export default function ScheduleDetailScreen() {
       setLocalParticipants(normalized.current_participants);
     } catch (err: unknown) {
       if (isRequestCanceled(err)) return;
-      if (activeSessionIdRef.current !== targetSessionId) return;
+      if (!isCurrentRequest()) return;
 
       const error = err as AxiosErrorResponse;
       setScheduleLoadError(
@@ -548,14 +556,15 @@ export default function ScheduleDetailScreen() {
           "Gagal memuat detail jadwal dari server."
       );
     } finally {
-      if (activeSessionIdRef.current === targetSessionId) {
+      if (isCurrentRequest()) {
         setIsLoadingSchedule(false);
       }
     }
-  }, [routeScheduleId]);
+  }, [routeScheduleId, userToken, isAuthLoading]);
 
   useEffect(() => {
     if (
+      !isAuthLoading &&
       !rawScheduleData &&
       !initialParsedSchedule &&
       routeScheduleId !== null
@@ -563,6 +572,7 @@ export default function ScheduleDetailScreen() {
       fetchScheduleDetailFallback();
     }
   }, [
+    isAuthLoading,
     rawScheduleData,
     initialParsedSchedule,
     routeScheduleId,
@@ -744,10 +754,10 @@ export default function ScheduleDetailScreen() {
   }, [scheduleId, userToken]);
 
   useEffect(() => {
-    if (scheduleId) {
+    if (!isAuthLoading && scheduleId) {
       verifyBookingAndMembership();
     }
-  }, [scheduleId, verifyBookingAndMembership]);
+  }, [isAuthLoading, scheduleId, verifyBookingAndMembership]);
 
   // --- F3: Automatic Local Clock Updater (Periodic + Exact Session Start/End Deadline Timers + AppState) ---
   useFocusEffect(
@@ -1018,6 +1028,8 @@ export default function ScheduleDetailScreen() {
   };
 
   const confirmBookingAction = async () => {
+    // Lock synchronously: two taps can arrive before React renders disabled.
+    if (isBookingInFlightRef.current) return;
     const currentNow = Date.now();
     setNowTimestamp(currentNow);
     if (currentNow >= sessionStartMs || !canBook) {
@@ -1045,11 +1057,17 @@ export default function ScheduleDetailScreen() {
       verifyAbortRef.current = null;
     }
 
+    const bookingSeq = ++bookingSeqRef.current;
     isBookingInFlightRef.current = true;
     setIsBooking(true);
 
     try {
       const resolvedToken = reqContextToken || (await getToken());
+      if (
+        bookingSeqRef.current !== bookingSeq ||
+        activeSessionIdRef.current !== targetSessionId ||
+        activeTokenRef.current !== reqContextToken
+      ) return;
       const headers = resolvedToken
         ? { Authorization: `Bearer ${resolvedToken}` }
         : undefined;
@@ -1063,6 +1081,7 @@ export default function ScheduleDetailScreen() {
 
       // F6: Verify session and auth context are still identical before applying POST result
       if (
+        bookingSeqRef.current !== bookingSeq ||
         activeSessionIdRef.current !== targetSessionId ||
         activeTokenRef.current !== reqContextToken
       ) {
@@ -1096,6 +1115,7 @@ export default function ScheduleDetailScreen() {
       });
     } catch (err: unknown) {
       if (
+        bookingSeqRef.current !== bookingSeq ||
         activeSessionIdRef.current !== targetSessionId ||
         activeTokenRef.current !== reqContextToken
       ) {
@@ -1124,11 +1144,9 @@ export default function ScheduleDetailScreen() {
         });
       }
     } finally {
-      isBookingInFlightRef.current = false;
-      if (
-        activeSessionIdRef.current === targetSessionId &&
-        activeTokenRef.current === reqContextToken
-      ) {
+      // An obsolete operation must not unlock a newer account's booking.
+      if (bookingSeqRef.current === bookingSeq) {
+        isBookingInFlightRef.current = false;
         setIsBooking(false);
       }
     }

@@ -209,7 +209,7 @@ export function normalizeScheduleItem(
   const statusSource =
     toNonEmptyTrimmedString(item.backend_status) ??
     toNonEmptyTrimmedString(item.status) ??
-    "scheduled";
+    "unknown";
   const normalizedStatus = mapBackendScheduleStatus(statusSource, isMockSource);
 
   // Validate required participant counter (must be non-negative integer)

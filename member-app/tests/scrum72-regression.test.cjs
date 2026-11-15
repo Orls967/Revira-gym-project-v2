@@ -1,0 +1,368 @@
+/* global __dirname */
+// Run: node --test tests/scrum72-regression.test.cjs
+// Requires react-test-renderer matching React 19.2.3 (may be provided via TEST_TOOLS).
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { createRequire } = require('node:module');
+const ts = require('typescript');
+const testRequire = process.env.TEST_TOOLS
+  ? createRequire(path.join(process.env.TEST_TOOLS, 'package.json')) : require;
+const React = testRequire('react');
+const { create, act } = testRequire('react-test-renderer');
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const app = process.env.SCRUM72_SOURCE_ROOT || path.resolve(__dirname, '../src/app');
+const fixture = { id: 7, class_name: 'Yoga', instructor_name: 'Instructor',
+  schedule_date: '2099-01-01', start_time: '10:00', end_time: '11:00',
+  status: 'scheduled', participants_count: 3, min_participants: 5 };
+const deferred = () => {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+function load(file, deps, globals = {}) {
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true },
+  }).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(code, {
+    module, exports: module.exports, require: (name) => {
+      if (Object.hasOwn(deps, name)) return deps[name];
+      throw new Error(`Unexpected import ${name}`);
+    }, AbortController, console, setInterval, clearInterval, setTimeout, clearTimeout, ...globals,
+  }, { filename: file });
+  return module.exports;
+}
+function setup({ restoring = false, payload = false, getDetail, authToken, membership, bookings = [], now } = {}) {
+  let auth = { isLoading: restoring, userToken: restoring ? null : 'test-session' };
+  if (authToken !== undefined) auth.userToken = authToken;
+  let readToken = async () => auth.userToken;
+  const detailCalls = [], postCalls = [], getCalls = [];
+  let overrideGet = () => undefined;
+  let post = () => Promise.resolve({ data: { data: { schedule: { participants_count: 4 } } } });
+  const api = { get: (url, options) => {
+    getCalls.push(url);
+    const override = overrideGet(url, options);
+    if (override !== undefined) return override;
+    if (url === '/api/v1/class-schedules') {
+      const request = deferred(); detailCalls.push({ ...request, options });
+      return getDetail ? getDetail(request) : request.promise;
+    }
+    if (url === '/api/v1/me') return Promise.resolve({ data: { data: { membership: membership === undefined ? {
+      is_active: true, status: 'active', start_date: '2098-01-01', end_date: '2100-01-01',
+    } : membership } } });
+    if (url === '/api/v1/member/bookings') return Promise.resolve({ data: { data: bookings } });
+    throw new Error(url);
+  }, post: (...args) => { postCalls.push(args); return post(); } };
+  const deps = {
+    react: React, 'react-native': Object.fromEntries(
+      ['View','Text','TouchableOpacity','Modal','ActivityIndicator','ScrollView','SectionList','RefreshControl']
+        .map((x) => [x, x])),
+    'expo-router': { useLocalSearchParams: () => ({ id: '7', ...(payload ? { scheduleData: JSON.stringify(fixture) } : {}) }),
+      useRouter: () => ({}), useFocusEffect: () => {} },
+    '@expo/vector-icons': { Ionicons: 'Icon' },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
+    '@/lib/api': api, '@/lib/auth': { getToken: () => readToken() },
+    '@/context/AuthContext': { useAuth: () => auth }, '@/mocks/schedules': { MOCK_SCHEDULES: [] },
+    '@/components/ParticipantCounter': { ParticipantCounter: 'Counter' },
+    '@/components/StatusBadge': { StatusBadge: 'Badge' },
+  };
+  const schedules = load(path.join(app, '(app)/schedules.tsx'), deps);
+  deps['@/app/(app)/schedules'] = schedules;
+  const Counter = load(path.resolve(app, '../components/ParticipantCounter.tsx'), deps).ParticipantCounter;
+  const Badge = load(path.resolve(app, '../components/StatusBadge.tsx'), deps).StatusBadge;
+  deps['@/components/ParticipantCounter'] = { ParticipantCounter: Counter };
+  deps['@/components/StatusBadge'] = { StatusBadge: Badge };
+  class ClockDate extends Date { static now() { return now; } }
+  const Screen = load(path.join(app, 'schedule/[id].tsx'), deps, now === undefined ? {} : { Date: ClockDate }).default;
+  let root;
+  return {
+    detailCalls, postCalls, getCalls, schedules,
+    setGet: (fn) => { overrideGet = fn; },
+    counterProps: () => root.root.findByType(Counter).props,
+    badgeProps: () => root.root.findByType(Badge).props,
+    setTokenReader: (fn) => { readToken = fn; },
+    setPost: (fn) => { post = fn; },
+    mount: async () => { await act(async () => { root = create(React.createElement(Screen)); }); },
+    auth: async (value) => { auth = value; await act(async () => root.update(React.createElement(Screen))); },
+    text: () => JSON.stringify(root.toJSON()),
+    buttonProps: (label) => root.root.findAllByType('TouchableOpacity').find((n) =>
+      n.findAllByType('Text').some((t) => t.children.join('') === label)).props,
+    button: (label) => root.root.findAllByType('TouchableOpacity').find((n) =>
+      n.findAllByType('Text').some((t) => t.children.join('') === label)).props.onPress,
+    unmount: async () => { await act(async () => root.unmount()); },
+  };
+}
+const response = (name) => ({ data: { data: [{ ...fixture, class_name: name }] } });
+test('restoration waits, loads once when ready, no retry loop', async () => {
+  const h = setup({ restoring: true }); await h.mount();
+  assert.equal(h.detailCalls.length, 0);
+  await h.auth({ isLoading: false, userToken: 'restored-session' });
+  assert.equal(h.detailCalls.length, 1);
+  await act(async () => h.detailCalls[0].resolve(response('Restored')));
+  assert.match(h.text(), /Restored/); assert.equal(h.detailCalls.length, 1);
+  await h.unmount();
+});
+test('token change restarts fallback; old rejection/finally cannot stop new loading', async () => {
+  const h = setup(); await h.mount(); const old = h.detailCalls[0];
+  await h.auth({ isLoading: false, userToken: 'replacement-session' });
+  assert.equal(h.detailCalls.length, 2); assert.equal(old.options.signal.aborted, true);
+  await act(async () => old.reject(new Error('old error')));
+  assert.match(h.text(), /Memuat detail/); assert.doesNotMatch(h.text(), /old error/);
+  await act(async () => h.detailCalls[1].resolve(response('Latest')));
+  assert.match(h.text(), /Latest/); await h.unmount();
+});
+test('out-of-order success cannot replace newer session result', async () => {
+  const h = setup(); await h.mount();
+  await h.auth({ isLoading: false, userToken: 'replacement-session' });
+  assert.equal(h.detailCalls.length, 2);
+  await act(async () => h.detailCalls[1].resolve(response('Latest')));
+  await act(async () => h.detailCalls[0].resolve(response('Obsolete')));
+  assert.match(h.text(), /Latest/); assert.doesNotMatch(h.text(), /Obsolete/); await h.unmount();
+});
+test('same-ID retries protect loading from older finally and error', async () => {
+  const h = setup(); await h.mount();
+  await act(async () => h.detailCalls[0].reject(new Error('offline')));
+  const retry = h.button('Coba Lagi');
+  await act(async () => { void retry(); void retry(); });
+  assert.equal(h.detailCalls.length, 3);
+  // Two rapid retry calls start two idempotent GETs; the first is canceled.
+  assert.equal(h.detailCalls[1].options.signal.aborted, true);
+  assert.equal(h.detailCalls[2].options.signal.aborted, false);
+  await act(async () => h.detailCalls[1].resolve(response('Obsolete')));
+  assert.match(h.text(), /Memuat detail/);
+  await act(async () => h.detailCalls[2].resolve(response('Retry latest')));
+  assert.match(h.text(), /Retry latest/); await h.unmount();
+});
+test('status missing, null, wrong type, empty and unknown never become scheduled', () => {
+  const h = setup();
+  for (const status of [undefined, null, 12, {}, [], '', ' ', 'unexpected']) {
+    const item = h.schedules.normalizeScheduleItem({ ...fixture, status });
+    assert.equal(item.status, 'unknown');
+    assert.equal(h.schedules.normalizeScheduleItem(item).status, 'unknown');
+  }
+  for (const status of ['scheduled', 'ongoing', 'completed', 'cancelled']) {
+    assert.equal(h.schedules.normalizeScheduleItem({ ...fixture, status }).status, status);
+  }
+});
+test('unknown status disables booking in actual detail component', async () => {
+  const h = setup(); await h.mount();
+  await act(async () => h.detailCalls[0].resolve({ data: { data: [{ ...fixture, status: null }] } }));
+  assert.match(h.text(), /Sesi tidak dalam status terjadwal/); await h.unmount();
+});
+test('two confirmation calls before render send one POST; failure unlocks retry', async () => {
+  const h = setup({ payload: true }); const first = deferred();
+  h.setPost(() => first.promise); await h.mount();
+  await act(async () => h.button('Booking Kelas')());
+  const confirm = h.button('Ya, Booking');
+  await act(async () => { void confirm(); void confirm(); });
+  assert.equal(h.postCalls.length, 1);
+  await act(async () => first.reject(new Error('offline')));
+  assert.match(h.text(), /Gagal Booking/);
+  h.setPost(() => Promise.resolve({ data: { data: { schedule: { participants_count: 4 } } } }));
+  await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+  assert.equal(h.postCalls.length, 2); assert.match(h.text(), /Sudah Terdaftar/);
+  await h.unmount();
+});
+
+for (const outcome of ['resolve', 'reject']) {
+  test(`unmount aborts pending fallback; late ${outcome} starts no follow-up request`, async () => {
+    const h = setup(); await h.mount(); const pending = h.detailCalls[0];
+    await h.unmount();
+    assert.equal(pending.options.signal.aborted, true);
+    await act(async () => {
+      if (outcome === 'resolve') pending.resolve(response('Unmounted'));
+      else pending.reject(new Error('late failure'));
+    });
+    assert.deepEqual(h.getCalls, ['/api/v1/class-schedules']);
+    assert.equal(h.postCalls.length, 0);
+  });
+}
+
+test('auth changes during pre-POST token read: no old POST, new context can verify and book', async () => {
+  const h = setup({ payload: true, authToken: null }); await h.mount();
+  const pendingToken = deferred(); h.setTokenReader(() => pendingToken.promise);
+  await act(async () => h.button('Booking Kelas')());
+  let confirmation;
+  await act(async () => { confirmation = h.button('Ya, Booking')(); });
+  assert.equal(h.postCalls.length, 0);
+  await h.auth({ isLoading: false, userToken: 'new-account-session' });
+  await act(async () => pendingToken.resolve('old-account-session'));
+  await act(async () => confirmation);
+  assert.equal(h.postCalls.length, 0);
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+  assert.equal(h.postCalls.length, 1);
+  assert.equal(h.postCalls[0][2].headers.Authorization, 'Bearer new-account-session');
+  assert.match(h.text(), /Sudah Terdaftar/); await h.unmount();
+});
+
+for (const status of [undefined, null, 12, {}, [], '', ' ', 'unexpected']) {
+  test(`invalid status ${JSON.stringify(status)} blocks POST even if handlers are invoked`, async () => {
+    const h = setup(); await h.mount();
+    await act(async () => h.detailCalls[0].resolve({ data: { data: [{ ...fixture, status }] } }));
+    assert.equal(h.buttonProps('Booking Kelas').disabled, true);
+    // Deliberately bypass the native disabled prop to exercise handler guards too.
+    await act(async () => h.button('Booking Kelas')());
+    await act(async () => h.button('Ya, Booking')());
+    assert.equal(h.postCalls.length, 0);
+    assert.match(h.text(), /Sesi tidak dalam status terjadwal/); await h.unmount();
+  });
+}
+
+test('old pre-POST completion cannot unlock a newer account submission', async () => {
+  const h = setup({ payload: true, authToken: null }); await h.mount();
+  const oldToken = deferred(); h.setTokenReader(() => oldToken.promise);
+  await act(async () => h.button('Booking Kelas')());
+  let oldConfirmation;
+  await act(async () => { oldConfirmation = h.button('Ya, Booking')(); });
+  await h.auth({ isLoading: false, userToken: 'new-account-session' });
+  const newPost = deferred(); h.setPost(() => newPost.promise);
+  await act(async () => h.button('Booking Kelas')());
+  const newConfirm = h.button('Ya, Booking');
+  await act(async () => { void newConfirm(); });
+  assert.equal(h.postCalls.length, 1);
+  await act(async () => oldToken.resolve('old-account-session'));
+  await act(async () => oldConfirmation);
+  await act(async () => { void newConfirm(); });
+  assert.equal(h.postCalls.length, 1);
+  await act(async () => newPost.resolve({ data: { data: { schedule: { participants_count: 4 } } } }));
+  assert.match(h.text(), /Sudah Terdaftar/); await h.unmount();
+});
+
+test('Jira detail renders required info with actual counter and badge', async () => {
+  const h = setup({ payload: true }); await h.mount();
+  assert.match(h.text(), /Yoga/); assert.match(h.text(), /Instructor/);
+  assert.match(h.text(), /2099/); assert.match(h.text(), /10:00/); assert.match(h.text(), /WITA/);
+  assert.equal(h.counterProps().current, 3); assert.equal(h.counterProps().min, 5);
+  assert.equal(h.badgeProps().status, 'scheduled'); await h.unmount();
+});
+
+for (const [label, membership, eligible] of [
+  ['active inside period', { is_active: true, status: 'active', start_date: '2098-01-01', end_date: '2100-01-01' }, true],
+  ['first day inclusive', { is_active: true, status: 'active', start_date: '2099-01-01', end_date: '2099-01-31' }, true],
+  ['last day inclusive', { is_active: true, status: 'active', start_date: '2098-12-01', end_date: '2099-01-01' }, true],
+  ['upcoming covers session', { is_active: false, status: 'upcoming', start_date: '2099-01-01', end_date: '2099-01-31' }, true],
+  ['not started on session date', { is_active: false, status: 'upcoming', start_date: '2099-01-02', end_date: '2099-02-01' }, false],
+  ['ends before session', { is_active: true, status: 'active', start_date: '2098-01-01', end_date: '2098-12-31' }, false],
+  ['pending', { is_active: false, status: 'pending', start_date: null, end_date: null }, false],
+  ['expired', { is_active: false, status: 'expired', start_date: '2098-01-01', end_date: '2098-12-31' }, false],
+  ['none', { is_active: false, status: 'none', start_date: null, end_date: null }, false],
+]) {
+  test(`B6 ${label}`, async () => {
+    const h = setup({ payload: true, membership }); await h.mount();
+    assert.equal(h.buttonProps('Booking Kelas').disabled, !eligible);
+    if (!eligible) {
+      await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0);
+    }
+    await h.unmount();
+  });
+}
+
+for (const [status, id, expected] of [['booked', 7, true], ['attended', 7, true], ['cancelled', 7, false], ['booked', 8, false]]) {
+  test(`GET bookings ${status} schedule ${id}`, async () => {
+    const h = setup({ payload: true, bookings: [{ id: 2, status, schedule: { id, participants_count: 3 } }] });
+    await h.mount(); assert.ok(h.getCalls.includes('/api/v1/member/bookings'));
+    assert.equal(h.buttonProps(expected ? 'Sudah Terdaftar' : 'Booking Kelas').disabled, expected);
+    if (expected) { await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0); }
+    await h.unmount();
+  });
+}
+
+for (const [label, now] of [['before start', '2099-01-01T09:59:59+08:00'], ['exact start', '2099-01-01T10:00:00+08:00'], ['after start', '2099-01-01T10:01:00+08:00']]) {
+  test(`B7 WITA ${label}`, async () => {
+    const h = setup({ payload: true, now: Date.parse(now) }); await h.mount();
+    assert.equal(h.buttonProps('Booking Kelas').disabled, label !== 'before start');
+    if (label !== 'before start') { await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0); }
+    await h.unmount();
+  });
+}
+
+for (const status of ['ongoing', 'completed', 'cancelled']) {
+  test(`B7 ${status} cannot POST`, async () => {
+    const h = setup(); await h.mount();
+    await act(async () => h.detailCalls[0].resolve({ data: { data: [{ ...fixture, status }] } }));
+    await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0);
+    await h.unmount();
+  });
+}
+
+test('confirmation before POST, loading, server counter and disabled booked button', async () => {
+  const h = setup({ payload: true }); const pending = deferred(); h.setPost(() => pending.promise);
+  await h.mount(); assert.equal(h.postCalls.length, 0);
+  await act(async () => h.button('Booking Kelas')()); assert.equal(h.postCalls.length, 0);
+  assert.match(h.text(), /Konfirmasi Booking/);
+  await act(async () => { void h.button('Ya, Booking')(); });
+  assert.equal(h.postCalls.length, 1);
+  assert.equal(h.postCalls[0][0], '/api/v1/member/class-schedules/7/booking');
+  assert.equal(Object.keys(h.postCalls[0][1]).length, 0);
+  assert.equal(h.buttonProps('Batal').disabled, true);
+  assert.equal(h.counterProps().current, 3);
+  await act(async () => pending.resolve({ data: { data: { schedule: { participants_count: 11 } } } }));
+  assert.equal(h.counterProps().current, 11);
+  assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true); assert.match(h.text(), /Booking Berhasil/);
+  await h.unmount();
+});
+
+for (const [status, message] of [[409, 'Anda sudah booking sesi kelas ini.'], [422, 'Membership tidak aktif pada tanggal sesi.']]) {
+  test(`POST HTTP ${status} shows actionable message and retains counter`, async () => {
+    const h = setup({ payload: true }); await h.mount();
+    h.setPost(() => Promise.reject({ response: { status, data: { message, errors: { booking: [message] } } } }));
+    await act(async () => h.button('Booking Kelas')());
+    await act(async () => h.button('Ya, Booking')());
+    assert.match(h.text(), /Gagal Booking/); assert.ok(h.text().includes(message));
+    assert.equal(h.counterProps().current, 3); assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+    await h.unmount();
+  });
+}
+
+for (const malformed of [false, true]) {
+  test(`GET bookings ${malformed ? 'malformed response' : 'HTTP 500'} blocks POST and supports retry`, async () => {
+    const h = setup({ payload: true });
+    h.setGet((url) => url === '/api/v1/member/bookings'
+      ? malformed ? Promise.resolve({ data: { data: {} } }) : Promise.reject({ response: { status: 500 } }) : undefined);
+    await h.mount(); assert.match(h.text(), /Gagal|tidak valid/);
+    await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0);
+    h.setGet(() => undefined); await act(async () => h.button('Coba Lagi')());
+    assert.equal(h.buttonProps('Booking Kelas').disabled, false); await h.unmount();
+  });
+}
+
+test('pending eligibility verification blocks handlers until both GETs complete', async () => {
+  const h = setup({ payload: true }); const pending = deferred();
+  h.setGet((url) => url === '/api/v1/me' ? pending.promise : undefined);
+  await h.mount(); assert.match(h.text(), /Memverifikasi/);
+  await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0);
+  await act(async () => pending.resolve({ data: { data: { membership: {
+    is_active: true, status: 'active', start_date: '2098-01-01', end_date: '2100-01-01',
+  } } } }));
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false); await h.unmount();
+});
+
+test('missing membership response remains error, never assumes active', async () => {
+  const h = setup({ payload: true, membership: null }); await h.mount();
+  assert.match(h.text(), /Format data membership/);
+  await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0); await h.unmount();
+});
+
+test('documents unresolved contract gap: summary A hides approved renewal B', async () => {
+  // Current /me selects A and omits B; backend B6 could allow a session in B.
+  // Passing this test documents the limitation, NOT a pass for renewal acceptance.
+  const h = setup({ payload: true, membership: {
+    is_active: true, status: 'active', start_date: '2098-01-01', end_date: '2098-12-31',
+  } });
+  await h.mount(); assert.equal(h.buttonProps('Booking Kelas').disabled, true);
+  assert.match(h.text(), /sebelum tanggal sesi/); await h.unmount();
+});
+
+test('cancelled booking can rebook and adopts server participant count', async () => {
+  const h = setup({ payload: true, bookings: [{ id: 2, status: 'cancelled', schedule: { id: 7, participants_count: 3 } }] });
+  await h.mount(); await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+  assert.equal(h.postCalls.length, 1); assert.equal(h.counterProps().current, 4);
+  assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true); await h.unmount();
+});
