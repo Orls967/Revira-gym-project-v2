@@ -20,16 +20,18 @@ export type NormalizedScheduleStatus =
   | "ongoing"
   | "cancelled"
   | "completed"
-  | "full"
   | "unknown";
 
-// Extended frontend model carrying normalized backend fields for SCRUM-72 & SCRUM-73
-export type NormalizedSchedule = Omit<ClassSchedule, "status"> & {
+// UI names are normalized once; participant fields retain the API contract.
+export type NormalizedSchedule = Omit<
+  ClassSchedule,
+  "class_name" | "instructor_name" | "schedule_date" | "status"
+> & {
+  title: string;
+  instructor: string;
+  date: string;
   status: NormalizedScheduleStatus;
   raw_backend_status?: string;
-  min_participants?: number | null;
-  has_max_capacity?: boolean;
-  updated_at?: string | null;
 };
 
 // Raw backend payload shape from GET /api/v1/class-schedules
@@ -41,7 +43,6 @@ export interface RawBackendSchedule {
   gym_class?: {
     name?: unknown;
     min_participants?: unknown;
-    max_participants?: unknown;
   } | null;
   instructor?: unknown;
   instructor_name?: unknown;
@@ -56,8 +57,6 @@ export interface RawBackendSchedule {
   participants_count?: unknown;
   bookings_count?: unknown;
   min_participants?: unknown;
-  max_participants?: unknown;
-  max_capacity?: unknown;
   updated_at?: unknown;
 }
 
@@ -149,7 +148,6 @@ export function mapBackendScheduleStatus(
   if (raw === "ongoing") return "ongoing";
   if (raw === "cancelled") return "cancelled";
   if (raw === "completed") return "completed";
-  if (raw === "full") return "full";
   return "unknown";
 }
 
@@ -232,17 +230,6 @@ export function normalizeScheduleItem(
       : gymClassObj?.min_participants;
   const minParticipants = parseNonNegativeInt(rawMinSource);
 
-  // F7: Do not invent max_participants unless explicitly provided as positive integer
-  const rawMaxSource =
-    item.max_participants !== undefined
-      ? item.max_participants
-      : item.max_capacity !== undefined
-      ? item.max_capacity
-      : gymClassObj?.max_participants;
-  const parsedMax = parseNonNegativeInt(rawMaxSource);
-  const hasMaxCapacity = parsedMax !== null && parsedMax > 0;
-  const maxParticipants = hasMaxCapacity ? parsedMax : 0;
-
   const cancelReason =
     typeof item.cancel_reason === "string"
       ? item.cancel_reason.trim()
@@ -260,23 +247,15 @@ export function normalizeScheduleItem(
     status: normalizedStatus,
     raw_backend_status: statusSource,
     cancel_reason: cancelReason,
-    current_participants: participantsCount,
-    max_participants: maxParticipants,
+    participants_count: participantsCount,
     min_participants: minParticipants,
-    has_max_capacity: hasMaxCapacity,
     updated_at: updatedAt,
   };
 }
 
 // Normalize initial mock data so offline fallback uses normalized contract
-const INITIAL_NORMALIZED_MOCKS: NormalizedSchedule[] = MOCK_SCHEDULES.map((m) =>
-  normalizeScheduleItem(
-    {
-      ...(m as unknown as RawBackendSchedule),
-      max_participants: undefined,
-    },
-    true
-  )
+const INITIAL_NORMALIZED_MOCKS: NormalizedSchedule[] = MOCK_SCHEDULES.map((item) =>
+  normalizeScheduleItem(item, true)
 ).filter((item): item is NormalizedSchedule => item !== null);
 
 // Helper pengelompokan 7 hari dalam WITA
@@ -467,12 +446,6 @@ export default function ClassSchedulesScreen() {
           const isCompleted = item.status === "completed";
           const isOngoing = item.status === "ongoing";
           const isUnknown = item.status === "unknown";
-          const isFull =
-            item.status === "full" ||
-            (Boolean(item.has_max_capacity) &&
-              item.max_participants > 0 &&
-              item.current_participants >= item.max_participants);
-
           const hasValidMin =
             typeof item.min_participants === "number" &&
             Number.isInteger(item.min_participants) &&
@@ -515,8 +488,6 @@ export default function ClassSchedulesScreen() {
                       ? "bg-zinc-800 border border-zinc-700"
                       : isOngoing
                       ? "bg-amber-500/20 border border-amber-500/40"
-                      : isFull
-                      ? "bg-rose-500/20 border border-rose-500/40"
                       : "bg-emerald-500/20 border border-emerald-500/40"
                   }`}
                 >
@@ -528,8 +499,6 @@ export default function ClassSchedulesScreen() {
                         ? "text-zinc-400"
                         : isOngoing
                         ? "text-amber-400"
-                        : isFull
-                        ? "text-rose-400"
                         : "text-emerald-400"
                     }`}
                   >
@@ -539,8 +508,6 @@ export default function ClassSchedulesScreen() {
                       ? "SELESAI"
                       : isOngoing
                       ? "BERLANGSUNG"
-                      : isFull
-                      ? "PENUH"
                       : isUnknown
                       ? "TIDAK DIKETAHUI"
                       : "TERJADWAL"}
@@ -570,18 +537,14 @@ export default function ClassSchedulesScreen() {
                   <Ionicons
                     name="people-outline"
                     size={14}
-                    color={isFull ? "#f87171" : "#a1a1aa"}
+                    color="#a1a1aa"
                   />
                   <Text
-                    className={`text-xs font-medium ml-1.5 ${
-                      isFull ? "text-red-400" : "text-zinc-400"
-                    }`}
+                    className="text-xs font-medium ml-1.5 text-zinc-400"
                   >
-                    {item.has_max_capacity && item.max_participants > 0
-                      ? `${item.current_participants}/${item.max_participants} Peserta`
-                      : hasValidMin
-                      ? `${item.current_participants} (Min. ${item.min_participants}) Peserta`
-                      : `${item.current_participants} Peserta`}
+                    {hasValidMin
+                      ? `${item.participants_count} (Min. ${item.min_participants}) Peserta`
+                      : `${item.participants_count} Peserta`}
                   </Text>
                 </View>
               </View>

@@ -35,11 +35,11 @@ function load(file, deps, globals = {}) {
   }, { filename: file });
   return module.exports;
 }
-function setup({ restoring = false, payload = false, getDetail, authToken, membership, bookings = [], now } = {}) {
+function setup({ restoring = false, payload = false, getDetail, authToken, membership, bookings = [], now, view = "detail" } = {}) {
   let auth = { isLoading: restoring, userToken: restoring ? null : 'test-session' };
   if (authToken !== undefined) auth.userToken = authToken;
   let readToken = async () => auth.userToken;
-  const detailCalls = [], postCalls = [], getCalls = [];
+  const detailCalls = [], postCalls = [], getCalls = [], navigation = [];
   let overrideGet = () => undefined;
   let post = () => Promise.resolve({ data: { data: { schedule: { participants_count: 4 } } } });
   const api = { get: (url, options) => {
@@ -61,13 +61,20 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
       ['View','Text','TouchableOpacity','Modal','ActivityIndicator','ScrollView','SectionList','RefreshControl']
         .map((x) => [x, x])),
     'expo-router': { useLocalSearchParams: () => ({ id: '7', ...(payload ? { scheduleData: JSON.stringify(fixture) } : {}) }),
-      useRouter: () => ({}), useFocusEffect: () => {} },
+      useRouter: () => ({ push: (value) => navigation.push(value) }), useFocusEffect: () => {} },
     '@expo/vector-icons': { Ionicons: 'Icon' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@/lib/api': api, '@/lib/auth': { getToken: () => readToken() },
     '@/context/AuthContext': { useAuth: () => auth }, '@/mocks/schedules': { MOCK_SCHEDULES: [] },
     '@/components/ParticipantCounter': { ParticipantCounter: 'Counter' },
     '@/components/StatusBadge': { StatusBadge: 'Badge' },
+  };
+  // Render actual list cards instead of leaving renderItem inside a native host.
+  deps['react-native'].AppState = { currentState: 'active' };
+  deps['react-native'].SectionList = function ListHost({ sections, renderItem, refreshControl, ...props }) {
+    return React.createElement('SectionList', { ...props, onRefresh: refreshControl.props.onRefresh },
+      ...sections.flatMap((section) => section.data.map((item) =>
+        React.createElement(React.Fragment, { key: item.id }, renderItem({ item })))));
   };
   const schedules = load(path.join(app, '(app)/schedules.tsx'), deps);
   deps['@/app/(app)/schedules'] = schedules;
@@ -77,16 +84,18 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
   deps['@/components/StatusBadge'] = { StatusBadge: Badge };
   class ClockDate extends Date { static now() { return now; } }
   const Screen = load(path.join(app, 'schedule/[id].tsx'), deps, now === undefined ? {} : { Date: ClockDate }).default;
+  const Component = view === 'list' ? schedules.default : Screen;
   let root;
   return {
-    detailCalls, postCalls, getCalls, schedules,
+    detailCalls, postCalls, getCalls, schedules, navigation,
+    refreshList: async () => { await act(async () => root.root.findByType('SectionList').props.onRefresh()); },
     setGet: (fn) => { overrideGet = fn; },
     counterProps: () => root.root.findByType(Counter).props,
     badgeProps: () => root.root.findByType(Badge).props,
     setTokenReader: (fn) => { readToken = fn; },
     setPost: (fn) => { post = fn; },
-    mount: async () => { await act(async () => { root = create(React.createElement(Screen)); }); },
-    auth: async (value) => { auth = value; await act(async () => root.update(React.createElement(Screen))); },
+    mount: async () => { await act(async () => { root = create(React.createElement(Component)); }); },
+    auth: async (value) => { auth = value; await act(async () => root.update(React.createElement(Component))); },
     text: () => JSON.stringify(root.toJSON()),
     buttonProps: (label) => root.root.findAllByType('TouchableOpacity').find((n) =>
       n.findAllByType('Text').some((t) => t.children.join('') === label)).props,
@@ -349,7 +358,7 @@ test('missing membership response remains error, never assumes active', async ()
   await act(async () => h.button('Ya, Booking')()); assert.equal(h.postCalls.length, 0); await h.unmount();
 });
 
-test('documents unresolved contract gap: summary A hides approved renewal B', async () => {
+test('documents approved known limitation: summary A hides approved renewal B', async () => {
   // Current /me selects A and omits B; backend B6 could allow a session in B.
   // Passing this test documents the limitation, NOT a pass for renewal acceptance.
   const h = setup({ payload: true, membership: {
@@ -366,3 +375,111 @@ test('cancelled booking can rebook and adopts server participant count', async (
   assert.equal(h.postCalls.length, 1); assert.equal(h.counterProps().current, 4);
   assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true); await h.unmount();
 });
+
+async function loadSchedule(raw, view = 'detail') {
+  const h = setup({ view }); await h.mount();
+  if (view === 'list') await h.refreshList();
+  await act(async () => h.detailCalls[0].resolve({ data: { data: [raw] } }));
+  return h;
+}
+
+for (const [id, count] of [['TC-SC01', 3], ['TC-SC02', 5], ['TC-SC03', 9]]) {
+  test(`${id}: count ${count} vs minimum 5 is informative, never full`, async () => {
+    const raw = { ...fixture, participants_count: count };
+    const list = await loadSchedule(raw, 'list');
+    assert.ok(list.text().includes(`${count} (Min. 5) Peserta`));
+    assert.doesNotMatch(list.text(), /PENUH|Penuh|Kapasitas Maksimal/);
+    await act(async () => list.button('Yoga')());
+    assert.equal(list.navigation[0].pathname, '/schedule/7');
+    const routed = JSON.parse(list.navigation[0].params.scheduleData);
+    assert.equal(routed.participants_count, count);
+    assert.equal(routed.min_participants, 5);
+    await list.unmount();
+    const detail = await loadSchedule(routed);
+    assert.equal(detail.counterProps().current, count);
+    assert.equal(detail.counterProps().min, 5);
+    assert.equal(detail.buttonProps('Booking Kelas').disabled, false);
+    if (count >= 5) assert.match(detail.text(), /Minimum terpenuhi/);
+    assert.doesNotMatch(detail.text(), /PENUH|Penuh/);
+    await act(async () => detail.button('Booking Kelas')());
+    await act(async () => detail.button('Ya, Booking')());
+    assert.equal(detail.postCalls.length, 1);
+    await detail.unmount();
+  });
+}
+
+for (const legacy of [{ max_participants: 2 }, { max_capacity: 2 }, { gym_class: { max_participants: 2 } }]) {
+  test(`TC-SC04: legacy maximum ignored ${JSON.stringify(legacy)}`, async () => {
+    const raw = { ...fixture, participants_count: 8, ...legacy };
+    const h = await loadSchedule(raw, 'list');
+    assert.ok(h.text().includes('8 (Min. 5) Peserta'));
+    assert.ok(!h.text().includes('8/2 Peserta'));
+    assert.doesNotMatch(h.text(), /PENUH|Penuh|Kapasitas Maksimal/);
+    const normalized = h.schedules.normalizeScheduleItem(raw);
+    for (const name of ['max_participants', 'max_capacity', 'has_max_capacity']) assert.equal(name in normalized, false);
+    await h.unmount();
+    const detail = await loadSchedule(raw);
+    assert.equal(detail.buttonProps('Booking Kelas').disabled, false);
+    await act(async () => detail.button('Booking Kelas')());
+    await act(async () => detail.button('Ya, Booking')());
+    assert.equal(detail.postCalls.length, 1); await detail.unmount();
+  });
+}
+
+test('TC-SC05: full legacy status is unknown on list/detail and cannot POST', async () => {
+  const raw = { ...fixture, status: 'full' };
+  const list = await loadSchedule(raw, 'list');
+  assert.match(list.text(), /TIDAK DIKETAHUI/); assert.doesNotMatch(list.text(), /PENUH|Penuh/);
+  assert.equal(list.schedules.normalizeScheduleItem(raw).status, 'unknown'); await list.unmount();
+  const detail = await loadSchedule(raw);
+  assert.equal(detail.buttonProps('Booking Kelas').disabled, true);
+  assert.equal(detail.badgeProps().customText, 'Tidak Diketahui');
+  assert.doesNotMatch(detail.text(), /PENUH|Penuh/);
+  await act(async () => detail.button('Ya, Booking')());
+  assert.equal(detail.postCalls.length, 0); await detail.unmount();
+});
+
+test('TC-SC06: scheduled remains scheduled and eligible', async () => {
+  const h = await loadSchedule(fixture);
+  assert.equal(h.badgeProps().status, 'scheduled');
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false); await h.unmount();
+});
+
+for (const status of ['cancelled', 'completed']) {
+  test(`TC-SC07: ${status} remains unavailable; cancelled reason preserved`, async () => {
+    const raw = { ...fixture, status, cancel_reason: status === 'cancelled' ? 'Instruktur berhalangan' : undefined };
+    const list = await loadSchedule(raw, 'list');
+    assert.match(list.text(), status === 'cancelled' ? /DIBATALKAN/ : /SELESAI/);
+    if (status === 'cancelled') assert.match(list.text(), /Instruktur berhalangan/);
+    await list.unmount();
+    const detail = await loadSchedule(raw);
+    assert.equal(detail.badgeProps().status, status);
+    if (status === 'cancelled') assert.match(detail.text(), /Instruktur berhalangan/);
+    await act(async () => detail.button('Ya, Booking')());
+    assert.equal(detail.postCalls.length, 0); await detail.unmount();
+  });
+}
+
+test('TC-SC08: API-only payload without maximum renders and keeps actual counter', async () => {
+  const h = await loadSchedule(fixture, 'list');
+  assert.ok(h.text().includes('3 (Min. 5) Peserta'));
+  assert.doesNotMatch(h.text(), /NaN|undefined|PENUH|Penuh/); await h.unmount();
+});
+
+for (const min of [null, undefined, -1, '5']) {
+  test(`TC-SC09: minimum ${JSON.stringify(min)} stays unknown without invented zero`, async () => {
+    const raw = { ...fixture, min_participants: min };
+    const list = await loadSchedule(raw, 'list');
+    assert.ok(list.text().includes('3 Peserta')); assert.doesNotMatch(list.text(), /Min\./); await list.unmount();
+    const detail = await loadSchedule(raw);
+    assert.match(detail.text(), /Minimum belum tersedia/); assert.doesNotMatch(detail.text(), /Minimum terpenuhi/);
+    assert.equal(detail.buttonProps('Booking Kelas').disabled, false); await detail.unmount();
+  });
+}
+
+test('TC-SC09: explicit minimum zero remains valid without limiting booking', async () => {
+  const h = await loadSchedule({ ...fixture, min_participants: 0 });
+  assert.equal(h.counterProps().min, 0); assert.match(h.text(), /Minimum terpenuhi/);
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false); await h.unmount();
+});
+// TC-SC10 is covered by the original 48 lifecycle/B6/WITA/409/422/counter tests above.
