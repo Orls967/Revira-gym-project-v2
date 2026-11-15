@@ -130,7 +130,7 @@ function isValidNormalizedSchedule(
   const validEnd = normalizeValidTime(item.end_time);
   if (!validStart || !validEnd) return false;
 
-  if (parseNonNegativeInt(item.current_participants) === null) return false;
+  if (parseNonNegativeInt(item.participants_count) === null) return false;
   if (
     item.min_participants !== null &&
     item.min_participants !== undefined &&
@@ -377,7 +377,7 @@ export default function ScheduleDetailScreen() {
 
   // Reactive participant counter state (AC2)
   const [localParticipants, setLocalParticipants] = useState<number>(
-    initialParsedSchedule?.current_participants ?? 0
+    initialParsedSchedule?.participants_count ?? 0
   );
 
   // --- F6: Concurrency, Sequence ID, Session & Auth Token Guards ---
@@ -463,7 +463,7 @@ export default function ScheduleDetailScreen() {
 
     if (initialParsedSchedule && initialParsedSchedule.id === routeScheduleId) {
       setSchedule(initialParsedSchedule);
-      setLocalParticipants(initialParsedSchedule.current_participants);
+      setLocalParticipants(initialParsedSchedule.participants_count);
       setIsLoadingSchedule(false);
       setScheduleLoadError(null);
     } else {
@@ -544,7 +544,7 @@ export default function ScheduleDetailScreen() {
       }
 
       setSchedule(normalized);
-      setLocalParticipants(normalized.current_participants);
+      setLocalParticipants(normalized.participants_count);
     } catch (err: unknown) {
       if (isRequestCanceled(err)) return;
       if (!isCurrentRequest()) return;
@@ -1000,8 +1000,6 @@ export default function ScheduleDetailScreen() {
   } else if (rawStatus === "ongoing" || isSessionOngoing) {
     badgeStatus = "scheduled";
     badgeCustomText = "Berlangsung";
-  } else if (rawStatus === "full") {
-    badgeStatus = "full";
   } else if (rawStatus === "unknown") {
     badgeStatus = "completed";
     badgeCustomText = "Tidak Diketahui";

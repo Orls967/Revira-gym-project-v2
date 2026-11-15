@@ -27,7 +27,7 @@ contract from Orlando. This patch does not alter `/me` or invent renewal eligibi
 
 ## Final verification coverage
 
-The suite now has 48 tests, including late fallback success/failure after unmount,
+The suite now has 64 tests, including late fallback success/failure after unmount,
 auth changes during a deferred pre-POST SecureStore read, isolation of a new
 account submit lock from old completion, and direct handler invocation for eight
 invalid status values (asserting zero POSTs).
@@ -37,3 +37,27 @@ its result/finally is ignored. This is minor redundant traffic, not duplicate
 booking or state corruption. Retry behavior is intentionally unchanged.
 
 Requirement traceability and outstanding acceptance gates are supplied separately in the handoff report. The suite renders real Counter/Badge, but mocks native hosts and APIs.
+
+
+## Capacity scope revision (SC-01/SC-02/SC-03)
+
+Sprint 3 has no maximum class capacity. The list/detail use `participants_count`
+and optional/nullable `min_participants` only. Minimum is informational and never
+restricts booking. Legacy maximum fields are ignored; legacy status `full` is
+unknown and cannot book. Shared StatusBadge is unchanged; its full variant is no
+longer called by the schedule flow or component preview.
+
+The original 48 regressions remain; 16 additional cases cover TC-SC01 through
+TC-SC09 (with variants). TC-SC10 is the existing lifecycle, WITA, membership,
+409/422, rebooking, and authoritative-counter suite. Actual list cards are now
+rendered in the test harness and navigation payloads are checked.
+
+The frontend schedule model now retains the API counter name `participants_count`.
+SCRUM-73 integration must migrate consumers of the older normalized
+`current_participants` field. The adapter still accepts that legacy field as input,
+but never emits maximum-capacity rules. No polling implementation is changed.
+
+Per Orlando's scope decision supplied for this revision, future approved renewal
+is an accepted known limitation/follow-up, not a blocker for SCRUM-72. The single
+membership date checks and fail-closed behavior remain. SCRUM-97 cancellation is
+out of scope. API/Android acceptance and Amel's review are still required.
