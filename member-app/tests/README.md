@@ -27,7 +27,7 @@ contract from Orlando. This patch does not alter `/me` or invent renewal eligibi
 
 ## Final verification coverage
 
-The suite now has 64 tests, including late fallback success/failure after unmount,
+The capacity-scope baseline had 64 tests, including late fallback success/failure after unmount,
 auth changes during a deferred pre-POST SecureStore read, isolation of a new
 account submit lock from old completion, and direct handler invocation for eight
 invalid status values (asserting zero POSTs).
@@ -47,7 +47,7 @@ restricts booking. Legacy maximum fields are ignored; legacy status `full` is
 unknown and cannot book. Shared StatusBadge is unchanged; its full variant is no
 longer called by the schedule flow or component preview.
 
-The original 48 regressions remain; 16 additional cases cover TC-SC01 through
+The baseline lifecycle/booking checks and 16 capacity cases cover TC-SC01 through
 TC-SC09 (with variants). TC-SC10 is the existing lifecycle, WITA, membership,
 409/422, rebooking, and authoritative-counter suite. Actual list cards are now
 rendered in the test harness and navigation payloads are checked.
@@ -61,3 +61,37 @@ Per Orlando's scope decision supplied for this revision, future approved renewal
 is an accepted known limitation/follow-up, not a blocker for SCRUM-72. The single
 membership date checks and fail-closed behavior remain. SCRUM-97 cancellation is
 out of scope. API/Android acceptance and Amel's review are still required.
+
+
+## HTTP 409 reconciliation follow-up
+
+A POST conflict remains an error/info popup, not a new booking success. The screen
+then re-fetches `/api/v1/me` and `/api/v1/member/bookings` through the existing
+sequence/epoch/auth/abort guards. A synchronous conflict flag blocks stale submit
+callbacks while reconciliation is pending or failed. Only validated server data
+clears that flag. GET failure leaves the error/retry UI fail-closed.
+
+The booking resource supplies the authoritative `schedule.participants_count`.
+If unavailable, the screen reads the existing `/api/v1/class-schedules` endpoint
+with `date_from`/`date_to` for the session date. The guarded fallback snapshot also
+retains current session status; it never invents a counter or increments on 409.
+This is a one-off reconciliation/retry, not SCRUM-73 polling.
+
+The former regression that expected Booking to remain active after HTTP 409 has
+been replaced by TC-409-01..07, with booked/attended/cancelled, GET failure/retry,
+missing/invalid counter, out-of-order booking and fallback responses, auth changes,
+unmount, 201/401/422 preservation and rapid confirmation coverage. Tests render
+the actual React screen with deferred promises and mock APIs/native hosts.
+
+Targeted execution (from `member-app`, with the existing TEST_TOOLS prerequisite):
+
+```powershell
+$env:TEST_TOOLS = Join-Path $env:TEMP 'Revira-SCRUM72-test-tools'
+node --test --test-name-pattern='TC-409|GET bookings|pending eligibility|missing membership|cancelled booking|auth changes during pre-POST|old pre-POST' tests/scrum72-regression.test.cjs
+npx.cmd tsc --noEmit
+npm.cmd run lint
+```
+
+No backend suite, real Android acceptance or Railway requests are implied by these
+regressions. Re-run the original two-client conflict on Android after this patch is
+reviewed, including GET failure/retry and account/route changes during reconciliation.

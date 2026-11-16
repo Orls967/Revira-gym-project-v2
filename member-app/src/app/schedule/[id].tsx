@@ -387,6 +387,7 @@ export default function ScheduleDetailScreen() {
   const verifySeqRef = useRef<number>(0);
   const isBookingInFlightRef = useRef<boolean>(false);
   const bookingSeqRef = useRef(0);
+  const needsConflictReconciliationRef = useRef(false);
 
   const verifyAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
@@ -439,6 +440,7 @@ export default function ScheduleDetailScreen() {
     // A new auth/session context owns its own submit lock and loading state.
     bookingSeqRef.current += 1;
     isBookingInFlightRef.current = false;
+    needsConflictReconciliationRef.current = false;
     setIsBooking(false);
 
     setHasBooked(false);
@@ -473,6 +475,7 @@ export default function ScheduleDetailScreen() {
     }
 
     return () => {
+      activeSessionIdRef.current = null;
       abortAllRequests();
     };
   }, [
@@ -580,6 +583,7 @@ export default function ScheduleDetailScreen() {
   ]);
 
   const scheduleId = schedule?.id ?? null;
+  const scheduleDate = schedule?.date;
 
   // --- F2 & F6: Verify Membership (/api/v1/me) AND Existing Bookings (/api/v1/member/bookings) ---
   // Protected by verifySeqRef, mutationEpochRef, activeSessionIdRef, activeTokenRef & AbortController
@@ -599,6 +603,7 @@ export default function ScheduleDetailScreen() {
     const reqSeq = ++verifySeqRef.current;
     const reqEpoch = mutationEpochRef.current;
     const reqContextToken = userToken ?? null;
+    const reconcileConflict = needsConflictReconciliationRef.current;
 
     setIsVerifyingEligibility(true);
     setVerificationError(null);
@@ -714,17 +719,54 @@ export default function ScheduleDetailScreen() {
         }
       }
 
+      // A conflict requires an authoritative count even if the booking was
+      // cancelled/removed meanwhile, or its resource omitted the counter.
+      if (reconcileConflict && authoritativeCountFromBookings === null) {
+        if (!scheduleDate) {
+          throw new Error("Tanggal sesi belum tersedia untuk memperbarui jumlah peserta.");
+        }
+        const schedulesRes = await api.get("/api/v1/class-schedules", {
+          headers,
+          signal: controller.signal,
+          params: { date_from: scheduleDate, date_to: scheduleDate },
+        });
+        if (
+          controller.signal.aborted ||
+          reqSeq !== verifySeqRef.current ||
+          reqEpoch !== mutationEpochRef.current ||
+          activeSessionIdRef.current !== targetSessionId ||
+          activeTokenRef.current !== reqContextToken ||
+          isBookingInFlightRef.current
+        ) {
+          return;
+        }
+        const rawSchedules = schedulesRes.data?.data ?? schedulesRes.data;
+        if (!Array.isArray(rawSchedules)) {
+          throw new Error("Format daftar jadwal untuk memperbarui jumlah peserta tidak valid.");
+        }
+        const currentSchedule = rawSchedules
+          .map((item: unknown) => normalizeScheduleItem(item, false))
+          .find((item) => item?.id === targetSessionId);
+        if (!currentSchedule) {
+          throw new Error("Jumlah peserta sesi belum dapat diverifikasi. Silakan coba lagi.");
+        }
+        setSchedule(currentSchedule);
+        authoritativeCountFromBookings = currentSchedule.participants_count;
+      }
+
       setMembershipData(parsedMembership);
       setHasBooked(foundActiveBooking);
       if (authoritativeCountFromBookings !== null) {
         setLocalParticipants(authoritativeCountFromBookings);
       }
+      if (reconcileConflict) needsConflictReconciliationRef.current = false;
       setVerificationError(null);
     } catch (err: unknown) {
       if (isRequestCanceled(err)) return;
 
       // F6: Never allow stale failed request to overwrite newer state
       if (
+        controller.signal.aborted ||
         reqSeq !== verifySeqRef.current ||
         reqEpoch !== mutationEpochRef.current ||
         activeSessionIdRef.current !== targetSessionId ||
@@ -743,6 +785,7 @@ export default function ScheduleDetailScreen() {
     } finally {
       // F6: Only clear loading indicator if this request is still the latest active verification
       if (
+        !controller.signal.aborted &&
         reqSeq === verifySeqRef.current &&
         reqEpoch === mutationEpochRef.current &&
         activeSessionIdRef.current === targetSessionId &&
@@ -751,7 +794,7 @@ export default function ScheduleDetailScreen() {
         setIsVerifyingEligibility(false);
       }
     }
-  }, [scheduleId, userToken]);
+  }, [scheduleId, scheduleDate, userToken]);
 
   useEffect(() => {
     if (!isAuthLoading && scheduleId) {
@@ -1013,7 +1056,7 @@ export default function ScheduleDetailScreen() {
   const handleBooking = () => {
     const currentNow = Date.now();
     setNowTimestamp(currentNow);
-    if (currentNow >= sessionStartMs || !canBook) {
+    if (needsConflictReconciliationRef.current || currentNow >= sessionStartMs || !canBook) {
       return;
     }
 
@@ -1027,7 +1070,7 @@ export default function ScheduleDetailScreen() {
 
   const confirmBookingAction = async () => {
     // Lock synchronously: two taps can arrive before React renders disabled.
-    if (isBookingInFlightRef.current) return;
+    if (isBookingInFlightRef.current || needsConflictReconciliationRef.current) return;
     const currentNow = Date.now();
     setNowTimestamp(currentNow);
     if (currentNow >= sessionStartMs || !canBook) {
@@ -1130,6 +1173,12 @@ export default function ScheduleDetailScreen() {
             "Sesi login Anda tidak valid atau belum terautentikasi. Silakan login kembali.",
         });
       } else {
+        if (error.response?.status === 409) {
+          // Keep stale callbacks locked until GET reconciliation succeeds.
+          // A conflict is not a new booking success and must not increment count.
+          needsConflictReconciliationRef.current = true;
+          setIsVerifyingEligibility(true);
+        }
         const msg =
           error.response?.data?.message ||
           error.message ||
@@ -1143,9 +1192,18 @@ export default function ScheduleDetailScreen() {
       }
     } finally {
       // An obsolete operation must not unlock a newer account's booking.
-      if (bookingSeqRef.current === bookingSeq) {
+      if (
+        bookingSeqRef.current === bookingSeq &&
+        activeSessionIdRef.current === targetSessionId &&
+        activeTokenRef.current === reqContextToken
+      ) {
         isBookingInFlightRef.current = false;
         setIsBooking(false);
+        // Verification rejects results during a POST. Start it only after the
+        // submit lock is released; the conflict ref still blocks duplicate POSTs.
+        if (needsConflictReconciliationRef.current) {
+          await verifyBookingAndMembership();
+        }
       }
     }
   };

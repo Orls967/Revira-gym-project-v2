@@ -161,7 +161,7 @@ test('unknown status disables booking in actual detail component', async () => {
   await act(async () => h.detailCalls[0].resolve({ data: { data: [{ ...fixture, status: null }] } }));
   assert.match(h.text(), /Sesi tidak dalam status terjadwal/); await h.unmount();
 });
-test('two confirmation calls before render send one POST; failure unlocks retry', async () => {
+test('TC-409-06: two confirmation calls before render send one POST; failure unlocks retry', async () => {
   const h = setup({ payload: true }); const first = deferred();
   h.setPost(() => first.promise); await h.mount();
   await act(async () => h.button('Booking Kelas')());
@@ -300,9 +300,10 @@ for (const status of ['ongoing', 'completed', 'cancelled']) {
   });
 }
 
-test('confirmation before POST, loading, server counter and disabled booked button', async () => {
+test('TC-409-04: confirmation before POST, loading, server counter and disabled booked button', async () => {
   const h = setup({ payload: true }); const pending = deferred(); h.setPost(() => pending.promise);
   await h.mount(); assert.equal(h.postCalls.length, 0);
+  const initialGetCount = h.getCalls.length;
   await act(async () => h.button('Booking Kelas')()); assert.equal(h.postCalls.length, 0);
   assert.match(h.text(), /Konfirmasi Booking/);
   await act(async () => { void h.button('Ya, Booking')(); });
@@ -314,20 +315,28 @@ test('confirmation before POST, loading, server counter and disabled booked butt
   await act(async () => pending.resolve({ data: { data: { schedule: { participants_count: 11 } } } }));
   assert.equal(h.counterProps().current, 11);
   assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true); assert.match(h.text(), /Booking Berhasil/);
+  assert.equal(h.getCalls.length, initialGetCount);
   await h.unmount();
 });
 
-for (const [status, message] of [[409, 'Anda sudah booking sesi kelas ini.'], [422, 'Membership tidak aktif pada tanggal sesi.']]) {
-  test(`POST HTTP ${status} shows actionable message and retains counter`, async () => {
-    const h = setup({ payload: true }); await h.mount();
-    h.setPost(() => Promise.reject({ response: { status, data: { message, errors: { booking: [message] } } } }));
-    await act(async () => h.button('Booking Kelas')());
-    await act(async () => h.button('Ya, Booking')());
-    assert.match(h.text(), /Gagal Booking/); assert.ok(h.text().includes(message));
-    assert.equal(h.counterProps().current, 3); assert.equal(h.buttonProps('Booking Kelas').disabled, false);
-    await h.unmount();
-  });
-}
+test('TC-409-05: POST HTTP 422 preserves message/counter and supports retry', async () => {
+  const h = setup({ payload: true }); await h.mount();
+  const before = h.getCalls.length;
+  h.setPost(() => Promise.reject({ response: { status: 422, data: { message: 'Membership tidak aktif pada tanggal sesi.' } } }));
+  await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+  assert.match(h.text(), /Gagal Booking/);
+  assert.match(h.text(), /Membership tidak aktif pada tanggal sesi/);
+  assert.equal(h.counterProps().current, 3);
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  assert.equal(h.getCalls.length, before);
+  h.setPost(() => Promise.resolve({ data: { data: { schedule: { participants_count: 8 } } } }));
+  await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+  assert.equal(h.postCalls.length, 2); assert.equal(h.counterProps().current, 8);
+  assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+  await h.unmount();
+});
 
 for (const malformed of [false, true]) {
   test(`GET bookings ${malformed ? 'malformed response' : 'HTTP 500'} blocks POST and supports retry`, async () => {
@@ -483,3 +492,175 @@ test('TC-SC09: explicit minimum zero remains valid without limiting booking', as
   assert.equal(h.buttonProps('Booking Kelas').disabled, false); await h.unmount();
 });
 // TC-SC10 is covered by the original 48 lifecycle/B6/WITA/409/422/counter tests above.
+
+// HTTP 409 is a conflict, never a new successful booking. Use real screen effects.
+const conflict409 = () => Promise.reject({ response: { status: 409, data: { message: 'Anda sudah booking sesi kelas ini.' } } });
+const ownBookingResponse = (status = 'booked', count = 12) => ({ data: { data: [
+  { id: 21, status, schedule: { id: '7', participants_count: count } },
+] } });
+async function submitConflict(h) {
+  h.setPost(conflict409);
+  await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+}
+for (const status of ['booked', 'attended']) {
+  test(`TC-409-01: conflict reconciles ${status} and authoritative counter without reopening`, async () => {
+    const h = setup({ payload: true }); await h.mount();
+    h.setGet((url) => url === '/api/v1/member/bookings' ? Promise.resolve(ownBookingResponse(status, 12)) : undefined);
+    await submitConflict(h);
+    assert.equal(h.getCalls.filter((x) => x === '/api/v1/member/bookings').length, 2);
+    assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+    assert.equal(h.counterProps().current, 12);
+    assert.match(h.text(), /Anda sudah booking sesi kelas ini/);
+    assert.doesNotMatch(h.text(), /Booking Berhasil/);
+    assert.equal(h.postCalls.length, 1); await h.unmount();
+  });
+}
+test('TC-409-01: missing booking counter falls back to date-filtered schedules', async () => {
+  const h = setup({ payload: true }); await h.mount(); let options;
+  // Omit the field rather than use the helper's default count.
+  h.setGet((url, config) => {
+    if (url === '/api/v1/member/bookings') return Promise.resolve({ data: { data: [{ status: 'booked', schedule: { id: 7 } }] } });
+    if (url === '/api/v1/class-schedules') { options = config; return Promise.resolve({ data: { data: [{ ...fixture, participants_count: 17 }] } }); }
+  });
+  await submitConflict(h);
+  assert.equal(h.counterProps().current, 17); assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(options.params)), { date_from: '2099-01-01', date_to: '2099-01-01' });
+  assert.ok(options.headers.Authorization); assert.equal(options.signal.aborted, false);
+  await h.unmount();
+});
+test('TC-409-02: failed reconciliation stays fail-closed; retry adopts server state', async () => {
+  const h = setup({ payload: true }); await h.mount();
+  h.setGet((url) => url === '/api/v1/member/bookings' ? Promise.reject(new Error('Booking service unavailable')) : undefined);
+  await submitConflict(h);
+  assert.match(h.text(), /Booking service unavailable/); assert.match(h.text(), /Coba Lagi/);
+  assert.doesNotMatch(h.text(), /Booking Berhasil/); assert.equal(h.counterProps().current, 3);
+  assert.doesNotMatch(h.text(), /"Booking Kelas"/);
+  await act(async () => h.button('Mengerti')());
+  h.setGet((url) => url === '/api/v1/member/bookings' ? Promise.resolve(ownBookingResponse('booked', 9)) : undefined);
+  await act(async () => h.button('Coba Lagi')());
+  assert.equal(h.counterProps().current, 9); assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+  assert.equal(h.postCalls.length, 1); await h.unmount();
+});
+for (const list of [null, [], [{ ...fixture, participants_count: 'invalid' }]]) {
+  test(`TC-409-02: unavailable authoritative counter cannot silently unlock booking ${JSON.stringify(list)}`, async () => {
+    const h = setup({ payload: true }); await h.mount();
+    h.setGet((url) => {
+      if (url === '/api/v1/member/bookings') return Promise.resolve({ data: { data: [] } });
+      if (url === '/api/v1/class-schedules') return Promise.resolve({ data: { data: list } });
+    });
+    await submitConflict(h);
+    assert.match(h.text(), /Coba Lagi/); assert.doesNotMatch(h.text(), /"Booking Kelas"/);
+    assert.equal(h.counterProps().current, 3); assert.equal(h.postCalls.length, 1); await h.unmount();
+  });
+}
+test('TC-409-02: pending reconciliation blocks stale confirmation callbacks synchronously', async () => {
+  const h = setup({ payload: true }); await h.mount(); const pending = deferred();
+  await act(async () => h.button('Booking Kelas')()); const confirm = h.button('Ya, Booking');
+  h.setPost(conflict409);
+  h.setGet((url) => url === '/api/v1/member/bookings' ? pending.promise : undefined);
+  await act(async () => { void confirm(); });
+  assert.match(h.text(), /Memverifikasi/);
+  await act(async () => { void confirm(); void confirm(); });
+  assert.equal(h.postCalls.length, 1);
+  await act(async () => pending.resolve(ownBookingResponse('booked', 7)));
+  assert.equal(h.counterProps().current, 7); assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+  await h.unmount();
+});
+for (const outcome of ['resolve', 'reject']) {
+  test(`TC-409-03: older reconciliation ${outcome}/finally cannot overwrite newer retry`, async () => {
+    const h = setup({ payload: true }); await h.mount();
+    h.setGet((url) => url === '/api/v1/member/bookings' ? Promise.reject(new Error('offline')) : undefined);
+    await submitConflict(h); await act(async () => h.button('Mengerti')()); const retry = h.button('Coba Lagi'); const a = deferred(), b = deferred(); let calls = 0;
+    h.setGet((url) => url === '/api/v1/member/bookings' ? (++calls === 1 ? a.promise : b.promise) : undefined);
+    await act(async () => { void retry(); void retry(); });
+    await act(async () => b.resolve(ownBookingResponse('booked', 8)));
+    await act(async () => outcome === 'resolve' ? a.resolve(ownBookingResponse('cancelled', 99)) : a.reject(new Error('obsolete failure')));
+    assert.equal(h.counterProps().current, 8); assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+    assert.doesNotMatch(h.text(), /obsolete failure/); assert.equal(calls, 2); await h.unmount();
+  });
+}
+test('TC-409-03: old account reconciliation cannot change the new auth context', async () => {
+  const h = setup({ payload: true }); await h.mount(); const old = deferred();
+  h.setPost(conflict409); h.setGet((url) => url === '/api/v1/member/bookings' ? old.promise : undefined);
+  await act(async () => h.button('Booking Kelas')()); await act(async () => { void h.button('Ya, Booking')(); });
+  h.setGet(() => undefined); await h.auth({ isLoading: false, userToken: 'new-test-context' });
+  await act(async () => old.resolve(ownBookingResponse('booked', 99)));
+  assert.equal(h.counterProps().current, 3); assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  assert.equal(h.postCalls.length, 1); await h.unmount();
+});
+test('TC-409-03: reconciliation completion after unmount starts no counter fallback', async () => {
+  const h = setup({ payload: true }); await h.mount(); const pending = deferred();
+  h.setPost(conflict409);h.setGet((url) => url === '/api/v1/member/bookings' ? pending.promise : undefined);
+  await act(async () => h.button('Booking Kelas')());await act(async () => { void h.button('Ya, Booking')(); });
+  await h.unmount(); const before = h.getCalls.length;
+  await act(async () => pending.resolve({ data: { data: [] } }));
+  assert.equal(h.getCalls.length, before);
+});
+test('TC-409-03: POST conflict received after unmount must not start reconciliation', async () => {
+  const h = setup({ payload: true }); const pending = deferred(); h.setPost(() => pending.promise); await h.mount();
+  await act(async () => h.button('Booking Kelas')()); await act(async () => { void h.button('Ya, Booking')(); });
+  await h.unmount(); const before = h.getCalls.length;
+  await act(async () => pending.reject({ response: { status: 409 } })); assert.equal(h.getCalls.length, before);
+});
+test('TC-409-07: cancelled reconciliation permits eligible rebooking; 201 counter stays authoritative', async () => {
+  const h = setup({ payload: true }); await h.mount();
+  h.setGet((url) => url === '/api/v1/member/bookings' ? Promise.resolve(ownBookingResponse('cancelled', 2)) : undefined);
+  await submitConflict(h); assert.equal(h.counterProps().current, 2); assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  h.setPost(() => Promise.resolve({ data: { data: { schedule: { participants_count: 6 } } } }));
+  await act(async () => h.button('Booking Kelas')()); await act(async () => h.button('Ya, Booking')());
+  assert.equal(h.postCalls.length, 2); assert.equal(h.counterProps().current, 6);
+  assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true); await h.unmount();
+});
+test('TC-409-guard: HTTP 401 keeps unauthorized flow and makes no reconciliation requests', async () => {
+  const h = setup({ payload: true }); await h.mount(); const before = h.getCalls.length;
+  h.setPost(() => Promise.reject({ response: { status: 401 } }));
+  await act(async () => h.button('Booking Kelas')()); await act(async () => h.button('Ya, Booking')());
+  assert.match(h.text(), /Sesi Berakhir/); assert.equal(h.getCalls.length, before); assert.equal(h.counterProps().current, 3);
+  await h.unmount();
+});
+
+test('TC-409-02: counter endpoint failure stays blocked until a successful retry', async () => {
+  const h = setup({ payload: true }); await h.mount(); let fail = true;
+  h.setGet((url) => {
+    if (url === '/api/v1/member/bookings') return Promise.resolve({ data: { data: [{ status: 'booked', schedule: { id: 7 } }] } });
+    if (url === '/api/v1/class-schedules') return fail ? Promise.reject(new Error('counter offline')) : Promise.resolve({ data: { data: [{ ...fixture, participants_count: 15 }] } });
+  });
+  await submitConflict(h); assert.match(h.text(), /counter offline/); assert.doesNotMatch(h.text(), /"Booking Kelas"/);
+  assert.equal(h.counterProps().current, 3); fail = false;
+  await act(async () => h.button('Mengerti')()); await act(async () => h.button('Coba Lagi')());
+  assert.equal(h.counterProps().current, 15); assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+  assert.equal(h.postCalls.length, 1); await h.unmount();
+});
+for (const outcome of ['resolve', 'reject']) {
+  test(`TC-409-03: obsolete counter fallback ${outcome} cannot overwrite a newer reconciliation`, async () => {
+    const h = setup({ payload: true }); await h.mount();
+    h.setGet((url) => url === '/api/v1/member/bookings' ? Promise.reject(new Error('initial offline')) : undefined);
+    await submitConflict(h); await act(async () => h.button('Mengerti')()); const retry = h.button('Coba Lagi');
+    const oldCounter = deferred(); let bookingCalls = 0;
+    h.setGet((url) => {
+      if (url === '/api/v1/member/bookings') return Promise.resolve(++bookingCalls === 1
+        ? { data: { data: [{ status: 'booked', schedule: { id: 7 } }] } }
+        : ownBookingResponse('booked', 18));
+      if (url === '/api/v1/class-schedules') return oldCounter.promise;
+    });
+    await act(async () => { void retry(); });
+    assert.match(h.text(), /Memverifikasi/);
+    await act(async () => retry());
+    await act(async () => outcome === 'resolve'
+      ? oldCounter.resolve({ data: { data: [{ ...fixture, participants_count: 99 }] } })
+      : oldCounter.reject(new Error('old counter failed')));
+    assert.equal(h.counterProps().current, 18); assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+    assert.doesNotMatch(h.text(), /old counter failed/); await h.unmount();
+  });
+}
+test('TC-409-02: fallback snapshot preserves cancellation eligibility instead of enabling rebooking', async () => {
+  const h = setup({ payload: true }); await h.mount();
+  h.setGet((url) => {
+    if (url === '/api/v1/member/bookings') return Promise.resolve({ data: { data: [] } });
+    if (url === '/api/v1/class-schedules') return Promise.resolve({ data: { data: [{ ...fixture, participants_count: 2, status: 'cancelled', cancel_reason: 'QA cancellation' }] } });
+  });
+  await submitConflict(h); assert.equal(h.counterProps().current, 2);
+  assert.equal(h.badgeProps().status, 'cancelled'); assert.match(h.text(), /QA cancellation/);
+  assert.doesNotMatch(h.text(), /"Booking Kelas"/); assert.equal(h.postCalls.length, 1); await h.unmount();
+});
