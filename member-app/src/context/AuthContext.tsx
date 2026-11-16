@@ -35,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const storedUser = await getUserData();
 
         if (storedToken) {
+          apiClient.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
           setUserToken(storedToken);
           setUser(storedUser);
         }
@@ -47,28 +48,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     initSession();
 
+    // Interceptor request agar token selalu disertakan di setiap request ke backend
+    const reqInterceptor = apiClient.interceptors.request.use(async (config) => {
+      const token = await getToken();
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
+
     registerUnauthorizedHandler(() => {
+      delete apiClient.defaults.headers.common["Authorization"];
       setUserToken(null);
       setUser(null);
     });
+
+    return () => {
+      apiClient.interceptors.request.eject(reqInterceptor);
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
     // Sesuai Kontrak SCRUM-41: POST /api/v1/login dengan device_name: "mobile"
     // ✅ SINTAKS AXIOS (Benar):
-  const result = await apiClient.post("/api/v1/login", {
-    email,
-    password,
-    device_name: "mobile",
-  });
+    const result = await apiClient.post("/api/v1/login", {
+      email,
+      password,
+      device_name: "mobile",
+    });
 
-  const token = result.data?.token || result.data?.data?.token;
-  const profile = result.data?.user || result.data?.data?.user;
+    const token =
+      result.data?.token ||
+      result.data?.access_token ||
+      result.data?.data?.token ||
+      result.data?.data?.access_token;
+    const profile =
+      result.data?.user ||
+      result.data?.member ||
+      result.data?.data?.user ||
+      result.data?.data?.member;
 
-  if (!token) {
-    throw new ApiError(500, "Format data respon tidak memiliki token.");
-  }
+    if (!token) {
+      throw new ApiError(500, "Format data respon tidak memiliki token.");
+    }
 
+    apiClient.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     await saveToken(token);
     if (profile) {
       await saveUserData(profile);
@@ -86,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch {
       // Jika jaringan gagal, logout lokal tetap dieksekusi sesuai AC
     } finally {
+      delete apiClient.defaults.headers.common["Authorization"];
       await clearToken();
       await clearUserData();
       setUserToken(null);
