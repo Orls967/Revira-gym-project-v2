@@ -8,13 +8,32 @@ export const apiClient = axios.create({
   },
 });
 
+// Untuk upload gambar (FormData): jangan paksa Content-Type JSON, biarkan
+// boundary multipart diisi otomatis.
+apiClient.interceptors.request.use(
+  (config) => {
+    if (config.data instanceof FormData) {
+      const headers: any = config.headers;
+      if (typeof headers?.delete === "function") {
+        headers.delete("Content-Type");
+      } else if (headers) {
+        delete headers["Content-Type"];
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 export class ApiError extends Error {
   status: number;
+  errors?: Record<string, string[]>;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, errors?: Record<string, string[]>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.errors = errors;
   }
 }
 

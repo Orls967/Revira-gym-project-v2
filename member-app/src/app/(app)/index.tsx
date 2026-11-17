@@ -13,10 +13,22 @@ import { useRouter } from 'expo-router';
 import api from '../../lib/api';
 import { MOCK_PLANS, MOCK_HOURS, MembershipPlan, OperationalHour } from '../../mocks/homeData';
 import { formatRupiah } from '../../utils/formatCurrency';
+import { useAuth } from '../../context/AuthContext';
+import { getMembershipAction } from '../../lib/membership';
+
+// Label tombol paket di Beranda. Konsisten dengan judul layar Apply (lib/membership.ts):
+// status none -> Pilih Paket, active/expired -> Perpanjang Paket, selain itu -> label netral.
+const PLAN_BUTTON_LABEL = {
+  register: 'Pilih Paket',
+  renew: 'Perpanjang Paket',
+  apply: 'Ajukan Membership',
+} as const;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
+  const action = getMembershipAction(user?.membership);
 
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [hours, setHours] = useState<OperationalHour[]>([]);
@@ -24,7 +36,6 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fungsi muat data dengan parameter isSilent agar polling tidak membuat UI flicker
   const loadData = async (isSilent = false) => {
     try {
       if (!isSilent) setError(null);
@@ -32,7 +43,6 @@ export default function HomeScreen() {
       let fetchedPlans = MOCK_PLANS;
       let fetchedHours = MOCK_HOURS;
 
-      // 1. Coba panggil API /membership-plans
       try {
         const plansRes = await api.get('/membership-plans');
         if (plansRes.data?.data) {
@@ -44,7 +54,6 @@ export default function HomeScreen() {
         }
       }
 
-      // 2. Coba panggil API /operational-hours
       try {
         const hoursRes = await api.get('/operational-hours');
         if (hoursRes.data?.data) {
@@ -56,7 +65,6 @@ export default function HomeScreen() {
         }
       }
 
-      // Filter hanya paket yang aktif
       setPlans(fetchedPlans.filter((p) => p.is_active));
       setHours(fetchedHours);
     } catch (err) {
@@ -67,11 +75,9 @@ export default function HomeScreen() {
     }
   };
 
-  // Effect untuk Panggilan Pertama & Polling 15 Detik (SCRUM-58)
   useEffect(() => {
     loadData();
 
-    // Set interval 15 detik untuk auto-update data di latar belakang
     const intervalId = setInterval(() => {
       loadData(true);
     }, 15000);
@@ -84,15 +90,11 @@ export default function HomeScreen() {
     loadData(true);
   }, []);
 
+  // PERBAIKAN POIN 4: Mengirimkan ID paket melalui parameter URL
   const handleSelectPlan = (plan: MembershipPlan) => {
-    Alert.alert(
-      'Pilih Paket',
-      `Anda memilih paket ${plan.name}. Alur pendaftaran akan tersedia di SCRUM-74 (Sprint 3).`,
-      [{ text: 'OK' }]
-    );
+    router.push({ pathname: '/membership/apply', params: { planId: plan.id } } as any);
   };
 
-  // State Loading Awal (Skeleton/ActivityIndicator)
   if (loading) {
     return (
       <View className="flex-1 bg-zinc-950 justify-center items-center">
@@ -102,7 +104,6 @@ export default function HomeScreen() {
     );
   }
 
-  // State Error dengan Tombol Coba Lagi
   if (error) {
     return (
       <View className="flex-1 bg-zinc-950 justify-center items-center px-8">
@@ -188,7 +189,9 @@ export default function HomeScreen() {
                 accessibilityLabel={`Pilih paket ${plan.name}, ${formatRupiah(plan.price)}`}
                 className="bg-amber-500 min-h-[52px] rounded-xl items-center justify-center"
               >
-                <Text className="text-zinc-950 font-bold text-base">Pilih Paket</Text>
+                <Text className="text-zinc-950 font-bold text-base">
+                  {PLAN_BUTTON_LABEL[action]}
+                </Text>
               </TouchableOpacity>
             </View>
           ))
