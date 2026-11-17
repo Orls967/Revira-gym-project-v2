@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Linking,
+  AppState,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -8,6 +19,7 @@ import { apiClient } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { PAYMENT_INSTRUCTIONS } from '@/constants/payment';
 import { compressPaymentReceipt, ReceiptTooLargeError } from '@/lib/image';
+import { getMembershipAction, MEMBERSHIP_ACTION_TITLE } from '@/lib/membership';
 
 interface Plan {
   id: number;
@@ -76,7 +88,7 @@ const parseApiError = (err: any) => {
 
 export default function ApplyMembershipScreen() {
   const router = useRouter();
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, profileStatus } = useAuth();
   const { planId } = useLocalSearchParams<{ planId?: string }>();
   const requestedPlanId = planId ? Number(planId) : null;
 
@@ -88,10 +100,20 @@ export default function ApplyMembershipScreen() {
   // TODO: sesuaikan 'pending_membership' dengan field yang disepakati bersama PIC backend.
   const isPending = submitted || u?.membership?.status === 'pending' || !!u?.pending_membership;
 
-  /* ---------------- Renewal & tanggal ---------------- */
-  const isRenewal = !!u?.membership && String(u.membership.status) !== 'none';
+  /* ---------------- Jenis pengajuan & tanggal ---------------- */
+  const action = getMembershipAction(u?.membership);
+  const isRenewal = action === 'renew';
   const endDate: string | undefined = u?.membership?.end_date?.slice(0, 10);
-  const todayYmd = getWitaTodayYmd();
+
+  // Hari ini (WITA) disimpan di state agar bisa dihitung ulang saat picker dibuka
+  // dan saat aplikasi kembali dari background (pergantian hari).
+  const [todayYmd, setTodayYmd] = useState<string>(getWitaTodayYmd);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setTodayYmd(getWitaTodayYmd());
+    });
+    return () => sub.remove();
+  }, []);
 
   const defaultStartYmd = useMemo(() => {
     if (isRenewal && endDate) {
@@ -125,11 +147,23 @@ export default function ApplyMembershipScreen() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false); // kamera/galeri sedang dibuka atau foto sedang diproses
 
   const clearError = (key: FieldKey) => {
     setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
     setFormError(null);
   };
+
+  // Tanggal yang sudah lampau (mis. lewat tengah malam WITA) tidak boleh tersisa
+  useEffect(() => {
+    if (startYmd < todayYmd) {
+      setStartYmd(todayYmd);
+      setErrors((prev) => ({
+        ...prev,
+        start_date: 'Tanggal mulai sudah terlewat dan diperbarui ke hari ini.',
+      }));
+    }
+  }, [todayYmd, startYmd]);
 
   useEffect(() => {
     if (isPending) return;
@@ -187,41 +221,83 @@ export default function ApplyMembershipScreen() {
     clearError('membership_plan_id');
   };
 
+  const handleOpenDatePicker = () => {
+    setTodayYmd(getWitaTodayYmd()); // hitung ulang batas minimum saat picker dibuka
+    setShowDatePicker(true);
+  };
+
   const handlePickImage = async (useCamera: boolean = false) => {
-    const permission = useCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (picking) return;
+    setPicking(true);
 
-    if (!permission.granted) {
-      Alert.alert('Izin Ditolak', 'Akses dibutuhkan untuk mengambil atau memilih bukti pembayaran.');
-      return;
-    }
+    try {
+      // Hanya kamera yang butuh izin runtime. Galeri memakai pemilih foto sistem
+      // sehingga tidak perlu izin storage (dan tidak ditolak karena izin).
+      if (useCamera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          if (permission.canAskAgain) {
+            Alert.alert(
+              'Izin Kamera Ditolak',
+              'Izin kamera dibutuhkan untuk memotret bukti transfer. Kamu juga bisa memilih foto dari galeri.'
+            );
+          } else {
+            Alert.alert(
+              'Izin Kamera Diblokir',
+              'Izin kamera sudah ditolak permanen. Aktifkan lewat pengaturan aplikasi, atau pilih foto dari galeri.',
+              [
+                { text: 'Batal', style: 'cancel' },
+                { text: 'Buka Pengaturan', onPress: () => Linking.openSettings() },
+              ]
+            );
+          }
+          return;
+        }
+      }
 
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.8 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
 
-    const asset = !result.canceled ? result.assets[0] : undefined;
-    if (asset?.uri) {
+      // Dibatalkan pengguna bukan error; bukti sebelumnya tetap dipertahankan
+      const asset = result.canceled ? undefined : result.assets?.[0];
+      if (!asset?.uri) return;
+
       try {
         const compressedUri = await compressPaymentReceipt(asset.uri, asset.width);
+        // receiptUri baru diganti setelah foto pengganti berhasil diproses
         setReceiptUri(compressedUri);
         clearError('receipt_image');
       } catch (e) {
+        // Gagal diproses: bukti lama (bila ada) tidak dihapus
         if (e instanceof ReceiptTooLargeError) {
           setErrors((prev) => ({
             ...prev,
             receipt_image: 'Ukuran foto masih lebih dari 2 MB setelah dikompres. Silakan pilih foto lain.',
           }));
         } else {
-          Alert.alert('Error', 'Gagal memproses gambar bukti transfer.');
+          setErrors((prev) => ({
+            ...prev,
+            receipt_image: 'Foto tidak dapat diproses. Pastikan formatnya gambar (JPG/PNG), lalu coba lagi.',
+          }));
         }
       }
+    } catch {
+      // Kamera/galeri gagal dibuka (mis. perangkat tanpa kamera, aplikasi pemilih foto error)
+      Alert.alert(
+        'Tidak Dapat Membuka ' + (useCamera ? 'Kamera' : 'Galeri'),
+        useCamera
+          ? 'Kamera tidak dapat dibuka. Coba lagi atau pilih foto dari galeri.'
+          : 'Galeri tidak dapat dibuka. Coba lagi atau gunakan kamera.'
+      );
+    } finally {
+      setPicking(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (loading) return;
+    // Jangan kirim selama status membership belum terverifikasi dari server
+    if (loading || profileStatus !== 'loaded') return;
 
     if (!selectedPlan) {
       setErrors((prev) => ({ ...prev, membership_plan_id: 'Silakan pilih paket yang masih aktif.' }));
@@ -235,6 +311,7 @@ export default function ApplyMembershipScreen() {
     // Validasi ulang tanggal tepat sebelum POST (hari bisa berganti saat form terbuka)
     const currentToday = getWitaTodayYmd();
     if (startYmd < currentToday) {
+      setTodayYmd(currentToday);
       setStartYmd(currentToday);
       setErrors((prev) => ({
         ...prev,
@@ -315,13 +392,41 @@ export default function ApplyMembershipScreen() {
     );
   }
 
+  /* ---------------- Profil gagal dimuat: form tidak dibuka ---------------- */
+  if (profileStatus === 'error') {
+    return (
+      <View className="flex-1 items-center justify-center bg-zinc-950 p-6">
+        <Ionicons name="cloud-offline-outline" size={64} color="#f59e0b" />
+        <Text className="mt-4 text-center text-xl font-bold text-white">Gagal Memuat Profil</Text>
+        <Text className="mt-2 text-center text-zinc-400">
+          Status membership kamu belum bisa dipastikan, jadi pengajuan belum bisa dibuka. Periksa koneksi internet
+          lalu coba lagi.
+        </Text>
+        <TouchableOpacity onPress={() => void refreshUser()} className="mt-6 rounded-xl bg-amber-500 px-6 py-3">
+          <Text className="font-bold text-black">Coba Lagi</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} className="mt-3 rounded-xl bg-zinc-800 px-6 py-3">
+          <Text className="font-semibold text-white">Kembali</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  /* ---------------- Profil masih diperiksa ---------------- */
+  if (profileStatus !== 'loaded') {
+    return (
+      <View className="flex-1 items-center justify-center bg-zinc-950 p-6">
+        <ActivityIndicator color="#f59e0b" size="large" />
+        <Text className="mt-4 text-center text-zinc-400">Memeriksa status membership...</Text>
+      </View>
+    );
+  }
+
   const phone = u?.phone_number ?? u?.phone ?? '-';
 
   return (
     <ScrollView className="flex-1 bg-zinc-950 p-4">
-      <Text className="mb-4 text-2xl font-bold text-white">
-        {isRenewal ? 'Perpanjang Membership' : 'Pendaftaran Membership'}
-      </Text>
+      <Text className="mb-4 text-2xl font-bold text-white">{MEMBERSHIP_ACTION_TITLE[action]}</Text>
 
       {/* Data pemohon (hanya baca) */}
       <View className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
@@ -365,7 +470,7 @@ export default function ApplyMembershipScreen() {
       {/* 2. Tanggal Mulai */}
       <Text className="mb-2 mt-4 text-base font-semibold text-white">2. Tanggal Mulai</Text>
       <TouchableOpacity
-        onPress={() => setShowDatePicker(true)}
+        onPress={handleOpenDatePicker}
         className="mb-2 flex-row items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-4"
       >
         <Text className="text-white">
@@ -431,31 +536,37 @@ export default function ApplyMembershipScreen() {
           <Text className="mt-2 text-xs text-zinc-400">{PAYMENT_INSTRUCTIONS.instruction}</Text>
 
           <Text className="mb-2 mt-4 text-sm font-semibold text-white">Upload Bukti Transfer</Text>
-          {receiptUri ? (
-            <View className="items-center">
-              <Image source={{ uri: receiptUri }} className="h-48 w-full rounded-lg" resizeMode="cover" />
-              <TouchableOpacity onPress={() => setReceiptUri(null)} className="mt-2 rounded-lg bg-red-600/20 px-4 py-2">
-                <Text className="text-xs font-semibold text-red-400">Hapus Foto</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View className="flex-row gap-2">
-              <TouchableOpacity
-                onPress={() => handlePickImage(false)}
-                className="flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-800/50 p-4"
-              >
-                <Ionicons name="images-outline" size={24} color="#f59e0b" />
-                <Text className="mt-1 text-xs text-zinc-300">Galeri</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handlePickImage(true)}
-                className="flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-800/50 p-4"
-              >
-                <Ionicons name="camera-outline" size={24} color="#f59e0b" />
-                <Text className="mt-1 text-xs text-zinc-300">Kamera</Text>
-              </TouchableOpacity>
-            </View>
+          {receiptUri && (
+            <Image source={{ uri: receiptUri }} className="mb-3 h-48 w-full rounded-lg" resizeMode="cover" />
           )}
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              onPress={() => handlePickImage(false)}
+              disabled={picking}
+              className="flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-800/50 p-4 disabled:opacity-50"
+            >
+              <Ionicons name="images-outline" size={24} color="#f59e0b" />
+              <Text className="mt-1 text-xs text-zinc-300">{receiptUri ? 'Ganti dari Galeri' : 'Galeri'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handlePickImage(true)}
+              disabled={picking}
+              className="flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-800/50 p-4 disabled:opacity-50"
+            >
+              <Ionicons name="camera-outline" size={24} color="#f59e0b" />
+              <Text className="mt-1 text-xs text-zinc-300">{receiptUri ? 'Ganti dari Kamera' : 'Kamera'}</Text>
+            </TouchableOpacity>
+          </View>
+          {receiptUri && (
+            <TouchableOpacity
+              onPress={() => setReceiptUri(null)}
+              disabled={picking}
+              className="mt-2 items-center rounded-lg bg-red-600/20 px-4 py-2 disabled:opacity-50"
+            >
+              <Text className="text-xs font-semibold text-red-400">Hapus Foto</Text>
+            </TouchableOpacity>
+          )}
+          {picking && <ActivityIndicator color="#f59e0b" className="mt-2" />}
           {errors.receipt_image && <Text className="mt-1 text-xs text-red-500">{errors.receipt_image}</Text>}
         </View>
       )}
@@ -494,4 +605,4 @@ export default function ApplyMembershipScreen() {
       </TouchableOpacity>
     </ScrollView>
   );
-}
+} 

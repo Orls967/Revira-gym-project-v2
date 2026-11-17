@@ -14,11 +14,21 @@ import api from '../../lib/api';
 import { MOCK_PLANS, MOCK_HOURS, MembershipPlan, OperationalHour } from '../../mocks/homeData';
 import { formatRupiah } from '../../utils/formatCurrency';
 import { useAuth } from '../../context/AuthContext';
+import { getMembershipAction } from '../../lib/membership';
+
+// Label tombol paket di Beranda. Konsisten dengan judul layar Apply (lib/membership.ts):
+// status none -> Pilih Paket, active/expired -> Perpanjang Paket, selain itu -> label netral.
+const PLAN_BUTTON_LABEL = {
+  register: 'Pilih Paket',
+  renew: 'Perpanjang Paket',
+  apply: 'Ajukan Membership',
+} as const;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const action = getMembershipAction(user?.membership);
 
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [hours, setHours] = useState<OperationalHour[]>([]);
@@ -180,7 +190,7 @@ export default function HomeScreen() {
                 className="bg-amber-500 min-h-[52px] rounded-xl items-center justify-center"
               >
                 <Text className="text-zinc-950 font-bold text-base">
-                  {user?.membership ? 'Perpanjang Paket' : 'Pilih Paket'}
+                  {PLAN_BUTTON_LABEL[action]}
                 </Text>
               </TouchableOpacity>
             </View>
