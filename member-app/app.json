@@ -18,6 +18,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.revira.gym",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "permissions": [
         "CAMERA"
       ]
