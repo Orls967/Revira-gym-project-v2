@@ -64,8 +64,8 @@ interface BannerNotification {
   message: string;
 }
 
-// --- DATA MOCK FALLBACK (Hanya dipakai bila server belum aktif / offline) ---
-const MOCK_TRANSACTIONS: AdminTransactionItem[] = [
+// --- DATA MOCK FALLBACK (Hanya dipakai di environment development bila server belum aktif) ---
+const INITIAL_MOCK_TRANSACTIONS: AdminTransactionItem[] = [
   {
     id: 9001,
     member: {
@@ -242,6 +242,15 @@ export default function Transaksi() {
   const [isUsingMock, setIsUsingMock] = useState<boolean>(false);
   const [banner, setBanner] = useState<BannerNotification | null>(null);
 
+  // Store mock lokal yang persisten antar perpindahan tab & refresh selama sesi dev
+  const mockStoreRef = useRef<AdminTransactionItem[]>(
+    INITIAL_MOCK_TRANSACTIONS.map((item) => ({ ...item }))
+  );
+
+  // AbortController & sequence ID untuk mencegah race condition saat ganti tab/halaman cepat
+  const fetchAbortRef = useRef<AbortController | null>(null);
+  const fetchSeqRef = useRef<number>(0);
+
   // --- STATE MODAL DETAIL & BUKTI TRANSFER (BLOB + ZOOM) ---
   const [detailTx, setDetailTx] = useState<AdminTransactionItem | null>(null);
   const [receiptObjectUrl, setReceiptObjectUrl] = useState<string | null>(null);
@@ -262,6 +271,23 @@ export default function Transaksi() {
   const [isRejecting, setIsRejecting] = useState<boolean>(false);
   const [rejectError, setRejectError] = useState<string>('');
 
+  // Helper untuk membaca & memfilter store mock secara konsisten
+  const applyMockList = useCallback((statusParam: VerificationStatus) => {
+    const filteredMocks = mockStoreRef.current.filter(
+      (item) => item.verification_status === statusParam
+    );
+    setTransactions(filteredMocks);
+    setIsUsingMock(true);
+    setMeta({
+      current_page: 1,
+      last_page: 1,
+      per_page: 15,
+      total: filteredMocks.length,
+      from: filteredMocks.length > 0 ? 1 : null,
+      to: filteredMocks.length > 0 ? filteredMocks.length : null,
+    });
+  }, []);
+
   // Helper untuk membersihkan ObjectURL bukti transfer agar tidak bocor di memori browser
   const revokeCurrentReceiptUrl = useCallback(() => {
     if (receiptAbortRef.current) {
@@ -276,8 +302,17 @@ export default function Transaksi() {
   }, []);
 
   // --- FETCH DAFTAR TRANSAKSI DARI GET /api/v1/admin/transactions ---
+  // Kontrak backend (TransactionController::index & IndexTransactionRequest):
+  // menerima query `status` & `page`, dengan paginasi tetap 15 data per halaman.
   const fetchTransactions = useCallback(
     async (statusParam: VerificationStatus, pageParam: number) => {
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      fetchAbortRef.current = controller;
+      const reqSeq = ++fetchSeqRef.current;
+
       setIsLoading(true);
       setFetchError('');
 
@@ -287,7 +322,12 @@ export default function Transaksi() {
             status: statusParam,
             page: pageParam,
           },
+          signal: controller.signal,
         });
+
+        if (controller.signal.aborted || reqSeq !== fetchSeqRef.current) {
+          return;
+        }
 
         const rawData = res.data?.data;
         const rawMeta = res.data?.meta;
@@ -319,35 +359,30 @@ export default function Transaksi() {
           });
         }
       } catch (err: unknown) {
+        if (isCanceledError(err) || reqSeq !== fetchSeqRef.current) {
+          return;
+        }
+
         const apiErr = err as ApiErrorShape;
         const statusCode = apiErr.response?.status;
 
-        // Jika server belum hidup (network error) atau endpoint 404 sebelum merge, gunakan mock fallback
-        if (!statusCode || statusCode === 404) {
-          const filteredMocks = MOCK_TRANSACTIONS.filter(
-            (item) => item.verification_status === statusParam
-          );
-          setTransactions(filteredMocks);
-          setIsUsingMock(true);
-          setMeta({
-            current_page: 1,
-            last_page: 1,
-            per_page: 15,
-            total: filteredMocks.length,
-            from: filteredMocks.length > 0 ? 1 : null,
-            to: filteredMocks.length > 0 ? filteredMocks.length : null,
-          });
+        // Fallback mock dibatasi ketat hanya di environment development (import.meta.env.DEV)
+        if (import.meta.env.DEV && (!statusCode || statusCode === 404)) {
+          applyMockList(statusParam);
         } else {
+          setIsUsingMock(false);
           setFetchError(
             apiErr.response?.data?.message ||
-              'Gagal memuat daftar transaksi dari server.'
+              'Gagal memuat daftar transaksi dari server. Pastikan layanan backend aktif dan coba lagi.'
           );
         }
       } finally {
-        setIsLoading(false);
+        if (reqSeq === fetchSeqRef.current) {
+          setIsLoading(false);
+        }
       }
     },
-    []
+    [applyMockList]
   );
 
   useEffect(() => {
@@ -408,9 +443,13 @@ export default function Transaksi() {
     [revokeCurrentReceiptUrl]
   );
 
-  // Cleanup ObjectURL saat komponen unmount
+  // Cleanup seluruh request & ObjectURL saat komponen unmount
   useEffect(() => {
     return () => {
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+        fetchAbortRef.current = null;
+      }
       revokeCurrentReceiptUrl();
     };
   }, [revokeCurrentReceiptUrl]);
@@ -443,7 +482,18 @@ export default function Transaksi() {
 
     try {
       if (isUsingMock) {
-        setTransactions((prev) => prev.filter((item) => item.id !== targetTx.id));
+        // Perbarui status secara persisten di mockStoreRef agar konsisten saat pindah tab / refresh
+        mockStoreRef.current = mockStoreRef.current.map((item) =>
+          item.id === targetTx.id
+            ? {
+                ...item,
+                verification_status: 'verified',
+                verified_at: new Date().toISOString(),
+                reject_reason: null,
+              }
+            : item
+        );
+        applyMockList(activeStatus);
         setApproveTx(null);
         if (detailTx?.id === targetTx.id) closeDetailModal();
         setBanner({
@@ -486,7 +536,7 @@ export default function Transaksi() {
         apiErr.response?.data?.message ||
         'Terjadi kesalahan saat menyetujui transaksi.';
 
-      // Langkah 5: Tangani 409 Conflict (sudah diproses admin lain / periode bertabrakan)
+      // Tangani 409 Conflict (sudah diproses admin lain / periode bertabrakan)
       if (status === 409) {
         setApproveTx(null);
         if (detailTx?.id === targetTx.id) {
@@ -532,7 +582,18 @@ export default function Transaksi() {
 
     try {
       if (isUsingMock) {
-        setTransactions((prev) => prev.filter((item) => item.id !== targetTx.id));
+        // Perbarui status & alasan penolakan secara persisten di mockStoreRef
+        mockStoreRef.current = mockStoreRef.current.map((item) =>
+          item.id === targetTx.id
+            ? {
+                ...item,
+                verification_status: 'rejected',
+                verified_at: new Date().toISOString(),
+                reject_reason: trimmedReason,
+              }
+            : item
+        );
+        applyMockList(activeStatus);
         setRejectTx(null);
         setRejectReason('');
         if (detailTx?.id === targetTx.id) closeDetailModal();
@@ -578,7 +639,7 @@ export default function Transaksi() {
         apiErr.response?.data?.message ||
         'Terjadi kesalahan saat menolak transaksi.';
 
-      // Langkah 5: Tangani 409 Conflict (sudah diproses admin lain)
+      // Tangani 409 Conflict (sudah diproses admin lain)
       if (status === 409) {
         setRejectTx(null);
         setRejectReason('');
@@ -640,10 +701,10 @@ export default function Transaksi() {
         </div>
       )}
 
-      {/* Indikator Fallback Mock bila Server belum jalan */}
+      {/* Indikator Fallback Mock (hanya tampil di mode development) */}
       {isUsingMock && (
         <div className="mb-4 px-4 py-2.5 rounded-lg bg-amber-950/80 border border-amber-800 text-amber-300 text-xs font-medium">
-          Menampilkan data contoh (mock) karena endpoint server belum terhubung.
+          Mode Development: Menampilkan data contoh (mock) karena endpoint server belum terhubung.
         </div>
       )}
 
@@ -815,7 +876,7 @@ export default function Transaksi() {
                               <div className="text-xs text-zinc-400 mt-1">
                                 {tx.has_receipt
                                   ? '📎 Bukti transfer tersedia'
-                                  : 'Tanpa bukti'}
+                                  : 'Bukti transfer tidak tersedia'}
                               </div>
                             </div>
                           ) : (
@@ -1112,10 +1173,9 @@ export default function Transaksi() {
                   )}
                 </div>
 
-                {/* Area Tampilan Bukti */}
+                {/* Area Tampilan Bukti (Kondisi on_the_spot dipisahkan dari transfer tanpa bukti) */}
                 <div className="flex-1 min-h-[340px] max-h-[520px] bg-zinc-950 border border-zinc-800 rounded-xl overflow-auto flex items-center justify-center p-4">
-                  {detailTx.payment_method === 'on_the_spot' ||
-                  !detailTx.has_receipt ? (
+                  {detailTx.payment_method === 'on_the_spot' ? (
                     <div className="text-center p-8">
                       <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 mb-3 text-xl">
                         💵
@@ -1127,6 +1187,19 @@ export default function Transaksi() {
                         Transaksi ini menggunakan metode pembayaran langsung di
                         kasir gym sehingga tidak memerlukan unggahan bukti
                         transfer.
+                      </p>
+                    </div>
+                  ) : !detailTx.has_receipt ? (
+                    <div className="text-center p-8">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 mb-3 text-xl">
+                        📄
+                      </div>
+                      <p className="text-base font-bold text-white">
+                        Bukti transfer tidak tersedia
+                      </p>
+                      <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
+                        Transaksi ini menggunakan metode transfer bank, tetapi
+                        file bukti transfer belum tersedia atau tidak tercatat.
                       </p>
                     </div>
                   ) : isReceiptLoading ? (
