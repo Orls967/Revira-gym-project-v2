@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 
-// --- TIPE DATA ---
+// --- TIPE DATA (Sesuai AdminMemberResource.php) ---
 interface MembershipPlan {
   id: number;
   name: string;
@@ -12,13 +12,16 @@ interface Member {
   id: number;
   name: string;
   email: string;
-  phone: string | null;
-  membership: {
-    plan_name: string;
-    status: string;
-    start_date: string;
-    end_date: string;
+  phone_number: string | null;
+  membership_status: string;
+  plan: {
+    id: number;
+    name: string;
+    duration_days: number;
   } | null;
+  start_date: string | null;
+  end_date: string | null;
+  registered_at: string | null;
 }
 
 interface PaginationData {
@@ -45,11 +48,11 @@ export default function MemberPage() {
   const navigate = useNavigate();
   const [members, setMembers] = useState<Member[]>([]);
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
-  
+
   // State UI
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // State Filter & Pagination
   const [search, setSearch] = useState<string>('');
   const debouncedSearch = useDebounce(search, 500);
@@ -58,12 +61,11 @@ export default function MemberPage() {
   const [page, setPage] = useState<number>(1);
   const [pagination, setPagination] = useState<PaginationData | null>(null);
 
-  // 1. Ambil daftar paket untuk dropdown filter
+  // 1. Ambil daftar paket untuk dropdown filter (baseURL api.ts sudah mengandung /api/v1)
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const res = await api.get('/api/v1/membership-plans');
-        // Handle double 'data' wrapping commonly found in Laravel resources
+        const res = await api.get('/admin/membership-plans');
         const plansData = res.data?.data?.data || res.data?.data || res.data || [];
         setPlans(Array.isArray(plansData) ? plansData : []);
       } catch (err) {
@@ -78,37 +80,33 @@ export default function MemberPage() {
     setLoading(true);
     setError(null);
     try {
-      // PERBAIKAN: Menyesuaikan endpoint API yang benar
-      const res = await api.get('/api/v1/memberships', {
+      const res = await api.get('/admin/members', {
         params: {
-          search: debouncedSearch,
-          status: statusFilter,
-          plan_id: planFilter,
+          search: debouncedSearch.trim() || undefined,
+          status: statusFilter || undefined,
+          membership_plan_id: planFilter || undefined,
           page: page,
         },
       });
-      
-      // PERBAIKAN: Menangkap response API dengan lebih tangguh
+
       const rawData = res.data;
-      
-      if (rawData?.data && typeof rawData.current_page !== 'undefined') {
-        // Format Pagination standar Laravel
+
+      if (Array.isArray(rawData?.data) && rawData?.meta) {
+        // Format Laravel JsonResource::collection()->response()
+        setMembers(rawData.data);
+        setPagination({
+          current_page: rawData.meta.current_page,
+          last_page: rawData.meta.last_page,
+          total: rawData.meta.total,
+        });
+      } else if (rawData?.data && typeof rawData.current_page !== 'undefined') {
         setMembers(rawData.data);
         setPagination({
           current_page: rawData.current_page,
           last_page: rawData.last_page,
           total: rawData.total,
         });
-      } else if (rawData?.data?.data && typeof rawData.data.current_page !== 'undefined') {
-        // Format Pagination jika dibungkus extra 'data'
-        setMembers(rawData.data.data);
-        setPagination({
-          current_page: rawData.data.current_page,
-          last_page: rawData.data.last_page,
-          total: rawData.data.total,
-        });
       } else {
-        // Format Data Array biasa (tanpa paginasi)
         const arrayData = rawData?.data || rawData || [];
         setMembers(Array.isArray(arrayData) ? arrayData : []);
         setPagination(null);
@@ -128,8 +126,10 @@ export default function MemberPage() {
 
   // --- HELPER UNTUK UI ---
   const getStatusBadge = (status?: string) => {
-    if (!status) return <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium border border-gray-200">Tidak Aktif</span>;
-    
+    if (!status || status.toLowerCase() === 'none') {
+      return <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium border border-gray-200">Tidak Aktif</span>;
+    }
+
     switch (status.toLowerCase()) {
       case 'active':
         return <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium border border-green-200">Aktif</span>;
@@ -142,9 +142,10 @@ export default function MemberPage() {
     }
   };
 
-  const formatDate = (dateStr?: string) => {
+  const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString('id-ID', {
+    return new Date(`${dateStr}T00:00:00+08:00`).toLocaleDateString('id-ID', {
+      timeZone: 'Asia/Makassar',
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -153,7 +154,7 @@ export default function MemberPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header dengan Tombol Tambah (PERBAIKAN) */}
+      {/* Header dengan Tombol Tambah */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Manajemen Member</h1>
         <button
@@ -198,6 +199,7 @@ export default function MemberPage() {
           <option value="active">Aktif</option>
           <option value="pending">Menunggu Verifikasi</option>
           <option value="expired">Kedaluwarsa</option>
+          <option value="none">Tidak Aktif</option>
         </select>
         <select
           className="px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-gray-700 bg-white"
@@ -266,26 +268,26 @@ export default function MemberPage() {
                     <td className="px-6 py-4">
                       <p className="font-bold text-gray-900 mb-0.5 group-hover:text-blue-600 transition-colors">{member.name}</p>
                       <p className="text-sm text-gray-500">{member.email}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{member.phone || 'Tidak ada nomor HP'}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{member.phone_number || 'Tidak ada nomor HP'}</p>
                     </td>
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-gray-100 text-gray-800">
-                        {member.membership?.plan_name || 'Tidak ada paket'}
+                        {member.plan?.name || 'Tidak ada paket'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {getStatusBadge(member.membership?.status)}
+                      {getStatusBadge(member.membership_status)}
                     </td>
                     <td className="px-6 py-4">
-                      {member.membership ? (
+                      {member.start_date || member.end_date ? (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2 text-sm text-gray-700">
                             <span className="w-8 text-xs font-semibold text-gray-400 uppercase">Dari</span>
-                            <span className="font-medium">{formatDate(member.membership.start_date)}</span>
+                            <span className="font-medium">{formatDate(member.start_date)}</span>
                           </div>
                           <div className="flex items-center gap-2 text-sm text-gray-700">
                             <span className="w-8 text-xs font-semibold text-gray-400 uppercase">S/D</span>
-                            <span className="font-medium">{formatDate(member.membership.end_date)}</span>
+                            <span className="font-medium">{formatDate(member.end_date)}</span>
                           </div>
                         </div>
                       ) : (
