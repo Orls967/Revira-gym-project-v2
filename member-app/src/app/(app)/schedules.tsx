@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "@/lib/api";
 import { ClassSchedule } from "@/types/schedule";
 import { MOCK_SCHEDULES } from "@/mocks/schedules";
+import { ChatAdminButton } from "@/components/ChatAdminButton";
 
 export type NormalizedScheduleStatus =
   | "scheduled"
@@ -452,103 +453,119 @@ export default function ClassSchedulesScreen() {
             item.min_participants >= 0;
 
           return (
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() =>
-                router.push({
-                  pathname: `/schedule/${item.id}`,
-                  params: { scheduleData: JSON.stringify(item) },
-                } as any)
-              }
-              className={`p-4 mb-3 rounded-2xl border ${
+            <View
+              className={`mb-3 rounded-2xl border ${
                 isCancelled
                   ? "bg-red-950/20 border-red-900/40"
                   : "bg-zinc-900 border-zinc-800"
               }`}
             >
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 mr-2">
-                  <Text className="text-base font-bold text-white mb-1">
-                    {item.title}
-                  </Text>
-                  <View className="flex-row items-center">
-                    <Ionicons name="person-outline" size={14} color="#a1a1aa" />
-                    <Text className="text-xs text-zinc-400 ml-1">
-                      {item.instructor}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() =>
+                  router.push({
+                    pathname: `/schedule/${item.id}`,
+                    params: { scheduleData: JSON.stringify(item) },
+                  } as any)
+                }
+                className="p-4"
+              >
+                <View className="flex-row items-start justify-between">
+                  <View className="flex-1 mr-2">
+                    <Text className="text-base font-bold text-white mb-1">
+                      {item.title}
+                    </Text>
+                    <View className="flex-row items-center">
+                      <Ionicons name="person-outline" size={14} color="#a1a1aa" />
+                      <Text className="text-xs text-zinc-400 ml-1">
+                        {item.instructor}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Badge Status */}
+                  <View
+                    className={`px-2.5 py-1 rounded-full ${
+                      isCancelled
+                        ? "bg-red-500/20 border border-red-500/40"
+                        : isCompleted || isUnknown
+                        ? "bg-zinc-800 border border-zinc-700"
+                        : isOngoing
+                        ? "bg-amber-500/20 border border-amber-500/40"
+                        : "bg-emerald-500/20 border border-emerald-500/40"
+                    }`}
+                  >
+                    <Text
+                      className={`text-[10px] font-bold ${
+                        isCancelled
+                          ? "text-red-400"
+                          : isCompleted || isUnknown
+                          ? "text-zinc-400"
+                          : isOngoing
+                          ? "text-amber-400"
+                          : "text-emerald-400"
+                      }`}
+                    >
+                      {isCancelled
+                        ? "DIBATALKAN"
+                        : isCompleted
+                        ? "SELESAI"
+                        : isOngoing
+                        ? "BERLANGSUNG"
+                        : isUnknown
+                        ? "TIDAK DIKETAHUI"
+                        : "TERJADWAL"}
                     </Text>
                   </View>
                 </View>
 
-                {/* Badge Status */}
-                <View
-                  className={`px-2.5 py-1 rounded-full ${
-                    isCancelled
-                      ? "bg-red-500/20 border border-red-500/40"
-                      : isCompleted || isUnknown
-                      ? "bg-zinc-800 border border-zinc-700"
-                      : isOngoing
-                      ? "bg-amber-500/20 border border-amber-500/40"
-                      : "bg-emerald-500/20 border border-emerald-500/40"
-                  }`}
-                >
-                  <Text
-                    className={`text-[10px] font-bold ${
-                      isCancelled
-                        ? "text-red-400"
-                        : isCompleted || isUnknown
-                        ? "text-zinc-400"
-                        : isOngoing
-                        ? "text-amber-400"
-                        : "text-emerald-400"
-                    }`}
-                  >
-                    {isCancelled
-                      ? "DIBATALKAN"
-                      : isCompleted
-                      ? "SELESAI"
-                      : isOngoing
-                      ? "BERLANGSUNG"
-                      : isUnknown
-                      ? "TIDAK DIKETAHUI"
-                      : "TERJADWAL"}
-                  </Text>
+                {/* Alasan Pembatalan (jika status cancelled) */}
+                {isCancelled && item.cancel_reason && (
+                  <View className="mt-2.5 p-2 rounded-lg bg-red-900/30 border border-red-800/40">
+                    <Text className="text-xs text-red-300 italic">
+                      Ket: {item.cancel_reason}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Waktu WITA & Counter Peserta */}
+                <View className="mt-3.5 pt-3 border-t border-zinc-800/60 flex-row items-center justify-between">
+                  <View className="flex-row items-center">
+                    <Ionicons name="time-outline" size={14} color="#fbbf24" />
+                    <Text className="text-xs font-semibold text-amber-400 ml-1.5">
+                      {item.start_time} - {item.end_time} WITA
+                    </Text>
+                  </View>
+
+                  <View className="flex-row items-center">
+                    <Ionicons
+                      name="people-outline"
+                      size={14}
+                      color="#a1a1aa"
+                    />
+                    <Text
+                      className="text-xs font-medium ml-1.5 text-zinc-400"
+                    >
+                      {hasValidMin
+                        ? `${item.participants_count} (Min. ${item.min_participants}) Peserta`
+                        : `${item.participants_count} Peserta`}
+                    </Text>
+                  </View>
                 </View>
+              </TouchableOpacity>
+
+              {/* Keep the chat action separate from detail navigation. */}
+              <View className="px-4 pb-4">
+                <ChatAdminButton
+                  context="schedule"
+                  data={{
+                    className: item.title,
+                    date: item.date,
+                    sessionTime: `${item.start_time} - ${item.end_time} WITA`,
+                  }}
+                />
               </View>
-
-              {/* Alasan Pembatalan (jika status cancelled) */}
-              {isCancelled && item.cancel_reason && (
-                <View className="mt-2.5 p-2 rounded-lg bg-red-900/30 border border-red-800/40">
-                  <Text className="text-xs text-red-300 italic">
-                    Ket: {item.cancel_reason}
-                  </Text>
-                </View>
-              )}
-
-              {/* Waktu WITA & Counter Peserta */}
-              <View className="mt-3.5 pt-3 border-t border-zinc-800/60 flex-row items-center justify-between">
-                <View className="flex-row items-center">
-                  <Ionicons name="time-outline" size={14} color="#fbbf24" />
-                  <Text className="text-xs font-semibold text-amber-400 ml-1.5">
-                    {item.start_time} - {item.end_time} WITA
-                  </Text>
-                </View>
-
-                <View className="flex-row items-center">
-                  <Ionicons
-                    name="people-outline"
-                    size={14}
-                    color="#a1a1aa"
-                  />
-                  <Text
-                    className="text-xs font-medium ml-1.5 text-zinc-400"
-                  >
-                    {hasValidMin
-                      ? `${item.participants_count} (Min. ${item.min_participants}) Peserta`
-                      : `${item.participants_count} Peserta`}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+            </View>
           );
         }}
       />

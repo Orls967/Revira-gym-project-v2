@@ -76,6 +76,16 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
       ...sections.flatMap((section) => section.data.map((item) =>
         React.createElement(React.Fragment, { key: item.id }, renderItem({ item })))));
   };
+  const openedChatLinks = [];
+  const ChatAdminButton = load(path.resolve(app, '../components/ChatAdminButton.tsx'), {
+    ...deps,
+    'expo-linking': {
+      canOpenURL: async () => true,
+      openURL: async (url) => { openedChatLinks.push(url); },
+    },
+    '../lib/whatsapp': { buildWaLink: () => 'https://example.test/qa-chat' },
+  }).ChatAdminButton;
+  deps['@/components/ChatAdminButton'] = { ChatAdminButton };
   const schedules = load(path.join(app, '(app)/schedules.tsx'), deps);
   deps['@/app/(app)/schedules'] = schedules;
   const Counter = load(path.resolve(app, '../components/ParticipantCounter.tsx'), deps).ParticipantCounter;
@@ -88,6 +98,16 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
   let root;
   return {
     detailCalls, postCalls, getCalls, schedules, navigation,
+    openedChatLinks,
+    chatProps: () => root.root.findByType(ChatAdminButton).props,
+    chatHasNavigationAncestor: () => {
+      let parent = root.root.findByType(ChatAdminButton).parent;
+      while (parent) {
+        if (parent.type === 'TouchableOpacity') return true;
+        parent = parent.parent;
+      }
+      return false;
+    },
     refreshList: async () => { await act(async () => root.root.findByType('SectionList').props.onRefresh()); },
     setGet: (fn) => { overrideGet = fn; },
     counterProps: () => root.root.findByType(Counter).props,
@@ -663,4 +683,25 @@ test('TC-409-02: fallback snapshot preserves cancellation eligibility instead of
   await submitConflict(h); assert.equal(h.counterProps().current, 2);
   assert.equal(h.badgeProps().status, 'cancelled'); assert.match(h.text(), /QA cancellation/);
   assert.doesNotMatch(h.text(), /"Booking Kelas"/); assert.equal(h.postCalls.length, 1); await h.unmount();
+});
+
+
+test('SCRUM72/85 merge: card navigation and Chat Admin remain separate actions', async () => {
+  const h = await loadSchedule(fixture, 'list');
+  assert.equal(h.chatProps().context, 'schedule');
+  assert.deepEqual(JSON.parse(JSON.stringify(h.chatProps().data)), {
+    className: 'Yoga', date: '2099-01-01', sessionTime: '10:00 - 11:00 WITA',
+  });
+  assert.equal(h.chatHasNavigationAncestor(), false);
+  await act(async () => h.button('Yoga')());
+  assert.equal(h.navigation.length, 1);
+  assert.equal(h.navigation[0].pathname, '/schedule/7');
+  const routed = JSON.parse(h.navigation[0].params.scheduleData);
+  assert.equal(routed.status, 'scheduled');
+  assert.equal(routed.participants_count, 3);
+  await act(async () => h.button('Chat Admin')());
+  assert.deepEqual(h.openedChatLinks, ['https://example.test/qa-chat']);
+  assert.equal(h.navigation.length, 1);
+  assert.equal(h.postCalls.length, 0);
+  await h.unmount();
 });
