@@ -1,18 +1,22 @@
+// PublicClassScheduleResource contract (Sprint 3 has no maximum capacity).
+export type BackendScheduleStatus = "scheduled" | "ongoing" | "completed" | "cancelled";
+
 export interface ClassSchedule {
   id: number;
-  title: string;
-  instructor: string;
-  date: string; // Format: YYYY-MM-DD
-  start_time: string; // HH:mm (WITA)
-  end_time: string; // HH:mm (WITA)
-  status: "active" | "cancelled";
-  cancel_reason?: string;
-  current_participants: number;
-  max_participants: number;
+  class_name: string;
+  instructor_name: string;
+  schedule_date: string; // YYYY-MM-DD (WITA)
+  start_time: string; // HH:mm or HH:mm:ss (WITA)
+  end_time: string;
+  status: BackendScheduleStatus;
+  cancel_reason?: string | null;
+  participants_count: number;
+  min_participants: number | null;
+  updated_at?: string | null;
 }
 
 export interface ScheduleSection {
-  title: string; // Contoh: "Hari Ini • Sabtu, 10 Okt"
-  date: string; // YYYY-MM-DD
+  title: string;
+  date: string;
   data: ClassSchedule[];
 }

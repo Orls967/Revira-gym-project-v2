@@ -27,7 +27,6 @@ export default function PreviewComponentsScreen() {
         <View className="flex-row flex-wrap gap-2">
           <StatusBadge status="scheduled" />
           <StatusBadge status="cancelled" />
-          <StatusBadge status="full" />
           <StatusBadge status="completed" />
         </View>
       </View>
