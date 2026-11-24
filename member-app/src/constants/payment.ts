@@ -1,8 +1,15 @@
-// Path: member-app/src/constants/payment.ts
-
-export const PAYMENT_INSTRUCTIONS = {
-  bankName: 'BCA',
-  accountNumber: '[Tunggu Info Orlando]', // Nanti diganti kalau Orlando sudah kasih nomor aslinya
-  accountName: 'Revira Gym Center',
-  instruction: 'Silakan transfer sesuai nominal paket, lalu unggah bukti transfer berformat JPG/PNG (maks. 2MB).',
+// Confirm these values with Orlando before enabling bank transfer.
+// Tests inject an isolated dummy configuration; no dummy account ships to members.
+export const PAYMENT_INSTRUCTIONS: {
+  confirmed: boolean;
+  bankName: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
+  instruction: string;
+} = {
+  confirmed: false,
+  bankName: null,
+  accountNumber: null,
+  accountName: null,
+  instruction: 'Informasi rekening belum tersedia. Hubungi admin atau pilih Bayar di Tempat.',
 };

@@ -15,19 +15,15 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { apiClient } from '@/lib/api';
+import { useMembershipApplication } from '@/hooks/useMembershipApplication';
+import { ApiError, apiClient } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { PAYMENT_INSTRUCTIONS } from '@/constants/payment';
 import { compressPaymentReceipt, ReceiptTooLargeError } from '@/lib/image';
-import { getMembershipAction, MEMBERSHIP_ACTION_TITLE } from '@/lib/membership';
+import { MembershipPlanCard } from '@/components/MembershipPlanCard';
+import { MembershipPlan, parseMembershipPlans, getMembershipAction, MEMBERSHIP_ACTION_TITLE } from '@/lib/membership';
 
-interface Plan {
-  id: number;
-  name: string;
-  price: number;
-  duration_days: number;
-  is_active?: boolean;
-}
+type Plan = MembershipPlan;
 
 type FieldKey = 'membership_plan_id' | 'start_date' | 'payment_method' | 'receipt_image';
 const FIELD_KEYS: FieldKey[] = ['membership_plan_id', 'start_date', 'payment_method', 'receipt_image'];
@@ -64,8 +60,8 @@ const localDateToYmd = (date: Date): string =>
 /* Parser error API                                                    */
 /* ------------------------------------------------------------------ */
 const parseApiError = (err: any) => {
-  const status: number | undefined = err?.response?.status;
-  const data = err?.response?.data;
+  const status: number | undefined = err instanceof ApiError ? err.status : err?.response?.status;
+  const data = err instanceof ApiError ? { errors: err.errors, message: err.message } : err?.response?.data;
   const rawErrors: Record<string, unknown> =
     data?.errors && typeof data.errors === 'object' ? data.errors : {};
 
@@ -83,22 +79,24 @@ const parseApiError = (err: any) => {
   });
 
   const message: string | undefined = typeof data?.message === 'string' ? data.message : undefined;
-  return { status, fieldErrors, otherMessages, message, hasResponse: !!err?.response };
+  return { status, fieldErrors, otherMessages, message, hasResponse: err instanceof ApiError || !!err?.response };
 };
 
 export default function ApplyMembershipScreen() {
   const router = useRouter();
-  const { user, refreshUser, profileStatus } = useAuth();
+  const { user, userToken, refreshUser, profileStatus } = useAuth();
   const { planId } = useLocalSearchParams<{ planId?: string }>();
   const requestedPlanId = planId ? Number(planId) : null;
 
   const u = user;
 
   /* ---------------- Status pengajuan ---------------- */
-  const [submitted, setSubmitted] = useState(false); // sukses POST di sesi ini
-  // F2: jangan hanya andalkan membership.status karena /me bisa memprioritaskan membership aktif.
-  // TODO: sesuaikan 'pending_membership' dengan field yang disepakati bersama PIC backend.
-  const isPending = submitted || u?.membership?.status === 'pending' || !!u?.pending_membership;
+  const { receipt: lastApplication, knownPending, notePending } = useMembershipApplication(u?.id, userToken);
+  const isPending = knownPending || (profileStatus === 'loaded' && u?.membership?.status === 'pending');
+  const currentSession = useRef(userToken);
+  useEffect(() => { currentSession.current = userToken; }, [userToken]);
+  const submitting = useRef(false);
+  const choosing = useRef(false);
 
   /* ---------------- Jenis pengajuan & tanggal ---------------- */
   const action = getMembershipAction(u?.membership);
@@ -173,8 +171,8 @@ export default function ApplyMembershipScreen() {
       try {
         const res = await apiClient.get('/api/v1/membership-plans');
         const data = res.data?.data ?? res.data;
-        const list: Plan[] = Array.isArray(data) ? data : [];
-        if (!cancelled) setPlans(list.filter((p) => p.is_active !== false));
+        const list = parseMembershipPlans(data);
+        if (!cancelled) setPlans(list);
       } catch {
         if (!cancelled) Alert.alert('Error', 'Gagal memuat data paket membership.');
       } finally {
@@ -227,7 +225,8 @@ export default function ApplyMembershipScreen() {
   };
 
   const handlePickImage = async (useCamera: boolean = false) => {
-    if (picking) return;
+    if (choosing.current || submitting.current) return;
+    choosing.current = true;
     setPicking(true);
 
     try {
@@ -291,16 +290,21 @@ export default function ApplyMembershipScreen() {
           : 'Galeri tidak dapat dibuka. Coba lagi atau gunakan kamera.'
       );
     } finally {
+      choosing.current = false;
       setPicking(false);
     }
   };
 
   const handleSubmit = async () => {
     // Jangan kirim selama status membership belum terverifikasi dari server
-    if (loading || profileStatus !== 'loaded') return;
+    if (submitting.current || choosing.current || loading || picking || isPending || profileStatus !== 'loaded') return;
 
     if (!selectedPlan) {
       setErrors((prev) => ({ ...prev, membership_plan_id: 'Silakan pilih paket yang masih aktif.' }));
+      return;
+    }
+    if (paymentMethod === 'transfer' && !PAYMENT_INSTRUCTIONS.confirmed) {
+      setFormError(PAYMENT_INSTRUCTIONS.instruction);
       return;
     }
     if (paymentMethod === 'transfer' && !receiptUri) {
@@ -320,6 +324,8 @@ export default function ApplyMembershipScreen() {
       return;
     }
 
+    const requestSession = userToken;
+    submitting.current = true;
     setLoading(true);
     setErrors({});
     setFormError(null);
@@ -339,16 +345,20 @@ export default function ApplyMembershipScreen() {
         } as any);
       }
 
-      await apiClient.post('/api/v1/member/memberships', formData);
+      const response = await apiClient.post('/api/v1/member/memberships', formData);
+      if (currentSession.current !== requestSession) return;
 
       // Langsung tampilkan "Menunggu Verifikasi" dari respons sukses, tanpa menunggu /me
-      setSubmitted(true);
+      notePending(response.data?.data?.membership?.id);
       try {
         if (refreshUser) await refreshUser();
       } catch {
         // gagal refresh tidak boleh membatalkan status sukses
       }
     } catch (err: any) {
+      if (currentSession.current !== requestSession) return;
+      const pendingMessages = err instanceof ApiError ? err.errors?.membership : err.response?.data?.errors?.membership;
+      if ((err.status ?? err.response?.status) === 422 && Array.isArray(pendingMessages) && pendingMessages.some((message: string) => /menunggu verifikasi|pengajuan.*pending/i.test(message))) notePending();
       const { status, fieldErrors, otherMessages, message, hasResponse } = parseApiError(err);
       setErrors(fieldErrors);
 
@@ -372,7 +382,8 @@ export default function ApplyMembershipScreen() {
         }
       }
     } finally {
-      setLoading(false);
+      submitting.current = false;
+      if (currentSession.current === requestSession) setLoading(false);
     }
   };
 
@@ -383,9 +394,9 @@ export default function ApplyMembershipScreen() {
         <Ionicons name="time-outline" size={64} color="#f59e0b" />
         <Text className="mt-4 text-center text-xl font-bold text-white">Menunggu Verifikasi</Text>
         <Text className="mt-2 text-center text-zinc-400">
-          Pengajuan membership kamu sedang diproses oleh admin. Silakan cek secara berkala.
+          Pengajuan membership terakhir diketahui menunggu verifikasi admin. Silakan periksa kembali secara berkala.
         </Text>
-        <TouchableOpacity onPress={() => router.replace('/')} className="mt-6 rounded-xl bg-zinc-800 px-6 py-3">
+        <TouchableOpacity onPress={() => router.replace('/(app)')} className="mt-6 rounded-xl bg-zinc-800 px-6 py-3">
           <Text className="font-semibold text-white">Kembali ke Beranda</Text>
         </TouchableOpacity>
       </View>
@@ -422,18 +433,24 @@ export default function ApplyMembershipScreen() {
     );
   }
 
-  const phone = u?.phone_number ?? u?.phone ?? '-';
+  const phone = u?.phone_number ?? '-';
 
   return (
     <ScrollView className="flex-1 bg-zinc-950 p-4">
       <Text className="mb-4 text-2xl font-bold text-white">{MEMBERSHIP_ACTION_TITLE[action]}</Text>
 
+      {lastApplication && !knownPending && (
+        <View className="mb-4 rounded-xl border border-amber-500 p-3">
+          <Text className="text-amber-400">Pengajuan terakhir tercatat menunggu verifikasi. Status terbaru belum dapat dipastikan. Periksa kembali atau hubungi admin sebelum mengajukan ulang.</Text>
+          <TouchableOpacity onPress={() => void refreshUser()}><Text className="mt-2 text-white">Periksa kembali</Text></TouchableOpacity>
+        </View>
+      )}
       {/* Data pemohon (hanya baca) */}
       <View className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <Text className="text-xs text-zinc-400">Data Pemohon</Text>
         <Text className="text-base font-semibold text-white">{u?.name}</Text>
         <Text className="text-sm text-zinc-300">
-          {u?.email} • {phone}
+          {u?.email} â€¢ {phone}
         </Text>
       </View>
 
@@ -450,19 +467,7 @@ export default function ApplyMembershipScreen() {
         <Text className="mb-3 text-sm text-zinc-400">Belum ada paket aktif yang tersedia saat ini.</Text>
       ) : (
         plans.map((plan) => (
-          <TouchableOpacity
-            key={plan.id}
-            onPress={() => handleSelectPlan(plan)}
-            className={`mb-3 rounded-xl border p-4 ${
-              selectedPlanId === plan.id ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900'
-            }`}
-          >
-            <View className="flex-row justify-between">
-              <Text className="font-bold text-white">{plan.name}</Text>
-              <Text className="font-bold text-amber-500">Rp {plan.price.toLocaleString('id-ID')}</Text>
-            </View>
-            <Text className="mt-1 text-xs text-zinc-400">{plan.duration_days} Hari</Text>
-          </TouchableOpacity>
+          <MembershipPlanCard key={plan.id} plan={plan} selected={selectedPlanId === plan.id} label={selectedPlanId === plan.id ? 'Dipilih' : 'Pilih Paket'} onPress={() => handleSelectPlan(plan)} />
         ))
       )}
       {errors.membership_plan_id && <Text className="mb-2 text-xs text-red-500">{errors.membership_plan_id}</Text>}
@@ -529,10 +534,12 @@ export default function ApplyMembershipScreen() {
       {paymentMethod === 'transfer' && (
         <View className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <Text className="text-xs text-zinc-400">Instruksi Transfer</Text>
-          <Text className="mt-1 font-bold text-amber-500">
-            {PAYMENT_INSTRUCTIONS.bankName} {PAYMENT_INSTRUCTIONS.accountNumber}
-          </Text>
-          <Text className="text-sm font-semibold text-white">a.n. {PAYMENT_INSTRUCTIONS.accountName}</Text>
+          {PAYMENT_INSTRUCTIONS.confirmed && (
+            <>
+              <Text className="mt-1 font-bold text-amber-500">{PAYMENT_INSTRUCTIONS.bankName} {PAYMENT_INSTRUCTIONS.accountNumber}</Text>
+              <Text className="text-sm font-semibold text-white">a.n. {PAYMENT_INSTRUCTIONS.accountName}</Text>
+            </>
+          )}
           <Text className="mt-2 text-xs text-zinc-400">{PAYMENT_INSTRUCTIONS.instruction}</Text>
 
           <Text className="mb-2 mt-4 text-sm font-semibold text-white">Upload Bukti Transfer</Text>
@@ -598,7 +605,7 @@ export default function ApplyMembershipScreen() {
 
       <TouchableOpacity
         onPress={handleSubmit}
-        disabled={loading}
+        disabled={loading || picking}
         className="mb-10 items-center justify-center rounded-xl bg-amber-500 py-4 active:bg-amber-600 disabled:opacity-50"
       >
         {loading ? <ActivityIndicator color="#000" /> : <Text className="font-bold text-black">Kirim Pengajuan</Text>}

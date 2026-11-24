@@ -6,15 +6,15 @@ import {
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import api from '../../lib/api';
-import { MOCK_PLANS, MOCK_HOURS, MembershipPlan, OperationalHour } from '../../mocks/homeData';
-import { formatRupiah } from '../../utils/formatCurrency';
+import { MOCK_HOURS, OperationalHour } from '../../mocks/homeData';
+import { ChatAdminButton } from '../../components/ChatAdminButton';
+import { MembershipPlanCard } from '../../components/MembershipPlanCard';
 import { useAuth } from '../../context/AuthContext';
-import { getMembershipAction } from '../../lib/membership';
+import { MembershipPlan, parseMembershipPlans, getMembershipAction } from '../../lib/membership';
 
 // Label tombol paket di Beranda. Konsisten dengan judul layar Apply (lib/membership.ts):
 // status none -> Pilih Paket, active/expired -> Perpanjang Paket, selain itu -> label netral.
@@ -27,7 +27,7 @@ const PLAN_BUTTON_LABEL = {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profileStatus } = useAuth();
   const action = getMembershipAction(user?.membership);
 
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
@@ -40,17 +40,17 @@ export default function HomeScreen() {
     try {
       if (!isSilent) setError(null);
 
-      let fetchedPlans = MOCK_PLANS;
+      let fetchedPlans: MembershipPlan[] = [];
       let fetchedHours = MOCK_HOURS;
 
       try {
-        const plansRes = await api.get('/membership-plans');
+        const plansRes = await api.get('/api/v1/membership-plans');
         if (plansRes.data?.data) {
-          fetchedPlans = plansRes.data.data;
+          fetchedPlans = parseMembershipPlans(plansRes.data.data);
         }
-      } catch (err) {
+      } catch {
         if (!isSilent) {
-          console.log('Endpoint plans belum siap, menggunakan Mock Data');
+          setError('Gagal memuat paket membership. Silakan coba lagi.');
         }
       }
 
@@ -59,15 +59,15 @@ export default function HomeScreen() {
         if (hoursRes.data?.data) {
           fetchedHours = hoursRes.data.data;
         }
-      } catch (err) {
+      } catch {
         if (!isSilent) {
           console.log('Endpoint operational-hours belum siap, menggunakan Mock Data');
         }
       }
 
-      setPlans(fetchedPlans.filter((p) => p.is_active));
+      setPlans(fetchedPlans);
       setHours(fetchedHours);
-    } catch (err) {
+    } catch {
       if (!isSilent) setError('Gagal memuat data Beranda.');
     } finally {
       setLoading(false);
@@ -165,35 +165,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           plans.map((plan) => (
-            <View
-              key={plan.id}
-              className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 mb-4"
-            >
-              <View className="flex-row justify-between items-center">
-                <Text className="text-white text-lg font-bold flex-1 pr-3">{plan.name}</Text>
-                <View className="bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">
-                  <Text className="text-amber-400 text-xs font-semibold">
-                    {plan.duration_in_days} Hari
-                  </Text>
-                </View>
-              </View>
-
-              <Text className="text-amber-400 text-2xl font-extrabold mt-3 mb-5">
-                {formatRupiah(plan.price)}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => handleSelectPlan(plan)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel={`Pilih paket ${plan.name}, ${formatRupiah(plan.price)}`}
-                className="bg-amber-500 min-h-[52px] rounded-xl items-center justify-center"
-              >
-                <Text className="text-zinc-950 font-bold text-base">
-                  {PLAN_BUTTON_LABEL[action]}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <MembershipPlanCard key={plan.id} plan={plan} disabled={profileStatus === 'loading' || profileStatus === 'idle'} label={profileStatus === 'loaded' ? (user?.membership?.status === 'pending' ? 'Menunggu Verifikasi' : PLAN_BUTTON_LABEL[action]) : profileStatus === 'error' ? 'Periksa Profil' : 'Memuat Profil'} onPress={() => handleSelectPlan(plan)} />
           ))
         )}
       </View>
@@ -220,6 +192,11 @@ export default function HomeScreen() {
             </View>
           ))}
         </View>
+      </View>
+
+      {/* Tombol Chat Admin */}
+      <View className="mt-8">
+        <ChatAdminButton context="home" />
       </View>
     </ScrollView>
   );

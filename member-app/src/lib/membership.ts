@@ -14,7 +14,7 @@ interface MembershipLike {
 export function getMembershipAction(membership?: MembershipLike | null): MembershipAction {
   const status = membership?.status ?? 'none';
   if (status === 'none') return 'register';
-  if (status === 'active' || status === 'expired') return 'renew';
+  if (status === 'active' || status === 'expired' || status === 'upcoming') return 'renew';
   return 'apply';
 }
 
@@ -31,3 +31,13 @@ export const MEMBERSHIP_ACTION_TITLE: Record<MembershipAction, string> = {
   renew: 'Perpanjang Membership',
   apply: 'Ajukan Membership',
 };
+export interface MembershipPlan {
+  id: number;
+  name: string;
+  price: number;
+  duration_days: number;
+}
+export function parseMembershipPlans(data: unknown): MembershipPlan[] {
+  if (!Array.isArray(data)) throw new Error('Format paket tidak valid.');
+  return data.filter(p => p && p.is_active !== false && Number.isInteger(p.id) && typeof p.name === 'string' && Number.isFinite(p.price) && p.price >= 0 && Number.isInteger(p.duration_days) && p.duration_days > 0);
+}

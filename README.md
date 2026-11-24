@@ -84,6 +84,34 @@ Daftarkan variabel lingkungan berikut pada tab **Variables** service API di Rail
 | `QUEUE_CONNECTION` | `database` | Driver queue database |
 | `RECEIPTS_DISK` | `receipts` | Disk penyimpanan bukti transfer: `receipts` (volume privat lokal, default) atau `s3` (S3-compatible) |
 | `SEED_PASSWORD` | `<password-khusus-staging>` | Password default untuk seeder akun member/admin di staging |
+| `WHATSAPP_DRIVER` | `log` | Pengirim WhatsApp: `log` (ditulis ke log, tidak dikirim) atau `fonnte`. Lihat [Gateway WhatsApp](#gateway-whatsapp-scrum-83) |
+| `WHATSAPP_TOKEN` | `<token-device-fonnte>` | Token device dari dashboard Fonnte. Wajib bila driver `fonnte` |
+| `WHATSAPP_ADMIN_PHONE` | `08xxxxxxxxxx` | Nomor WA admin gym penerima notifikasi admin (SCRUM-79) |
+
+### Gateway WhatsApp (SCRUM-83)
+
+Semua notifikasi WhatsApp (SCRUM-84, SCRUM-79) mengirim lewat satu antarmuka `App\Contracts\WhatsAppSender`. Driver dipilih lewat `WHATSAPP_DRIVER` dan bisa diganti tanpa mengubah kode pemanggil.
+
+**Keputusan: Fonnte** (perbandingan per 1 November 2026):
+
+| Aspek | Fonnte | Wablas |
+|---|---|---|
+| Biaya & kuota | Paket **Free Rp0, 1.000 pesan/bulan** (teks saja). Regular Rp66.000/10.000 pesan; Master Rp175.000 tanpa batas | Tidak ada paket gratis permanen (trial 15 hari dengan watermark). Nano Rp22.000/1.000 pesan; Small Rp69.000/10.000 pesan |
+| Nomor pengirim | Scan QR dari WhatsApp nomor pengirim di dashboard | Sama: scan QR (device) |
+| Batas kirim | Pengiriman diantrikan per device; jeda diatur parameter `delay` | Ada rate limit (HTTP 429 + `retry_after`); jeda per batch 5 pesan, 10–120 detik |
+| API | Satu endpoint `POST https://api.fonnte.com/send`, header `Authorization: <token>` | `POST /api/send-message`, header `Authorization: <token>.<secret_key>` (dua rahasia) |
+| Dokumentasi | Singkat dan jelas; contoh respons gagal tersedia | Lengkap tetapi panjang; contoh body gagal tidak lengkap |
+
+Alasan: volume notifikasi gym (pengingat membership dan perubahan jadwal) masih di bawah 1.000 pesan/bulan, jadi paket Free Fonnte cukup untuk staging dan awal produksi tanpa biaya. Integrasinya juga paling sederhana (satu token). Bila volume naik, cukup naik ke paket Regular. Kebutuhan lampiran (gambar/dokumen) tidak ada, jadi paket teks saja sudah memadai.
+
+> **Sebelum produksi**: harga dan kuota di atas diambil dari situs resmi pada 1 November 2026 dan bisa berubah. Cek ulang paket Fonnte (terutama kuota paket Free) sebelum menyalakan driver `fonnte` di produksi.
+
+**Aturan nomor pengirim**: device Fonnte di-scan dengan **nomor WhatsApp khusus gym/tim yang disepakati**, bukan nomor pribadi anggota tim atau member. Token device hanya disimpan di variabel Railway, tidak di repo.
+
+**Perilaku klien** (`App\Services\WhatsApp`):
+- Nomor `08xx` / `+62xx` / `62xx` (boleh dengan spasi atau tanda hubung) dinormalisasi menjadi `62xx`. Nomor kosong atau bukan nomor seluler Indonesia langsung menghasilkan hasil gagal tanpa memanggil gateway.
+- Timeout request 10 detik. Error jaringan, HTTP error, atau `status: false` dari gateway dikembalikan sebagai `WhatsAppResult` gagal (berisi pesan error singkat), tidak melempar exception. Bila berhasil, `messageId` berisi ID pesan dari Fonnte untuk dicatat di `notification_logs`.
+- Driver `log` dipakai di lokal, CI (`phpunit.xml`), dan staging sebelum device siap. Di luar lingkungan `local`, nomor di log disamarkan (mis. `62812*****890`).
 
 ### Penyimpanan Persisten Bukti Transfer (SCRUM-48)
 

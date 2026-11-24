@@ -37,16 +37,17 @@ export class ApiError extends Error {
   }
 }
 
-export const registerUnauthorizedHandler = (handler: () => void) => {
-  apiClient.interceptors.response.use(
+export const registerUnauthorizedHandler = (handler: (error: any) => void) => {
+  const interceptor = apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
       if (error.response?.status === 401) {
-        handler();
+        handler(error);
       }
       return Promise.reject(error);
     }
   );
+  return () => apiClient.interceptors.response.eject(interceptor);
 };
 
 export default apiClient;

@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    /*
+    | Pengirim WhatsApp (SCRUM-83). driver: "log" (tulis ke log, tidak dikirim) atau "fonnte".
+    | admin_phone adalah nomor admin gym penerima notifikasi admin (SCRUM-79).
+    */
+    'whatsapp' => [
+        'driver' => env('WHATSAPP_DRIVER', 'log'),
+        'token' => env('WHATSAPP_TOKEN'),
+        'admin_phone' => env('WHATSAPP_ADMIN_PHONE'),
+        'timeout' => 10,
+    ],
+
 ];
