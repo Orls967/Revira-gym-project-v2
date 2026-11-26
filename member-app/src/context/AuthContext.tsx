@@ -8,7 +8,10 @@ export interface MembershipInfo {
   start_date?: string | null;
   end_date?: string | null;
 }
-export interface UserData extends BaseUserData { membership?: MembershipInfo | null }
+export interface UserData extends BaseUserData {
+  membership?: MembershipInfo | null;
+  has_pending_application?: boolean;
+}
 export type ProfileStatus = "idle" | "loading" | "loaded" | "error";
 interface AuthContextType {
   isLoading: boolean;

@@ -22,7 +22,7 @@ import { useAuth } from '@/context/AuthContext';
 import { PAYMENT_INSTRUCTIONS } from '@/constants/payment';
 import { compressPaymentReceipt, ReceiptTooLargeError } from '@/lib/image';
 import { MembershipPlanCard } from '@/components/MembershipPlanCard';
-import { MembershipPlan, parseMembershipPlans, getMembershipAction, MEMBERSHIP_ACTION_TITLE } from '@/lib/membership';
+import { MembershipPlan, parseMembershipPlans, getMembershipAction, hasPendingApplication, MEMBERSHIP_ACTION_TITLE } from '@/lib/membership';
 
 type Plan = MembershipPlan;
 
@@ -93,8 +93,21 @@ export default function ApplyMembershipScreen() {
   const u = user;
 
   /* ---------------- Status pengajuan ---------------- */
-  const { receipt: lastApplication, knownPending, notePending } = useMembershipApplication(u?.id, userToken);
-  const isPending = knownPending || (profileStatus === 'loaded' && u?.membership?.status === 'pending');
+  const serverSupportsPending = typeof u?.has_pending_application === 'boolean';
+  const { receipt: lastApplication, knownPending, notePending } = useMembershipApplication(
+    serverSupportsPending ? undefined : u?.id, userToken,
+  );
+  // A successful POST or duplicate response is stronger than the pre-submit /me snapshot.
+  // Keep it during refresh/failure, then let the next verified profile replace it.
+  const [confirmedSubmission, setConfirmedSubmission] = useState<{ token: typeof userToken; profile: typeof u } | null>(null);
+  const submissionPending = confirmedSubmission !== null &&
+    confirmedSubmission.token === userToken && confirmedSubmission.profile === u;
+  const isPending = submissionPending || (!serverSupportsPending && knownPending) ||
+    (profileStatus === 'loaded' && hasPendingApplication(u));
+  const confirmPending = (applicationId?: number) => {
+    if (serverSupportsPending) setConfirmedSubmission({ token: userToken, profile: u });
+    else notePending(applicationId);
+  };
   const currentSession = useRef(userToken);
   useEffect(() => { currentSession.current = userToken; }, [userToken]);
   const submitting = useRef(false);
@@ -352,7 +365,7 @@ export default function ApplyMembershipScreen() {
       if (currentSession.current !== requestSession) return;
 
       // Langsung tampilkan "Menunggu Verifikasi" dari respons sukses, tanpa menunggu /me
-      notePending(response.data?.data?.membership?.id);
+      confirmPending(response.data?.data?.membership?.id);
       try {
         if (refreshUser) await refreshUser();
       } catch {
@@ -361,7 +374,7 @@ export default function ApplyMembershipScreen() {
     } catch (err: any) {
       if (currentSession.current !== requestSession) return;
       const pendingMessages = err instanceof ApiError ? err.errors?.membership : err.response?.data?.errors?.membership;
-      if ((err.status ?? err.response?.status) === 422 && Array.isArray(pendingMessages) && pendingMessages.some((message: string) => /menunggu verifikasi|pengajuan.*pending/i.test(message))) notePending();
+      if ((err.status ?? err.response?.status) === 422 && Array.isArray(pendingMessages) && pendingMessages.some((message: string) => /menunggu verifikasi|pengajuan.*pending/i.test(message))) confirmPending();
       const { status, fieldErrors, otherMessages, message, hasResponse } = parseApiError(err);
       setErrors(fieldErrors);
 
@@ -442,7 +455,7 @@ export default function ApplyMembershipScreen() {
     <ScrollView className="flex-1 bg-zinc-950 px-4" style={{ marginTop: insets.top }} contentContainerStyle={{ paddingTop: 16, paddingBottom: 16 }}>
       <Text className="mb-4 text-2xl font-bold text-white">{MEMBERSHIP_ACTION_TITLE[action]}</Text>
 
-      {lastApplication && !knownPending && (
+      {!serverSupportsPending && lastApplication && !knownPending && (
         <View className="mb-4 rounded-xl border border-amber-500 p-3">
           <Text className="text-amber-400">Pengajuan terakhir tercatat menunggu verifikasi. Status terbaru belum dapat dipastikan. Periksa kembali atau hubungi admin sebelum mengajukan ulang.</Text>
           <TouchableOpacity onPress={() => void refreshUser()}><Text className="mt-2 text-white">Periksa kembali</Text></TouchableOpacity>

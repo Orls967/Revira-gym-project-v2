@@ -17,7 +17,7 @@ export const readApplicationReceipt = (raw: string | null): ApplicationReceipt |
   } catch { return null; }
 };
 
-// /me has no separate renewal-application status. Cache is a historical hint ONLY.
+// Legacy /me without an application status: cache is a historical hint only.
 export function useMembershipApplication(userId: number | undefined, session: string | null) {
   const ownerKey = `${userId}:${session}`;
   const [state, setState] = useState<{ owner: string; receipt: ApplicationReceipt | null; known: boolean }>({ owner: ownerKey, receipt: null, known: false });

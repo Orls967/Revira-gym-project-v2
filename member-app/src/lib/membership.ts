@@ -5,6 +5,14 @@
 // - active / expired                 -> perpanjangan (sudah punya riwayat membership)
 // - selain itu (rejected, pending, dll) -> riwayat belum bisa dipastikan, pakai label netral
 
+// Older API deployments only expose a pending membership when it wins the summary.
+export function hasPendingApplication(profile?: {
+  has_pending_application?: boolean;
+  membership?: { status?: string | null } | null;
+} | null): boolean {
+  return profile?.has_pending_application ?? (profile?.membership?.status === 'pending');
+}
+
 export type MembershipAction = 'register' | 'renew' | 'apply';
 
 interface MembershipLike {

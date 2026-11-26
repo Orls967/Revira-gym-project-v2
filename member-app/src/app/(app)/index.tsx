@@ -14,12 +14,13 @@ import { MOCK_HOURS, OperationalHour } from '../../mocks/homeData';
 import { ChatAdminButton } from '../../components/ChatAdminButton';
 import { MembershipPlanCard } from '../../components/MembershipPlanCard';
 import { useAuth } from '../../context/AuthContext';
-import { MembershipPlan, parseMembershipPlans, getMembershipAction, MEMBERSHIP_ACTION_LABEL } from '../../lib/membership';
+import { MembershipPlan, parseMembershipPlans, getMembershipAction, hasPendingApplication, MEMBERSHIP_ACTION_LABEL } from '../../lib/membership';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, profileStatus } = useAuth();
+  const { user, profileStatus, refreshUser } = useAuth();
+  const pending = profileStatus === 'loaded' && hasPendingApplication(user);
   const action = getMembershipAction(user?.membership);
 
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
@@ -84,6 +85,11 @@ export default function HomeScreen() {
 
   // PERBAIKAN POIN 4: Mengirimkan ID paket melalui parameter URL
   const handleSelectPlan = (plan: MembershipPlan) => {
+    if (pending) return;
+    if (profileStatus !== 'loaded') {
+      if (profileStatus === 'error') void refreshUser();
+      return;
+    }
     router.push({ pathname: '/membership/apply', params: { planId: plan.id } } as any);
   };
 
@@ -157,7 +163,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           plans.map((plan) => (
-            <MembershipPlanCard key={plan.id} plan={plan} disabled={profileStatus === 'loading' || profileStatus === 'idle'} label={profileStatus === 'loaded' ? (user?.membership?.status === 'pending' ? 'Menunggu Verifikasi' : MEMBERSHIP_ACTION_LABEL[action]) : profileStatus === 'error' ? 'Periksa Profil' : 'Memuat Profil'} onPress={() => handleSelectPlan(plan)} />
+            <MembershipPlanCard key={plan.id} plan={plan} disabled={pending || profileStatus === 'loading' || profileStatus === 'idle'} label={profileStatus === 'loaded' ? (pending ? 'Menunggu Verifikasi' : MEMBERSHIP_ACTION_LABEL[action]) : profileStatus === 'error' ? 'Periksa Profil' : 'Memuat Profil'} onPress={() => handleSelectPlan(plan)} />
           ))
         )}
       </View>

@@ -32,6 +32,7 @@ class MeController extends Controller
                 'phone_number' => $user->phone_number,
                 'profile_photo' => $user->profile_photo,
                 'role' => $user->role,
+                'has_pending_application' => $user->memberships()->awaiting()->exists(),
                 'membership' => $this->membershipSummary($user),
             ],
         ]);

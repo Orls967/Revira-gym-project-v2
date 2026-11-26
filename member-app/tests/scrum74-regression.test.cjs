@@ -49,8 +49,8 @@ const plans=[{id:1,name:'Plan A',price:100,duration_days:30},{id:2,name:'Plan B'
 test('API plan parser accepts active public shape and rejects malformed/inactive plans',()=>{
  assert.equal(membership.parseMembershipPlans([...plans,{...plans[0],is_active:false},{id:8,name:'bad',price:null}]).length,2);assert.equal(membership.getMembershipAction({status:'none'}),'register');assert.equal(membership.getMembershipAction({status:'active'}),'renew');assert.equal(membership.getMembershipAction({status:'rejected'}),'apply');
 });
-function screenHarness({planId='2',profileStatus='loaded',membershipStatus='active',confirmed=true,cache=null,compress,imageModule,post,now}={}) {
- let auth={userToken:'fixture-session',profileStatus,user:{id:1,name:'Fixture',email:'fixture@example.test',phone_number:'TEST ONLY',membership:{status:membershipStatus,is_active:membershipStatus==='active',end_date:'2099-01-31'}}};
+function screenHarness({planId='2',profileStatus='loaded',membershipStatus='active',confirmed=true,cache=null,compress,imageModule,post,now,pendingIndicator,refreshUser=async()=>{}}={}) {
+ let auth={userToken:'fixture-session',profileStatus,user:{id:1,name:'Fixture',email:'fixture@example.test',phone_number:'TEST ONLY',has_pending_application:pendingIndicator,membership:{status:membershipStatus,is_active:membershipStatus==='active',end_date:'2099-01-31'}}};
  const postCalls=[],nav=[],alerts=[],store=new Map(cache?[['membership_application_1',JSON.stringify(cache)]]:[]);let tree;
  const Native=Object.fromEntries(['View','Text','ScrollView','TouchableOpacity','Image','ActivityIndicator'].map(n=>[n,n]));
  Native.Platform={OS:'android'};Native.Alert={alert:(...args)=>alerts.push(args)};Native.Linking={openSettings:async()=>{}};Native.AppState={addEventListener:()=>({remove(){}})};
@@ -63,7 +63,7 @@ function screenHarness({planId='2',profileStatus='loaded',membershipStatus='acti
  let picker=async()=>({canceled:false,assets:[{uri:'file:///new.jpg',width:2000}]});
  const api={get:async()=>({data:{data:plans}}),post:async(...args)=>{postCalls.push(args);return post?post(...args):{status:201,data:{data:{membership:{id:99,status:'pending'}}}};}};
  class Multipart {constructor(){this.fields=new Map();}append(k,v){this.fields.set(k,v);}}
- const deps={'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:24,bottom:0})},'react-native':Native,'expo-router':{useRouter:()=>({replace:v=>nav.push(v),back:()=>{}}),useLocalSearchParams:()=>({planId})},'expo-image-picker':{requestCameraPermissionsAsync:async()=>({granted:true}),launchCameraAsync:()=>picker(),launchImageLibraryAsync:()=>picker()},'@react-native-community/datetimepicker':{default:'DatePicker',__esModule:true},'@expo/vector-icons':{Ionicons:'Icon'},'@/lib/api':{apiClient:api,ApiError},'@/context/AuthContext':{useAuth:()=>({...auth,refreshUser:async()=>{}})},'@/constants/payment':{PAYMENT_INSTRUCTIONS:{confirmed,bankName:'TEST ONLY',accountNumber:'TEST ONLY',accountName:'TEST ONLY',instruction:'Rekening belum dikonfirmasi.'}},'@/lib/image':image,'@/lib/membership':membership,'@/components/MembershipPlanCard':{MembershipPlanCard:card},'@/hooks/useMembershipApplication':pending};
+ const deps={'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:24,bottom:0})},'react-native':Native,'expo-router':{useRouter:()=>({replace:v=>nav.push(v),back:()=>{}}),useLocalSearchParams:()=>({planId})},'expo-image-picker':{requestCameraPermissionsAsync:async()=>({granted:true}),launchCameraAsync:()=>picker(),launchImageLibraryAsync:()=>picker()},'@react-native-community/datetimepicker':{default:'DatePicker',__esModule:true},'@expo/vector-icons':{Ionicons:'Icon'},'@/lib/api':{apiClient:api,ApiError},'@/context/AuthContext':{useAuth:()=>({...auth,refreshUser})},'@/constants/payment':{PAYMENT_INSTRUCTIONS:{confirmed,bankName:'TEST ONLY',accountNumber:'TEST ONLY',accountName:'TEST ONLY',instruction:'Rekening belum dikonfirmasi.'}},'@/lib/image':image,'@/lib/membership':membership,'@/components/MembershipPlanCard':{MembershipPlanCard:card},'@/hooks/useMembershipApplication':pending};
  const Screen=load('app/(app)/membership/apply.tsx',deps,{FormData:Multipart,Date:Clock}).default;
  function text(node){if(typeof node==='string')return node;if(!node)return '';return (node.children||[]).map(text).join(' ');}
  const harness={postCalls,nav,alerts,store,image,expirePending:()=>expiry.at(-1)?.(),async mount(){await act(async()=>{tree=create(React.createElement(Screen));await settle();});},async close(){await act(async()=>tree.unmount());},button(label){return tree.root.findAllByType('TouchableOpacity').find(n=>(text(n)+' '+(n.props.accessibilityLabel||'')).includes(label));},text(){return text(tree.toJSON());},async click(label){const b=this.button(label);assert.ok(b,'Missing button '+label);await act(async()=>{await b.props.onPress();await settle();});},async run(f){await act(async()=>{await f();await settle();});},setPicker(f){picker=f;},update(patch){auth={...auth,...patch};return this.run(()=>tree.update(React.createElement(Screen)));},scrollProps(){return tree.root.findByType('ScrollView').props;},images(){return tree.root.findAllByType('Image').map(n=>n.props.source.uri);},datePicker(){return tree.root.findByType('DatePicker');},setClock(value){clock=value;}};
@@ -134,7 +134,7 @@ test('runtime restore: root waits for restore and routes a valid session to Bera
 });
 test('runtime route guard: protected tabs require auth and application route is hidden',async()=>{
  let auth={isLoading:false,userToken:'fixture-session'};const Tabs=({children})=>React.createElement('Tabs',null,children);Tabs.Screen=props=>React.createElement('TabScreen',props);
- const Layout=load('app/(app)/_layout.tsx',{'expo-router':{Tabs,Redirect:'Redirect'},'react-native':{View:'View',ActivityIndicator:'Spinner',Platform:{OS:'android'}},'react-native-safe-area-context':{useSafeAreaInsets:()=>({bottom:0})},'@/context/AuthContext':{useAuth:()=>auth},'@expo/vector-icons':{Ionicons:'Icon'}}).default;let tree;await act(async()=>{tree=create(React.createElement(Layout));});assert.equal(tree.root.findAllByType('TabScreen').find(n=>n.props.name==='membership/apply').props.options.href,null);auth={isLoading:false,userToken:null};await act(async()=>tree.update(React.createElement(Layout)));assert.equal(tree.root.findByType('Redirect').props.href,'/login');await act(async()=>tree.unmount());
+ const Layout=load('app/(app)/_layout.tsx',{'expo-router':{Tabs,Redirect:'Redirect'},'react-native':{View:'View',ActivityIndicator:'Spinner',AppState:{addEventListener:()=>({remove(){}})},Platform:{OS:'android'}},'react-native-safe-area-context':{useSafeAreaInsets:()=>({bottom:0})},'@/context/AuthContext':{useAuth:()=>auth},'@expo/vector-icons':{Ionicons:'Icon'}}).default;let tree;await act(async()=>{tree=create(React.createElement(Layout));});assert.equal(tree.root.findAllByType('TabScreen').find(n=>n.props.name==='membership/apply').props.options.href,null);auth={isLoading:false,userToken:null};await act(async()=>tree.update(React.createElement(Layout)));assert.equal(tree.root.findByType('Redirect').props.href,'/login');await act(async()=>tree.unmount());
 });
 
 test('runtime 360dp: form content begins below the status-bar safe area',async()=>{const h=screenHarness();await h.mount();assert.equal(h.scrollProps().style.marginTop,24);assert.equal(h.scrollProps().contentContainerStyle.paddingTop,16);await h.close();});
@@ -191,4 +191,88 @@ test('TC3-31: Laravel past/overlap start_date 422 renders beneath the date secti
   assert.equal(h.button('Kirim Pengajuan').props.disabled,false);
   await h.close();
  }
+});
+
+
+test('D1: server pending guards direct form, and verified false clears it without resurrecting stale legacy cache',async()=>{
+ const cache={status:'pending',recordedAt:Date.now()};
+ const h=screenHarness({pendingIndicator:true,cache});await h.mount();
+ assert.match(h.text(),/Menunggu Verifikasi/);
+ assert.equal(h.button('Kirim Pengajuan'),undefined);
+ const member={id:1,membership:{status:'active',is_active:true}};
+ await h.update({user:{...member,has_pending_application:false}});
+ assert.ok(h.button('Kirim Pengajuan'));assert.doesNotMatch(h.text(),/Pengajuan terakhir tercatat/);
+ await h.update({profileStatus:'error'});
+ assert.equal(h.button('Kirim Pengajuan'),undefined);
+ await h.update({profileStatus:'loaded',userToken:'new-account',user:{id:2,has_pending_application:false}});
+ assert.ok(h.button('Kirim Pengajuan'));await h.close();
+});
+
+test('D1: POST 201 waits immediately, requests refresh, and next authoritative profile clears waiting',async()=>{
+ const reload=deferred();let refreshes=0;
+ const h=screenHarness({pendingIndicator:false,refreshUser:()=>{refreshes++;return reload.promise;}});
+ await h.mount();await h.click('Bayar di Tempat');
+ let submit;await act(async()=>{submit=h.button('Kirim Pengajuan').props.onPress();await settle();});
+ assert.equal(refreshes,1);assert.match(h.text(),/Menunggu Verifikasi/);assert.equal(h.store.size,0);
+ await h.update({profileStatus:'error'});assert.match(h.text(),/Menunggu Verifikasi/);
+ await h.update({profileStatus:'loaded',user:{id:1,has_pending_application:true,membership:{status:'active',is_active:true}}});
+ assert.match(h.text(),/Menunggu Verifikasi/);
+ await h.run(()=>reload.resolve());await submit;
+ await h.update({user:{id:1,has_pending_application:false,membership:{status:'active',is_active:true}}});
+ assert.ok(h.button('Kirim Pengajuan'));await h.close();
+});
+
+test('D1: Beranda shows waiting without opening Apply, then enables Perpanjang after verified server false',async()=>{
+ let profile={id:1,has_pending_application:true,membership:{status:'active',is_active:true}};
+ const navigation=[];
+ const Native=Object.fromEntries(['View','Text','ScrollView','RefreshControl','TouchableOpacity','ActivityIndicator'].map(n=>[n,n]));
+ const Home=load('app/(app)/index.tsx',{
+  'react-native':Native,'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0})},
+  'expo-router':{useRouter:()=>({push:route=>navigation.push(route)})},
+  '../../context/AuthContext':{useAuth:()=>({user:profile,profileStatus:'loaded'})},
+  '../../lib/api':{get:async url=>({data:{data:url.includes('membership-plans')?plans:[]}})},
+  '../../mocks/homeData':{MOCK_HOURS:[]},'../../components/ChatAdminButton':{ChatAdminButton:'ChatAdmin'},
+  '../../components/MembershipPlanCard':{MembershipPlanCard:'PlanCard'},'../../lib/membership':membership,
+ },{setInterval:()=>0,clearInterval:()=>{}}).default;
+ let tree;await act(async()=>{tree=create(React.createElement(Home));await settle();});
+ const card=()=>tree.root.findAllByType('PlanCard')[0].props;
+ assert.equal(card().label,'Menunggu Verifikasi');assert.equal(card().disabled,true);card().onPress();
+ assert.deepEqual(navigation,[]);
+ profile={...profile,has_pending_application:false};
+ await act(async()=>tree.update(React.createElement(Home)));
+ assert.equal(card().label,'Perpanjang');card().onPress();
+ assert.equal(navigation[0].pathname,'/membership/apply');
+ await act(async()=>tree.unmount());
+});
+
+
+test('D1: AuthContext restores pending, retains it across a network error, and replaces it on verified refresh',async()=>{
+ const response=(flag,id=1)=>({data:{data:{id,has_pending_application:flag,membership:{status:'active',is_active:true}}}});
+ const h=authHarness({restored:'fixture-restored',getProfile:async()=>response(true)});
+ await h.mount();
+ assert.equal(h.state.user.has_pending_application,true);
+ assert.equal(h.state.user.membership.is_active,true);
+ h.profile(async()=>{throw new Error('offline');});
+ await h.run(()=>h.state.refreshUser());
+ assert.equal(h.state.profileStatus,'error');
+ assert.equal(h.state.user.has_pending_application,true);
+ h.profile(async()=>response(false));
+ await h.run(()=>h.state.refreshUser());
+ assert.equal(h.state.profileStatus,'loaded');
+ assert.equal(h.state.user.has_pending_application,false);
+ await h.run(()=>h.state.logout());
+ h.profile(async()=>response(false,2));
+ await h.run(()=>h.state.login('fixture@example.test','fixture-only'));
+ assert.equal(h.state.user.id,2);
+ assert.equal(h.state.user.has_pending_application,false);
+ await h.close();
+});
+
+test('receipt_image API rejection displays the backend message and keeps the form retryable',async()=>{
+ const message='Gambar bukti transfer rusak atau tidak dapat dibaca.';
+ const h=screenHarness({post:async()=>{throw new ApiError(422,'Validation failed',{receipt_image:[message]});}});
+ await h.mount();await h.click('Galeri');await h.click('Kirim Pengajuan');
+ assert.ok(h.text().includes(message));
+ assert.equal(h.button('Kirim Pengajuan').props.disabled,false);
+ await h.close();
 });
