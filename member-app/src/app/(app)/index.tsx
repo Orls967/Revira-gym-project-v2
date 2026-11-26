@@ -14,15 +14,7 @@ import { MOCK_HOURS, OperationalHour } from '../../mocks/homeData';
 import { ChatAdminButton } from '../../components/ChatAdminButton';
 import { MembershipPlanCard } from '../../components/MembershipPlanCard';
 import { useAuth } from '../../context/AuthContext';
-import { MembershipPlan, parseMembershipPlans, getMembershipAction } from '../../lib/membership';
-
-// Label tombol paket di Beranda. Konsisten dengan judul layar Apply (lib/membership.ts):
-// status none -> Pilih Paket, active/expired -> Perpanjang Paket, selain itu -> label netral.
-const PLAN_BUTTON_LABEL = {
-  register: 'Pilih Paket',
-  renew: 'Perpanjang Paket',
-  apply: 'Ajukan Membership',
-} as const;
+import { MembershipPlan, parseMembershipPlans, getMembershipAction, MEMBERSHIP_ACTION_LABEL } from '../../lib/membership';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -165,7 +157,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           plans.map((plan) => (
-            <MembershipPlanCard key={plan.id} plan={plan} disabled={profileStatus === 'loading' || profileStatus === 'idle'} label={profileStatus === 'loaded' ? (user?.membership?.status === 'pending' ? 'Menunggu Verifikasi' : PLAN_BUTTON_LABEL[action]) : profileStatus === 'error' ? 'Periksa Profil' : 'Memuat Profil'} onPress={() => handleSelectPlan(plan)} />
+            <MembershipPlanCard key={plan.id} plan={plan} disabled={profileStatus === 'loading' || profileStatus === 'idle'} label={profileStatus === 'loaded' ? (user?.membership?.status === 'pending' ? 'Menunggu Verifikasi' : MEMBERSHIP_ACTION_LABEL[action]) : profileStatus === 'error' ? 'Periksa Profil' : 'Memuat Profil'} onPress={() => handleSelectPlan(plan)} />
           ))
         )}
       </View>

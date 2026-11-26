@@ -15,7 +15,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((y,n) 
 function load(file, deps = {}, globals = {}) {
  const code = ts.transpileModule(fs.readFileSync(path.join(src,file),'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React,esModuleInterop:true}}).outputText;
  const module={exports:{}};
- vm.runInNewContext(code,{module,exports:module.exports,require:name => {if(name==='react')return React;if(name in deps)return deps[name];throw Error('Unexpected import '+name);},console,setTimeout,clearTimeout,setInterval,clearInterval,Date,...globals});
+ vm.runInNewContext(code,{module,exports:module.exports,require:name => {if(name==='react')return React;if(name in deps)return deps[name];throw Error('Unexpected import '+name);},console,setTimeout,clearTimeout,setInterval,clearInterval,Date,React,...globals});
  return module.exports;
 }
 class ApiError extends Error { constructor(status,message,errors){ super(message); this.status=status; this.errors=errors; } }
@@ -49,7 +49,7 @@ const plans=[{id:1,name:'Plan A',price:100,duration_days:30},{id:2,name:'Plan B'
 test('API plan parser accepts active public shape and rejects malformed/inactive plans',()=>{
  assert.equal(membership.parseMembershipPlans([...plans,{...plans[0],is_active:false},{id:8,name:'bad',price:null}]).length,2);assert.equal(membership.getMembershipAction({status:'none'}),'register');assert.equal(membership.getMembershipAction({status:'active'}),'renew');assert.equal(membership.getMembershipAction({status:'rejected'}),'apply');
 });
-function screenHarness({planId='2',profileStatus='loaded',membershipStatus='active',confirmed=true,cache=null,compress,post,now}={}) {
+function screenHarness({planId='2',profileStatus='loaded',membershipStatus='active',confirmed=true,cache=null,compress,imageModule,post,now}={}) {
  let auth={userToken:'fixture-session',profileStatus,user:{id:1,name:'Fixture',email:'fixture@example.test',phone_number:'TEST ONLY',membership:{status:membershipStatus,is_active:membershipStatus==='active',end_date:'2099-01-31'}}};
  const postCalls=[],nav=[],alerts=[],store=new Map(cache?[['membership_application_1',JSON.stringify(cache)]]:[]);let tree;
  const Native=Object.fromEntries(['View','Text','ScrollView','TouchableOpacity','Image','ActivityIndicator'].map(n=>[n,n]));
@@ -59,14 +59,14 @@ function screenHarness({planId='2',profileStatus='loaded',membershipStatus='acti
  const expiry=[];
  const pending=load('hooks/useMembershipApplication.ts',{'expo-secure-store':secure},{Date:Clock,setTimeout:fn=>{expiry.push(fn);return expiry.length;},clearTimeout:()=>{}});
  const card=load('components/MembershipPlanCard.tsx',{'react-native':Native,'@/lib/membership':membership,'@/utils/formatCurrency':{formatRupiah:v=>'Rp '+v}}).MembershipPlanCard;
- const image={compressPaymentReceipt:compress||asyncUri,ReceiptTooLargeError:class extends Error{}};
+ const image=imageModule||{compressPaymentReceipt:compress||asyncUri,ReceiptTooLargeError:class extends Error{}};
  let picker=async()=>({canceled:false,assets:[{uri:'file:///new.jpg',width:2000}]});
  const api={get:async()=>({data:{data:plans}}),post:async(...args)=>{postCalls.push(args);return post?post(...args):{status:201,data:{data:{membership:{id:99,status:'pending'}}}};}};
  class Multipart {constructor(){this.fields=new Map();}append(k,v){this.fields.set(k,v);}}
- const deps={'react-native':Native,'expo-router':{useRouter:()=>({replace:v=>nav.push(v),back:()=>{}}),useLocalSearchParams:()=>({planId})},'expo-image-picker':{requestCameraPermissionsAsync:async()=>({granted:true}),launchCameraAsync:()=>picker(),launchImageLibraryAsync:()=>picker()},'@react-native-community/datetimepicker':{default:'DatePicker',__esModule:true},'@expo/vector-icons':{Ionicons:'Icon'},'@/lib/api':{apiClient:api,ApiError},'@/context/AuthContext':{useAuth:()=>({...auth,refreshUser:async()=>{}})},'@/constants/payment':{PAYMENT_INSTRUCTIONS:{confirmed,bankName:'TEST ONLY',accountNumber:'TEST ONLY',accountName:'TEST ONLY',instruction:'Rekening belum dikonfirmasi.'}},'@/lib/image':image,'@/lib/membership':membership,'@/components/MembershipPlanCard':{MembershipPlanCard:card},'@/hooks/useMembershipApplication':pending};
+ const deps={'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:24,bottom:0})},'react-native':Native,'expo-router':{useRouter:()=>({replace:v=>nav.push(v),back:()=>{}}),useLocalSearchParams:()=>({planId})},'expo-image-picker':{requestCameraPermissionsAsync:async()=>({granted:true}),launchCameraAsync:()=>picker(),launchImageLibraryAsync:()=>picker()},'@react-native-community/datetimepicker':{default:'DatePicker',__esModule:true},'@expo/vector-icons':{Ionicons:'Icon'},'@/lib/api':{apiClient:api,ApiError},'@/context/AuthContext':{useAuth:()=>({...auth,refreshUser:async()=>{}})},'@/constants/payment':{PAYMENT_INSTRUCTIONS:{confirmed,bankName:'TEST ONLY',accountNumber:'TEST ONLY',accountName:'TEST ONLY',instruction:'Rekening belum dikonfirmasi.'}},'@/lib/image':image,'@/lib/membership':membership,'@/components/MembershipPlanCard':{MembershipPlanCard:card},'@/hooks/useMembershipApplication':pending};
  const Screen=load('app/(app)/membership/apply.tsx',deps,{FormData:Multipart,Date:Clock}).default;
  function text(node){if(typeof node==='string')return node;if(!node)return '';return (node.children||[]).map(text).join(' ');}
- const harness={postCalls,nav,alerts,store,image,expirePending:()=>expiry.at(-1)?.(),async mount(){await act(async()=>{tree=create(React.createElement(Screen));await settle();});},async close(){await act(async()=>tree.unmount());},button(label){return tree.root.findAllByType('TouchableOpacity').find(n=>(text(n)+' '+(n.props.accessibilityLabel||'')).includes(label));},text(){return text(tree.toJSON());},async click(label){const b=this.button(label);assert.ok(b,'Missing button '+label);await act(async()=>{await b.props.onPress();await settle();});},async run(f){await act(async()=>{await f();await settle();});},setPicker(f){picker=f;},update(patch){auth={...auth,...patch};return this.run(()=>tree.update(React.createElement(Screen)));},datePicker(){return tree.root.findByType('DatePicker');},setClock(value){clock=value;}};
+ const harness={postCalls,nav,alerts,store,image,expirePending:()=>expiry.at(-1)?.(),async mount(){await act(async()=>{tree=create(React.createElement(Screen));await settle();});},async close(){await act(async()=>tree.unmount());},button(label){return tree.root.findAllByType('TouchableOpacity').find(n=>(text(n)+' '+(n.props.accessibilityLabel||'')).includes(label));},text(){return text(tree.toJSON());},async click(label){const b=this.button(label);assert.ok(b,'Missing button '+label);await act(async()=>{await b.props.onPress();await settle();});},async run(f){await act(async()=>{await f();await settle();});},setPicker(f){picker=f;},update(patch){auth={...auth,...patch};return this.run(()=>tree.update(React.createElement(Screen)));},scrollProps(){return tree.root.findByType('ScrollView').props;},images(){return tree.root.findAllByType('Image').map(n=>n.props.source.uri);},datePicker(){return tree.root.findByType('DatePicker');},setClock(value){clock=value;}};
  return harness;
 }
 async function asyncUri(uri){return uri;}
@@ -127,4 +127,68 @@ test('FormData interceptor removes JSON without altering auth or setting a bound
 test('transfer requires a receipt before POST',async()=>{const h=screenHarness();await h.mount();await h.click('Kirim Pengajuan');assert.equal(h.postCalls.length,0);assert.match(h.text(),/Bukti transfer wajib/);await h.close();});
 test('out-of-order refresh cannot overwrite a newer profile within the same session',async()=>{
  const h=authHarness();await h.mount();await h.run(()=>h.state.login('fixture@example.test','fixture-only'));const first=deferred();let count=0;h.profile(()=>++count===1?first.promise:Promise.resolve({data:{data:{id:1,membership:{status:'pending'}}}}));let old;await act(async()=>{old=h.state.refreshUser();await settle();});await h.run(()=>h.state.refreshUser());await h.run(()=>first.resolve({data:{data:{id:1,membership:{status:'active'}}}}));await old;assert.equal(h.state.user.membership.status,'pending');await h.close();
+});
+
+test('runtime restore: root waits for restore and routes a valid session to Beranda',async()=>{
+ let auth={isLoading:true,userToken:null};const Root=load('app/index.tsx',{'react-native':{View:'View',ActivityIndicator:'Spinner'},'expo-router':{Redirect:'Redirect'},'@/context/AuthContext':{useAuth:()=>auth}}).default;let tree;await act(async()=>{tree=create(React.createElement(Root));});assert.equal(tree.root.findAllByType('Redirect').length,0);auth={isLoading:false,userToken:'fixture-session'};await act(async()=>tree.update(React.createElement(Root)));assert.equal(tree.root.findByType('Redirect').props.href,'/(app)');auth={isLoading:false,userToken:null};await act(async()=>tree.update(React.createElement(Root)));assert.equal(tree.root.findByType('Redirect').props.href,'/login');await act(async()=>tree.unmount());
+});
+test('runtime route guard: protected tabs require auth and application route is hidden',async()=>{
+ let auth={isLoading:false,userToken:'fixture-session'};const Tabs=({children})=>React.createElement('Tabs',null,children);Tabs.Screen=props=>React.createElement('TabScreen',props);
+ const Layout=load('app/(app)/_layout.tsx',{'expo-router':{Tabs,Redirect:'Redirect'},'react-native':{View:'View',ActivityIndicator:'Spinner',Platform:{OS:'android'}},'react-native-safe-area-context':{useSafeAreaInsets:()=>({bottom:0})},'@/context/AuthContext':{useAuth:()=>auth},'@expo/vector-icons':{Ionicons:'Icon'}}).default;let tree;await act(async()=>{tree=create(React.createElement(Layout));});assert.equal(tree.root.findAllByType('TabScreen').find(n=>n.props.name==='membership/apply').props.options.href,null);auth={isLoading:false,userToken:null};await act(async()=>tree.update(React.createElement(Layout)));assert.equal(tree.root.findByType('Redirect').props.href,'/login');await act(async()=>tree.unmount());
+});
+
+test('runtime 360dp: form content begins below the status-bar safe area',async()=>{const h=screenHarness();await h.mount();assert.equal(h.scrollProps().style.marginTop,24);assert.equal(h.scrollProps().contentContainerStyle.paddingTop,16);await h.close();});
+
+
+test('TC3-31b: size exhaustion and native decode errors clear replaced preview and prevent old receipt upload',async()=>{
+ for(const failure of ['oversize','corrupt','unsupported']){
+  let attempts=0;
+  const image=load('lib/image.ts',{
+   'expo-image-manipulator':{SaveFormat:{JPEG:'jpeg'},manipulateAsync:async uri=>{
+    if(uri.endsWith('old.jpg'))return {uri:'file:///old-compressed.jpg'};
+    attempts++;
+    if(failure!=='oversize')throw new Error('Native image decode failed');
+    return {uri:'file:///still-too-large.jpg'};
+   }},
+  },{fetch:async uri=>({blob:async()=>({size:uri.includes('too-large')?3*1024*1024:12000})})});
+  const h=screenHarness({imageModule:image});await h.mount();
+  h.setPicker(async()=>({canceled:false,assets:[{uri:'file:///old.jpg',width:1200}]}));
+  await h.click('Galeri');assert.ok(h.images().includes('file:///old-compressed.jpg'));
+  h.setPicker(async()=>({canceled:false,assets:[{uri:'file:///replacement.'+(failure==='unsupported'?'pdf':'jpg'),width:3000}]}));
+  await h.click('Ganti dari Galeri');
+  assert.equal(attempts,failure==='oversize'?5:1);
+  assert.match(h.text(),failure==='oversize'?/masih lebih dari 2 MB/:/Foto tidak dapat diproses/);
+  assert.equal(h.images().length,0);
+  await h.click('Kirim Pengajuan');assert.equal(h.postCalls.length,0);
+  await h.close();
+ }
+});
+
+test('TC3-31b: picker in flight blocks submission; cancel preserves the intentionally selected receipt',async()=>{
+ const result=deferred();const h=screenHarness();await h.mount();await h.click('Galeri');
+ h.setPicker(()=>result.promise);
+ let picking;await act(async()=>{picking=h.button('Ganti dari Galeri').props.onPress();await settle();});
+ await h.run(()=>h.button('Kirim Pengajuan').props.onPress());
+ assert.equal(h.postCalls.length,0);
+ await h.run(()=>result.resolve({canceled:true,assets:null}));await picking;
+ assert.equal(h.postCalls.length,0);
+ assert.ok(h.images().includes('file:///new.jpg'));
+ await h.click('Kirim Pengajuan');
+ assert.equal(h.postCalls[0][1].fields.get('receipt_image').uri,'file:///new.jpg');
+ await h.close();
+});
+
+test('TC3-31: Laravel past/overlap start_date 422 renders beneath the date section and leaves submit retryable',async()=>{
+ for(const message of ['Tanggal mulai minimal hari ini.','Periode membership baru bertabrakan dengan masa aktif yang sedang berjalan.']){
+  const h=screenHarness({post:async()=>{throw new ApiError(422,'Validation failed',{start_date:[message]});}});
+  await h.mount();
+  await h.click('Bayar di Tempat');
+  await h.click('Kirim Pengajuan');
+  assert.equal(h.postCalls.length,1);
+  const text=h.text();
+  assert.ok(text.indexOf('2. Tanggal Mulai')<text.indexOf(message));
+  assert.ok(text.indexOf(message)<text.indexOf('3. Metode Pembayaran'));
+  assert.equal(h.button('Kirim Pengajuan').props.disabled,false);
+  await h.close();
+ }
 });

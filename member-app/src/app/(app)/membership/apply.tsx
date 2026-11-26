@@ -11,6 +11,7 @@ import {
   Linking,
   AppState,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -84,6 +85,7 @@ const parseApiError = (err: any) => {
 
 export default function ApplyMembershipScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, userToken, refreshUser, profileStatus } = useAuth();
   const { planId } = useLocalSearchParams<{ planId?: string }>();
   const requestedPlanId = planId ? Number(planId) : null;
@@ -268,7 +270,8 @@ export default function ApplyMembershipScreen() {
         setReceiptUri(compressedUri);
         clearError('receipt_image');
       } catch (e) {
-        // Gagal diproses: bukti lama (bila ada) tidak dihapus
+        // Foto pengganti gagal diproses. Jangan kirim bukti yang sudah ingin diganti.
+        setReceiptUri(null);
         if (e instanceof ReceiptTooLargeError) {
           setErrors((prev) => ({
             ...prev,
@@ -436,7 +439,7 @@ export default function ApplyMembershipScreen() {
   const phone = u?.phone_number ?? '-';
 
   return (
-    <ScrollView className="flex-1 bg-zinc-950 p-4">
+    <ScrollView className="flex-1 bg-zinc-950 px-4" style={{ marginTop: insets.top }} contentContainerStyle={{ paddingTop: 16, paddingBottom: 16 }}>
       <Text className="mb-4 text-2xl font-bold text-white">{MEMBERSHIP_ACTION_TITLE[action]}</Text>
 
       {lastApplication && !knownPending && (
@@ -450,7 +453,7 @@ export default function ApplyMembershipScreen() {
         <Text className="text-xs text-zinc-400">Data Pemohon</Text>
         <Text className="text-base font-semibold text-white">{u?.name}</Text>
         <Text className="text-sm text-zinc-300">
-          {u?.email} â€¢ {phone}
+          {u?.email} | {phone}
         </Text>
       </View>
 
