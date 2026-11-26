@@ -54,7 +54,8 @@ memberApplications:
                 description: >
                   Bukti transfer. Wajib bila `payment_method = transfer`.
                   Dilarang (akan ditolak 422) bila `payment_method = on_the_spot`.
-                  Format: JPEG, PNG, atau WebP. Ukuran maksimal 2 MB.
+                  Format: JPEG, PNG, atau WebP yang dapat didekode. Ukuran maksimal 2 MiB (2.097.152 byte).
+                  Maksimal 4096 piksel per sisi dan 8 juta piksel total untuk membatasi penggunaan memori decoder.
     responses:
       '201':
         description: Pengajuan membership berhasil dikirim.

@@ -45,6 +45,11 @@ class ReceiptStorage
      */
     public const MAX_FILE_SIZE_BYTES = 2048 * 1024;
 
+    // A 2 MiB compressed file can expand considerably when decoded.
+    public const MAX_IMAGE_EDGE = 4096;
+
+    public const MAX_IMAGE_PIXELS = 8_000_000;
+
     /**
      * Aturan validasi untuk dipakai FormRequest (mis. SCRUM-69) pada field receipt_image.
      * Validasi isi file di service ini tetap dijalankan sebagai lapis kedua.
@@ -147,6 +152,63 @@ class ReceiptStorage
                 'receipt_image' => ['Format file tidak didukung. Bukti transfer harus berupa gambar JPG, PNG, atau WEBP.'],
             ]);
         }
+
+        $this->validateDecodableImage($file, $mime);
+    }
+
+    private function validateDecodableImage(UploadedFile $file, string $mime): void
+    {
+        $invalid = fn () => ValidationException::withMessages([
+            'receipt_image' => ['Gambar bukti transfer rusak atau tidak dapat dibaca.'],
+        ]);
+
+        $contents = @file_get_contents($file->getPathname());
+        if ($contents === false || ! $this->hasCompleteImageContainer($contents, $mime)) {
+            throw $invalid();
+        }
+
+        $dimensions = @getimagesizefromstring($contents);
+        if ($dimensions === false || $dimensions[0] < 1 || $dimensions[1] < 1) {
+            throw $invalid();
+        }
+
+        [$width, $height] = $dimensions;
+        if ($width > self::MAX_IMAGE_EDGE || $height > self::MAX_IMAGE_EDGE || $width * $height > self::MAX_IMAGE_PIXELS) {
+            throw ValidationException::withMessages([
+                'receipt_image' => ['Dimensi bukti transfer maksimal 4096 piksel per sisi dan 8 juta piksel total.'],
+            ]);
+        }
+
+        // Some decoders return a partial image with a warning on truncated input.
+        $decodeWarning = false;
+        set_error_handler(static function () use (&$decodeWarning): bool {
+            $decodeWarning = true;
+
+            return true;
+        }, E_WARNING | E_NOTICE);
+        try {
+            $image = imagecreatefromstring($contents);
+        } finally {
+            restore_error_handler();
+        }
+
+        if ($image === false || $decodeWarning) {
+            throw $invalid();
+        }
+    }
+
+    private function hasCompleteImageContainer(string $contents, string $mime): bool
+    {
+        // GD can decode partial images without reporting a warning.
+        return match ($mime) {
+            'image/jpeg' => str_ends_with($contents, "\xff\xd9"),
+            'image/png' => str_ends_with($contents, "\x00\x00\x00\x00IEND\xae\x42\x60\x82"),
+            'image/webp' => strlen($contents) >= 12 &&
+                substr($contents, 0, 4) === 'RIFF' &&
+                substr($contents, 8, 4) === 'WEBP' &&
+                unpack('Vsize', $contents, 4)['size'] === strlen($contents) - 8,
+            default => false,
+        };
     }
 
     /**

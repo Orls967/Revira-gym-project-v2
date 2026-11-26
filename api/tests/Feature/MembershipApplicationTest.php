@@ -11,6 +11,7 @@ use App\Services\ReceiptStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -523,5 +524,61 @@ class MembershipApplicationTest extends TestCase
         $response2->assertUnprocessable()
             ->assertJsonValidationErrors(['payment_method'])
             ->assertJsonMissingValidationErrors(['receipt_image']);
+    }
+
+    public function test_supported_formats_remain_readable_receipts(): void
+    {
+        foreach (['jpg' => 'imagejpeg', 'png' => 'imagepng', 'webp' => 'imagewebp'] as $ext => $encode) {
+            Sanctum::actingAs(User::factory()->create(['role' => UserRole::Member]));
+            $contents = $this->encodedReceipt($encode);
+            $this->submitReceiptContents($ext, $contents)->assertCreated()
+                ->assertJsonPath('data.transaction.has_receipt', true);
+        }
+
+        $this->assertCount(3, Storage::disk($this->disk)->allFiles());
+    }
+
+    public function test_unreadable_and_oversized_dimensions_do_not_leave_a_receipt_or_records(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['role' => UserRole::Member]));
+        $badReceipts = [
+            ['jpg', "\xff\xd8\xff\xe0invalid JPEG data"],
+            ['jpg', substr($this->encodedReceipt('imagejpeg'), 0, -30)],
+            ['png', substr($this->encodedReceipt('imagepng'), 0, -25)],
+            ['webp', substr($this->encodedReceipt('imagewebp'), 0, -10)],
+            ['jpg', ''],
+            ['pdf', '%PDF-1.4'],
+            ['jpg', $this->encodedReceipt('imagejpeg', 4097, 1)],
+            ['png', $this->encodedReceipt('imagepng', 3000, 3000)],
+        ];
+
+        foreach ($badReceipts as [$ext, $contents]) {
+            $this->submitReceiptContents($ext, $contents)->assertUnprocessable()
+                ->assertJsonValidationErrors('receipt_image');
+            $this->assertDatabaseCount('memberships', 0);
+            $this->assertDatabaseCount('transactions', 0);
+            $this->assertSame([], Storage::disk($this->disk)->allFiles());
+        }
+    }
+
+    private function encodedReceipt(string $encode, int $width = 64, int $height = 48): string
+    {
+        $image = imagecreatetruecolor($width, $height);
+        imagefill($image, 0, 0, 0x346789);
+
+        ob_start();
+        $encode($image);
+
+        return (string) ob_get_clean();
+    }
+
+    private function submitReceiptContents(string $ext, string $contents): TestResponse
+    {
+        return $this->postJson($this->url, [
+            'membership_plan_id' => $this->plan->id,
+            'start_date' => today()->toDateString(),
+            'payment_method' => 'transfer',
+            'receipt_image' => UploadedFile::fake()->createWithContent("receipt.$ext", $contents),
+        ]);
     }
 }
