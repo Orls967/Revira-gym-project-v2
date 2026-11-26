@@ -56,3 +56,15 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+
+### Validasi bukti transfer membership
+
+PHP GD harus mendukung JPEG, PNG, dan WebP. Image Docker API dan CI menyediakan GD.
+Receipt dibatasi 2 MiB, 4096 piksel per sisi dan 8 juta piksel total agar gambar
+terkompresi tidak memakai memori berlebihan saat didekode. Gambar rusak atau di luar
+batas, termasuk container gambar yang terpotong, menghasilkan HTTP 422 dengan key `receipt_image` sebelum file atau record disimpan.
+
+`GET /api/v1/me` mengembalikan `data.has_pending_application` untuk pengajuan
+yang menunggu verifikasi. `data.membership` tetap menunjukkan membership yang
+berlaku, sehingga member aktif masih dapat booking saat renewal pending.

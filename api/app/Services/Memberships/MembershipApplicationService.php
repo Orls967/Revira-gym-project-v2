@@ -116,7 +116,7 @@ class MembershipApplicationService
     private function guardAgainstDuplicatePending(User $user): void
     {
         $hasPending = $user->memberships()
-            ->where('status', 'pending')
+            ->awaiting()
             ->exists();
 
         if ($hasPending) {

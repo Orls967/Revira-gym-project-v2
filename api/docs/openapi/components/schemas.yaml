@@ -226,7 +226,7 @@ MeResponse:
   properties:
     data:
       type: object
-      required: [id, name, email, phone_number, profile_photo, role, membership]
+      required: [id, name, email, phone_number, profile_photo, role, membership, has_pending_application]
       properties:
         id:
           type: integer
@@ -241,6 +241,9 @@ MeResponse:
           type: [string, 'null']
         role:
           $ref: '#/UserRole'
+        has_pending_application:
+          type: boolean
+          description: True when the authenticated member has an application awaiting verification, independently of current membership eligibility.
         membership:
           $ref: '#/MembershipSummary'
 UserModel:

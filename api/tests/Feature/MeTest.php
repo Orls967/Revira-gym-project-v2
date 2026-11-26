@@ -31,7 +31,7 @@ class MeTest extends TestCase
             ->assertOk()
             ->assertExactJsonStructure([
                 'data' => [
-                    'id', 'name', 'email', 'phone_number', 'profile_photo', 'role',
+                    'id', 'name', 'email', 'phone_number', 'profile_photo', 'role', 'has_pending_application',
                     'membership' => [
                         'is_active', 'status', 'start_date', 'end_date',
                         'plan' => ['id', 'name', 'duration_days'],
@@ -76,6 +76,7 @@ class MeTest extends TestCase
 
         $this->getJson('/api/v1/me')
             ->assertOk()
+            ->assertJsonPath('data.has_pending_application', false)
             ->assertJsonPath('data.membership', [
                 'is_active' => false,
                 'status' => 'none',
@@ -96,6 +97,7 @@ class MeTest extends TestCase
 
         $this->getJson('/api/v1/me')
             ->assertJsonPath('data.membership.is_active', false)
+            ->assertJsonPath('data.has_pending_application', true)
             ->assertJsonPath('data.membership.status', 'pending')
             ->assertJsonPath('data.membership.start_date', null);
     }
@@ -261,5 +263,59 @@ class MeTest extends TestCase
         Sanctum::actingAs(User::factory()->admin()->create());
 
         $this->getJson('/api/v1/me')->assertForbidden();
+    }
+
+    public function test_pending_renewal_is_independent_of_active_membership_and_scoped_to_member(): void
+    {
+        $user = User::factory()->create();
+        $active = Membership::factory()->for($user)->create([
+            'status' => 'active',
+            'start_date' => today()->subDay(),
+            'end_date' => today()->addDays(10),
+        ]);
+        Membership::factory()->pending()->create();
+        Sanctum::actingAs($user);
+
+        $before = $this->getJson('/api/v1/me')->assertOk()
+            ->assertJsonPath('data.has_pending_application', false)
+            ->json('data.membership');
+        $this->assertTrue($before['is_active']);
+
+        $renewal = Membership::factory()->for($user)->pending()->create([
+            'start_date' => $active->end_date->copy()->addDay(),
+            'record_type' => 'extension',
+        ]);
+        $this->getJson('/api/v1/me')->assertOk()
+            ->assertJsonPath('data.has_pending_application', true)
+            ->assertJsonPath('data.membership', $before);
+
+        $renewal->update(['status' => 'rejected']);
+        $this->getJson('/api/v1/me')->assertOk()
+            ->assertJsonPath('data.has_pending_application', false)
+            ->assertJsonPath('data.membership', $before);
+
+        $renewal->update(['status' => 'active', 'end_date' => today()->addDays(40)]);
+        $this->getJson('/api/v1/me')->assertOk()
+            ->assertJsonPath('data.has_pending_application', false)
+            ->assertJsonPath('data.membership', $before);
+    }
+
+    public function test_pending_indicator_remains_true_with_upcoming_or_expired_history(): void
+    {
+        foreach (['upcoming', 'expired'] as $history) {
+            $user = User::factory()->create();
+            Membership::factory()->for($user)->pending()->create();
+            Membership::factory()->for($user)->create([
+                'status' => 'active',
+                'start_date' => $history === 'upcoming' ? today()->addDay() : today()->subDays(35),
+                'end_date' => $history === 'upcoming' ? today()->addDays(30) : today()->subDay(),
+            ]);
+            Sanctum::actingAs($user);
+
+            $this->getJson('/api/v1/me')->assertOk()
+                ->assertJsonPath('data.has_pending_application', true)
+                ->assertJsonPath('data.membership.status', $history)
+                ->assertJsonPath('data.membership.is_active', false);
+        }
     }
 }

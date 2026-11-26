@@ -6,18 +6,22 @@ import {
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import api from '../../lib/api';
-import { MOCK_PLANS, MOCK_HOURS, MembershipPlan, OperationalHour } from '../../mocks/homeData';
-import { formatRupiah } from '../../utils/formatCurrency';
+import { MOCK_HOURS, OperationalHour } from '../../mocks/homeData';
 import { ChatAdminButton } from '../../components/ChatAdminButton';
+import { MembershipPlanCard } from '../../components/MembershipPlanCard';
+import { useAuth } from '../../context/AuthContext';
+import { MembershipPlan, parseMembershipPlans, getMembershipAction, hasPendingApplication, MEMBERSHIP_ACTION_LABEL } from '../../lib/membership';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user, profileStatus, refreshUser } = useAuth();
+  const pending = profileStatus === 'loaded' && hasPendingApplication(user);
+  const action = getMembershipAction(user?.membership);
 
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [hours, setHours] = useState<OperationalHour[]>([]);
@@ -25,42 +29,38 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fungsi muat data dengan parameter isSilent agar polling tidak membuat UI flicker
   const loadData = async (isSilent = false) => {
     try {
       if (!isSilent) setError(null);
 
-      let fetchedPlans = MOCK_PLANS;
+      let fetchedPlans: MembershipPlan[] = [];
       let fetchedHours = MOCK_HOURS;
 
-      // 1. Coba panggil API /membership-plans
       try {
-        const plansRes = await api.get('/membership-plans');
+        const plansRes = await api.get('/api/v1/membership-plans');
         if (plansRes.data?.data) {
-          fetchedPlans = plansRes.data.data;
+          fetchedPlans = parseMembershipPlans(plansRes.data.data);
         }
-      } catch (err) {
+      } catch {
         if (!isSilent) {
-          console.log('Endpoint plans belum siap, menggunakan Mock Data');
+          setError('Gagal memuat paket membership. Silakan coba lagi.');
         }
       }
 
-      // 2. Coba panggil API /operational-hours
       try {
         const hoursRes = await api.get('/operational-hours');
         if (hoursRes.data?.data) {
           fetchedHours = hoursRes.data.data;
         }
-      } catch (err) {
+      } catch {
         if (!isSilent) {
           console.log('Endpoint operational-hours belum siap, menggunakan Mock Data');
         }
       }
 
-      // Filter hanya paket yang aktif
-      setPlans(fetchedPlans.filter((p) => p.is_active));
+      setPlans(fetchedPlans);
       setHours(fetchedHours);
-    } catch (err) {
+    } catch {
       if (!isSilent) setError('Gagal memuat data Beranda.');
     } finally {
       setLoading(false);
@@ -68,11 +68,9 @@ export default function HomeScreen() {
     }
   };
 
-  // Effect untuk Panggilan Pertama & Polling 15 Detik (SCRUM-58)
   useEffect(() => {
     loadData();
 
-    // Set interval 15 detik untuk auto-update data di latar belakang
     const intervalId = setInterval(() => {
       loadData(true);
     }, 15000);
@@ -85,15 +83,16 @@ export default function HomeScreen() {
     loadData(true);
   }, []);
 
+  // PERBAIKAN POIN 4: Mengirimkan ID paket melalui parameter URL
   const handleSelectPlan = (plan: MembershipPlan) => {
-    Alert.alert(
-      'Pilih Paket',
-      `Anda memilih paket ${plan.name}. Alur pendaftaran akan tersedia di SCRUM-74 (Sprint 3).`,
-      [{ text: 'OK' }]
-    );
+    if (pending) return;
+    if (profileStatus !== 'loaded') {
+      if (profileStatus === 'error') void refreshUser();
+      return;
+    }
+    router.push({ pathname: '/membership/apply', params: { planId: plan.id } } as any);
   };
 
-  // State Loading Awal (Skeleton/ActivityIndicator)
   if (loading) {
     return (
       <View className="flex-1 bg-zinc-950 justify-center items-center">
@@ -103,7 +102,6 @@ export default function HomeScreen() {
     );
   }
 
-  // State Error dengan Tombol Coba Lagi
   if (error) {
     return (
       <View className="flex-1 bg-zinc-950 justify-center items-center px-8">
@@ -165,33 +163,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           plans.map((plan) => (
-            <View
-              key={plan.id}
-              className="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 mb-4"
-            >
-              <View className="flex-row justify-between items-center">
-                <Text className="text-white text-lg font-bold flex-1 pr-3">{plan.name}</Text>
-                <View className="bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">
-                  <Text className="text-amber-400 text-xs font-semibold">
-                    {plan.duration_in_days} Hari
-                  </Text>
-                </View>
-              </View>
-
-              <Text className="text-amber-400 text-2xl font-extrabold mt-3 mb-5">
-                {formatRupiah(plan.price)}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => handleSelectPlan(plan)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel={`Pilih paket ${plan.name}, ${formatRupiah(plan.price)}`}
-                className="bg-amber-500 min-h-[52px] rounded-xl items-center justify-center"
-              >
-                <Text className="text-zinc-950 font-bold text-base">Pilih Paket</Text>
-              </TouchableOpacity>
-            </View>
+            <MembershipPlanCard key={plan.id} plan={plan} disabled={pending || profileStatus === 'loading' || profileStatus === 'idle'} label={profileStatus === 'loaded' ? (pending ? 'Menunggu Verifikasi' : MEMBERSHIP_ACTION_LABEL[action]) : profileStatus === 'error' ? 'Periksa Profil' : 'Memuat Profil'} onPress={() => handleSelectPlan(plan)} />
           ))
         )}
       </View>

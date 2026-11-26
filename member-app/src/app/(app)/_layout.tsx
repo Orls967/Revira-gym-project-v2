@@ -1,10 +1,25 @@
-import { Tabs } from 'expo-router';
+import { useEffect, useRef } from 'react';
+import { Tabs, Redirect } from 'expo-router';
+import { ActivityIndicator, AppState, View, Platform } from 'react-native';
+import { useAuth } from '@/context/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // Import ikon bawaan Expo
 
 export default function AppLayout() {
   const insets = useSafeAreaInsets();
+  const { isLoading, userToken, refreshUser } = useAuth();
+  const refresh = useRef(refreshUser);
+  useEffect(() => { refresh.current = refreshUser; }, [refreshUser]);
+  useEffect(() => {
+    if (!userToken) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refresh.current();
+    });
+    return () => sub.remove();
+  }, [userToken]);
+  const refreshOnFocus = () => { void refresh.current?.(); };
+  if (isLoading) return <View className="flex-1 items-center justify-center bg-zinc-950"><ActivityIndicator color="#f59e0b" /></View>;
+  if (!userToken) return <Redirect href="/login" />;
 
   return (
     <Tabs
@@ -21,8 +36,10 @@ export default function AppLayout() {
         tabBarInactiveTintColor: '#71717a', // zinc-500
       }}
     >
+      <Tabs.Screen name="membership/apply" listeners={{ focus: refreshOnFocus }} options={{ href: null }} />
       <Tabs.Screen
         name="index"
+        listeners={{ focus: refreshOnFocus }}
         options={{
           title: 'Beranda',
           tabBarIcon: ({ color, size }) => (

@@ -6,7 +6,7 @@ me:
     description: Khusus role `member`. Dipakai app untuk mengaktifkan tombol booking (`data.membership.is_active`).
     responses:
       '200':
-        description: Profil member.
+        description: Profil member dan indikator pengajuan yang masih menunggu verifikasi.
         content:
           application/json:
             schema:
@@ -22,6 +22,7 @@ me:
                     phone_number: '081234567890'
                     profile_photo: null
                     role: member
+                    has_pending_application: false
                     membership:
                       is_active: true
                       status: active
@@ -41,6 +42,7 @@ me:
                     phone_number: '081234567890'
                     profile_photo: null
                     role: member
+                    has_pending_application: false
                     membership:
                       is_active: false
                       status: none

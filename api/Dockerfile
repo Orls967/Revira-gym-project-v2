@@ -1,5 +1,10 @@
 FROM serversideup/php:8.4-fpm-nginx-v4.5.1
 
+USER root
+RUN install-php-extensions gd \
+    && php -r 'exit((imagetypes() & (IMG_JPG | IMG_PNG | IMG_WEBP)) === (IMG_JPG | IMG_PNG | IMG_WEBP) ? 0 : 1);'
+USER www-data
+
 ENV AUTORUN_ENABLED=true
 
 WORKDIR /var/www/html
