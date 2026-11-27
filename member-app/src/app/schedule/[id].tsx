@@ -26,10 +26,9 @@ import { ParticipantCounter } from "@/components/ParticipantCounter";
 import { StatusBadge, ScheduleStatus } from "@/components/StatusBadge";
 import {
   NormalizedSchedule,
-  NormalizedScheduleStatus,
   RawBackendSchedule,
-  normalizeScheduleItem,
   mapBackendScheduleStatus,
+  normalizeScheduleItem,
   isValidCalendarDateString,
   normalizeValidDate,
   normalizeValidTime,
@@ -58,7 +57,7 @@ interface MembershipPeriodItem {
   end_date: string | null;
 }
 
-// Structure extracted from GET /api/v1/me (supports single summary AND optional renewal list/flags)
+// Structure extracted from GET /api/v1/me (supports single summary AND future renewal list/flags)
 interface MeMembershipData {
   primary: MembershipPeriodItem;
   periods: MembershipPeriodItem[];
@@ -83,20 +82,7 @@ interface BookingResourceItem {
     cancel_reason?: unknown;
     participants_count?: unknown;
     min_participants?: unknown;
-    updated_at?: unknown;
   } | null;
-}
-
-// Item returned by ClassScheduleStatusResource (GET /api/v1/class-schedules/status)
-interface ScheduleStatusPollItem {
-  id?: unknown;
-  schedule_id?: unknown;
-  status?: unknown;
-  cancel_reason?: unknown;
-  participants_count?: unknown;
-  current_participants?: unknown;
-  min_participants?: unknown;
-  updated_at?: unknown;
 }
 
 type PopupState = {
@@ -117,7 +103,7 @@ function isRequestCanceled(err: unknown): boolean {
   );
 }
 
-// Helper: Normalize validated HH:mm or HH:mm:ss into HH:mm:ss without losing seconds precision
+// Helper: Normalize validated HH:mm or HH:mm:ss into HH:mm:ss without losing seconds precision (F5)
 function toFullTimeWithSeconds(timeStr: string): string {
   const clean = timeStr.trim();
   if (/^\d{2}:\d{2}$/.test(clean)) return `${clean}:00`;
@@ -131,14 +117,7 @@ function parseWitaDateTime(dateStr: string, timeStr: string): Date {
   return new Date(`${dateStr}T${normalizedTime}+08:00`);
 }
 
-// Helper: Parse ISO timestamp to epoch ms safely for updated_at comparison
-function parseTimestampMs(iso?: string | null): number | null {
-  if (!iso || typeof iso !== "string") return null;
-  const ms = Date.parse(iso);
-  return Number.isFinite(ms) ? ms : null;
-}
-
-// Strict validator for normalized schedule object (F5)
+// --- F5: Strict validator for normalized schedule object ---
 function isValidNormalizedSchedule(
   item: NormalizedSchedule | null
 ): item is NormalizedSchedule {
@@ -188,6 +167,7 @@ function parseSingleMembershipPeriod(
       ? null
       : normalizeValidDate(m.end_date);
 
+  // If start_date or end_date was provided as a non-null value but failed calendar validation, reject
   if (
     (m.start_date !== null && m.start_date !== undefined && !startDate) ||
     (m.end_date !== null && m.end_date !== undefined && !endDate)
@@ -203,7 +183,8 @@ function parseSingleMembershipPeriod(
   };
 }
 
-// Extract & Validate MeController membership response from GET /api/v1/me (F2)
+// --- F2: Extract & Validate MeController membership response from GET /api/v1/me ---
+// Supports current single summary AND optional array/upcoming_membership for renewal (B6)
 function parseMeMembershipResponse(payload: unknown): MeMembershipData | null {
   if (!payload || typeof payload !== "object") return null;
   const root = payload as Record<string, unknown>;
@@ -221,6 +202,7 @@ function parseMeMembershipResponse(payload: unknown): MeMembershipData | null {
 
   const periods: MembershipPeriodItem[] = [primary];
 
+  // Support optional renewal / upcoming membership fields if backend provides them
   const upcomingCandidate = parseSingleMembershipPeriod(
     dataObj.upcoming_membership ?? dataObj.next_membership
   );
@@ -249,7 +231,7 @@ function parseMeMembershipResponse(payload: unknown): MeMembershipData | null {
   };
 }
 
-// Evaluate B6 Membership Eligibility against Session Date (F2)
+// --- F2: Evaluate B6 Membership Eligibility against Session Date ---
 function evaluateMembershipOnSessionDate(
   membershipData: MeMembershipData | null,
   sessionDate: string
@@ -271,6 +253,7 @@ function evaluateMembershipOnSessionDate(
     };
   }
 
+  // Check if ANY valid active/upcoming membership period covers sessionDate (supports renewal)
   for (const period of membershipData.periods) {
     const st = period.status.toLowerCase();
     if (st === "active" || st === "upcoming") {
@@ -345,6 +328,35 @@ function evaluateMembershipOnSessionDate(
   };
 }
 
+type PollOutcome = "UPDATED" | "UNCHANGED" | "MISSING" | "ABORTED" | "FAILED";
+type ScheduleSnapshot = Partial<Pick<
+  NormalizedSchedule,
+  "status" | "participants_count" | "min_participants" | "cancel_reason" | "updated_at"
+>> & { id: number };
+
+const REQUEST_TIMEOUT_MS = 12000;
+const POLL_INTERVAL_MS = 15000;
+const MAX_BACKOFF_MS = 120000;
+
+function timestampMs(value: unknown) {
+  const parsed = typeof value === "string" ? Date.parse(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function retryAfterMs(value: unknown, now: number) {
+  if (typeof value !== "string" && typeof value !== "number") return 0;
+  const text = String(value).trim();
+  const delay = /^\d+$/.test(text) ? Number(text) * 1000 : (timestampMs(text) ?? now) - now;
+  return Math.min(MAX_BACKOFF_MS, Math.max(0, delay));
+}
+
+function findScheduleItem(payload: unknown, id: number): RawBackendSchedule | undefined {
+  if (!Array.isArray(payload)) throw new Error("Format daftar jadwal dari server tidak valid.");
+  return payload.find((item): item is RawBackendSchedule =>
+    Boolean(item && typeof item === "object" && Number(item.id) === id)
+  );
+}
+
 export default function ScheduleDetailScreen() {
   const params = useLocalSearchParams<{
     id?: string | string[];
@@ -352,7 +364,7 @@ export default function ScheduleDetailScreen() {
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { userToken } = useAuth();
+  const { userToken, isLoading: isAuthLoading } = useAuth();
 
   const rawIdParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const rawScheduleData = Array.isArray(params.scheduleData)
@@ -385,7 +397,6 @@ export default function ScheduleDetailScreen() {
     }
   }, [rawScheduleData, routeScheduleId]);
 
-  // Single source of truth for schedule (including live participants_count, status, cancel_reason)
   const [schedule, setSchedule] = useState<NormalizedSchedule | null>(
     initialParsedSchedule
   );
@@ -396,48 +407,46 @@ export default function ScheduleDetailScreen() {
     null
   );
 
-  // --- Concurrency, Lifecycle, Session & Auth Token Guards (SCRUM-72 F6 & SCRUM-73 Poin 2, 3, 4) ---
+  const scheduleRef = useRef(initialParsedSchedule);
+  const observationRef = useRef(0);
+  const acceptedObservationRef = useRef(0);
+  const latestTimestampRef = useRef(timestampMs(initialParsedSchedule?.updated_at));
+  const bookingRevisionRef = useRef(0);
+  const pollAbortRef = useRef<AbortController | null>(null);
+  const focusedRef = useRef(false);
+  const refreshSeqRef = useRef(0);
+  const retryRef = useRef({ failures: 0, until: 0, throttled: false });
+
+  // --- F6: Concurrency, Sequence ID, Session & Auth Token Guards ---
   const activeSessionIdRef = useRef<number | null>(routeScheduleId);
   const activeTokenRef = useRef<string | null>(userToken ?? null);
   const mutationEpochRef = useRef<number>(0);
   const verifySeqRef = useRef<number>(0);
-  const pollSeqRef = useRef<number>(0);
-  const isPollingInFlightRef = useRef<boolean>(false);
   const isBookingInFlightRef = useRef<boolean>(false);
-  const lastUpdatedAtMsRef = useRef<number | null>(
-    parseTimestampMs(initialParsedSchedule?.updated_at)
-  );
-  const scheduleDateRef = useRef<string | null>(
-    initialParsedSchedule?.date ?? null
-  );
+  const bookingSeqRef = useRef(0);
+  const needsConflictReconciliationRef = useRef(false);
 
-  const pollAbortRef = useRef<AbortController | null>(null);
   const verifyAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
 
-  const isScreenFocusedRef = useRef<boolean>(false);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const abortPoll = useCallback(() => {
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
+  }, []);
 
-  const cancelAllInFlightRequests = useCallback(() => {
-    if (pollAbortRef.current) {
-      pollAbortRef.current.abort();
-      pollAbortRef.current = null;
-    }
-    if (verifyAbortRef.current) {
-      verifyAbortRef.current.abort();
-      verifyAbortRef.current = null;
-    }
+  const abortVerification = useCallback(() => {
+    verifyAbortRef.current?.abort();
+    verifyAbortRef.current = null;
+  }, []);
+
+  const abortAllRequests = useCallback(() => {
+    abortPoll();
+    abortVerification();
     if (detailAbortRef.current) {
       detailAbortRef.current.abort();
       detailAbortRef.current = null;
     }
-    isPollingInFlightRef.current = false;
-  }, []);
-
-  // Keep scheduleDateRef synced for date_from/date_to query params during polling
-  useEffect(() => {
-    scheduleDateRef.current = schedule?.date ?? null;
-  }, [schedule?.date]);
+  }, [abortPoll, abortVerification]);
 
   // --- F2 & F6: Verification states for GET /api/v1/me & GET /api/v1/member/bookings ---
   const [hasBooked, setHasBooked] = useState(false);
@@ -449,10 +458,56 @@ export default function ScheduleDetailScreen() {
     null
   );
   const [isBooking, setIsBooking] = useState(false);
-
-  // --- SCRUM-73 Poin 6: Pull-to-refresh & Error Banner States ---
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  const isActive = useCallback(() =>
+    focusedRef.current && AppState.currentState === "active", []);
+
+  const acceptSnapshot = useCallback((snapshot: ScheduleSnapshot, observation: number, sawCancellation = false): PollOutcome => {
+    const previous = scheduleRef.current;
+    if (!previous || previous.id !== snapshot.id || activeSessionIdRef.current !== snapshot.id) {
+      return "ABORTED";
+    }
+    const timestamp = timestampMs(snapshot.updated_at);
+    if (
+      observation < acceptedObservationRef.current ||
+      (timestamp !== null && latestTimestampRef.current !== null &&
+        timestamp < latestTimestampRef.current)
+    ) {
+      return "UNCHANGED";
+    }
+
+    acceptedObservationRef.current = observation;
+    if (timestamp !== null) latestTimestampRef.current = timestamp;
+    const next = {
+      ...previous,
+      status: snapshot.status ?? previous.status,
+      participants_count: snapshot.participants_count ?? previous.participants_count,
+      min_participants: snapshot.min_participants === undefined
+        ? previous.min_participants : snapshot.min_participants,
+      cancel_reason: "cancel_reason" in snapshot ? snapshot.cancel_reason : previous.cancel_reason,
+      updated_at: snapshot.updated_at ?? previous.updated_at,
+    };
+    if (next.status !== "cancelled") next.cancel_reason = undefined;
+
+    if (previous.status !== "cancelled" && (next.status === "cancelled" || sawCancellation)) {
+      // B9 invalidates personal booking reads started before cancellation.
+      bookingRevisionRef.current += 1;
+      setHasBooked(false);
+    }
+    scheduleRef.current = next;
+    if (
+      previous.status === next.status &&
+      previous.participants_count === next.participants_count &&
+      previous.min_participants === next.min_participants &&
+      previous.cancel_reason === next.cancel_reason &&
+      previous.updated_at === next.updated_at
+    ) return "UNCHANGED";
+
+    setSchedule(next);
+    return "UPDATED";
+  }, []);
 
   // --- F3: Real-time WITA clock timestamp state ---
   const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
@@ -470,19 +525,31 @@ export default function ScheduleDetailScreen() {
     setPopup((prev) => ({ ...prev, visible: false }));
   };
 
-  // --- Reset state & invalidate stale requests on session or auth token change (Poin 4 & F6) ---
+  // --- F6: Reset state & invalidate stale requests on session or auth token change ---
   useEffect(() => {
     activeSessionIdRef.current = routeScheduleId;
     activeTokenRef.current = userToken ?? null;
     mutationEpochRef.current += 1;
     verifySeqRef.current += 1;
-    pollSeqRef.current += 1;
-    cancelAllInFlightRequests();
+    abortAllRequests();
+    // A new auth/session context owns its own submit lock and loading state.
+    bookingSeqRef.current += 1;
+    isBookingInFlightRef.current = false;
+    needsConflictReconciliationRef.current = false;
+    setIsBooking(false);
+    bookingRevisionRef.current += 1;
+    acceptedObservationRef.current = 0;
+    latestTimestampRef.current = timestampMs(initialParsedSchedule?.updated_at);
+    scheduleRef.current = initialParsedSchedule;
+    retryRef.current = { failures: 0, until: 0, throttled: false };
+    refreshSeqRef.current += 1;
+    setRefreshing(false);
+    setRefreshError(null);
+    setPopup((previous) => ({ ...previous, visible: false }));
 
     setHasBooked(false);
     setMembershipData(null);
     setVerificationError(null);
-    setRefreshError(null);
     setIsVerifyingEligibility(true);
     setNowTimestamp(Date.now());
 
@@ -491,8 +558,8 @@ export default function ScheduleDetailScreen() {
       !initialParsedSchedule &&
       routeScheduleId !== null
     ) {
+      // Explicit scheduleData was passed in params, but failed F5 validation
       setSchedule(null);
-      lastUpdatedAtMsRef.current = null;
       setIsLoadingSchedule(false);
       setScheduleLoadError(
         "Data sesi tidak valid (format tanggal, waktu, atau kuota tidak sesuai kontrak)."
@@ -502,32 +569,31 @@ export default function ScheduleDetailScreen() {
 
     if (initialParsedSchedule && initialParsedSchedule.id === routeScheduleId) {
       setSchedule(initialParsedSchedule);
-      lastUpdatedAtMsRef.current = parseTimestampMs(
-        initialParsedSchedule.updated_at
-      );
       setIsLoadingSchedule(false);
       setScheduleLoadError(null);
     } else {
       setSchedule(null);
-      lastUpdatedAtMsRef.current = null;
       setIsLoadingSchedule(routeScheduleId !== null);
       setScheduleLoadError(null);
     }
 
     return () => {
-      cancelAllInFlightRequests();
+      activeSessionIdRef.current = null;
+      abortAllRequests();
     };
   }, [
     routeScheduleId,
     userToken,
+    isAuthLoading,
     rawScheduleData,
     initialParsedSchedule,
-    cancelAllInFlightRequests,
+    abortAllRequests,
   ]);
 
   // --- F5: Fallback fetch from GET /api/v1/class-schedules if opened without scheduleData ---
   const fetchScheduleDetailFallback = useCallback(async () => {
     const targetSessionId = routeScheduleId;
+    if (isAuthLoading) return;
     if (!targetSessionId) {
       setScheduleLoadError("ID jadwal tidak sah.");
       setIsLoadingSchedule(false);
@@ -540,6 +606,12 @@ export default function ScheduleDetailScreen() {
     const controller = new AbortController();
     detailAbortRef.current = controller;
     const startEpoch = mutationEpochRef.current;
+    const isCurrentRequest = () =>
+      detailAbortRef.current === controller &&
+      !controller.signal.aborted &&
+      activeSessionIdRef.current === targetSessionId &&
+      activeTokenRef.current === (userToken ?? null) &&
+      mutationEpochRef.current === startEpoch;
 
     setIsLoadingSchedule(true);
     setScheduleLoadError(null);
@@ -547,13 +619,10 @@ export default function ScheduleDetailScreen() {
     try {
       const res = await api.get("/api/v1/class-schedules", {
         signal: controller.signal,
+        timeout: REQUEST_TIMEOUT_MS,
       });
 
-      if (
-        controller.signal.aborted ||
-        activeSessionIdRef.current !== targetSessionId ||
-        mutationEpochRef.current !== startEpoch
-      ) {
+      if (!isCurrentRequest()) {
         return;
       }
 
@@ -582,11 +651,12 @@ export default function ScheduleDetailScreen() {
         );
       }
 
-      lastUpdatedAtMsRef.current = parseTimestampMs(normalized.updated_at);
+      scheduleRef.current = normalized;
+      latestTimestampRef.current = timestampMs(normalized.updated_at);
       setSchedule(normalized);
     } catch (err: unknown) {
       if (isRequestCanceled(err)) return;
-      if (activeSessionIdRef.current !== targetSessionId) return;
+      if (!isCurrentRequest()) return;
 
       const error = err as AxiosErrorResponse;
       setScheduleLoadError(
@@ -595,14 +665,15 @@ export default function ScheduleDetailScreen() {
           "Gagal memuat detail jadwal dari server."
       );
     } finally {
-      if (activeSessionIdRef.current === targetSessionId) {
+      if (isCurrentRequest()) {
         setIsLoadingSchedule(false);
       }
     }
-  }, [routeScheduleId]);
+  }, [routeScheduleId, userToken, isAuthLoading]);
 
   useEffect(() => {
     if (
+      !isAuthLoading &&
       !rawScheduleData &&
       !initialParsedSchedule &&
       routeScheduleId !== null
@@ -610,6 +681,7 @@ export default function ScheduleDetailScreen() {
       fetchScheduleDetailFallback();
     }
   }, [
+    isAuthLoading,
     rawScheduleData,
     initialParsedSchedule,
     routeScheduleId,
@@ -617,473 +689,341 @@ export default function ScheduleDetailScreen() {
   ]);
 
   const scheduleId = schedule?.id ?? null;
-  const scheduleDate = schedule?.date ?? null;
-  const scheduleStartTime = schedule?.start_time ?? null;
-  const scheduleEndTime = schedule?.end_time ?? null;
+  const scheduleDate = schedule?.date;
+  const scheduleStartTime = schedule?.start_time;
+  const scheduleEndTime = schedule?.end_time;
 
-  // --- F2 & F6: Verify Membership (/api/v1/me) AND Existing Bookings (/api/v1/member/bookings) ---
-  // Returns boolean indicating success so Pull-to-Refresh can track completion & errors (Poin 6)
-  const verifyBookingAndMembership = useCallback(
-    async (options?: { isSilent?: boolean }): Promise<boolean> => {
-      const isSilent = options?.isSilent ?? false;
-      const targetSessionId = scheduleId;
+  const pollScheduleStatus = useCallback(async (force = false): Promise<PollOutcome> => {
+    const targetId = scheduleId;
+    const token = userToken ?? null;
+    if (
+      !isActive() || isAuthLoading || !targetId || !scheduleDate ||
+      activeSessionIdRef.current !== targetId || activeTokenRef.current !== token ||
+      isBookingInFlightRef.current
+    ) return "ABORTED";
 
-      if (!targetSessionId) {
-        if (!isSilent) setIsVerifyingEligibility(false);
-        return false;
+    const retry = retryRef.current;
+    if (Date.now() < retry.until && (!force || retry.throttled)) return "FAILED";
+    if (pollAbortRef.current && !force) return "ABORTED";
+    abortPoll();
+
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    const epoch = mutationEpochRef.current;
+    const observation = ++observationRef.current;
+    const isCurrent = () =>
+      !controller.signal.aborted && pollAbortRef.current === controller &&
+      mutationEpochRef.current === epoch && activeSessionIdRef.current === targetId &&
+      activeTokenRef.current === token && !isBookingInFlightRef.current && isActive();
+    const recovered = () => {
+      retryRef.current = { failures: 0, until: 0, throttled: false };
+    };
+    const recordFailure = (error: unknown) => {
+      const response = (error as AxiosErrorResponse & {
+        response?: { headers?: Record<string, unknown> };
+      })?.response;
+      if (response?.status && response.status !== 429 && response.status < 500) return;
+      const failures = retryRef.current.failures + 1;
+      const now = Date.now();
+      const delay = Math.min(MAX_BACKOFF_MS, 2 ** Math.min(failures, 3) * POLL_INTERVAL_MS);
+      const requestedDelay = response?.status === 429 || response?.status === 503
+        ? retryAfterMs(response.headers?.["retry-after"], now) : 0;
+      retryRef.current = {
+        failures,
+        until: now + Math.max(delay, requestedDelay),
+        throttled: response?.status === 429,
+      };
+    };
+
+    try {
+      const config = {
+        signal: controller.signal,
+        timeout: REQUEST_TIMEOUT_MS,
+        params: { date_from: scheduleDate, date_to: scheduleDate },
+      };
+      const res = await api.get("/api/v1/class-schedules/status", {
+        ...config,
+        validateStatus: (status) => status === 304 || (status >= 200 && status < 300),
+      });
+      if (!isCurrent()) return "ABORTED";
+      if (res.status === 304) {
+        recovered();
+        return "UNCHANGED";
       }
 
-      if (isBookingInFlightRef.current) {
-        return true;
+      const item = findScheduleItem(res.data?.data, targetId);
+      if (!item) {
+        recovered();
+        return "MISSING";
+      }
+      const count = parseNonNegativeInt(item.participants_count);
+      if (count === null) throw new Error("Jumlah peserta dari server tidak valid.");
+
+      const status = mapBackendScheduleStatus(item.status, false);
+      const updatedAt = toNonEmptyTrimmedString(item.updated_at) ?? undefined;
+      const snapshot: ScheduleSnapshot = {
+        id: targetId,
+        status,
+        participants_count: count,
+        ...(item.min_participants === undefined ? {} : { min_participants: parseNonNegativeInt(item.min_participants) }),
+        ...(updatedAt ? { updated_at: updatedAt } : {}),
+      };
+      if (status === "cancelled") {
+        const statusTime = timestampMs(updatedAt);
+        if (statusTime !== null && latestTimestampRef.current !== null &&
+            statusTime < latestTimestampRef.current) {
+          recovered();
+          return "UNCHANGED";
+        }
+        try {
+          const fullResponse = await api.get("/api/v1/class-schedules", config);
+          if (!isCurrent()) return "ABORTED";
+          const full = normalizeScheduleItem(findScheduleItem(fullResponse.data?.data, targetId), false);
+          const fullTime = timestampMs(full?.updated_at);
+          if (!isValidNormalizedSchedule(full) || full.status === "unknown" || full.date !== scheduleDate ||
+              (statusTime !== null && (fullTime === null || fullTime < statusTime))) {
+            throw new Error("Rincian pembatalan belum tersedia.");
+          }
+          recovered();
+          // The second response may already contain a valid reschedule.
+          return acceptSnapshot({ ...full, cancel_reason: full.cancel_reason ?? "" }, observation, true);
+        } catch (err: unknown) {
+          if (!isCurrent() || isRequestCanceled(err)) return "ABORTED";
+          // Hide booking immediately, but never borrow a reason from a
+          // different snapshot or report refresh success without the detail.
+          if (updatedAt !== scheduleRef.current?.updated_at || scheduleRef.current?.status !== "cancelled") {
+            snapshot.cancel_reason = undefined;
+          }
+          acceptSnapshot(snapshot, observation);
+          recordFailure(err);
+          return "FAILED";
+        }
       }
 
-      if (verifyAbortRef.current) {
-        verifyAbortRef.current.abort();
-      }
-      const controller = new AbortController();
-      verifyAbortRef.current = controller;
-
-      const reqSeq = ++verifySeqRef.current;
-      const reqEpoch = mutationEpochRef.current;
-      const reqContextToken = userToken ?? null;
-
-      if (!isSilent) {
-        setIsVerifyingEligibility(true);
-        setVerificationError(null);
-      }
-      setNowTimestamp(Date.now());
-
-      try {
-        const resolvedToken = reqContextToken || (await getToken());
-
-        if (
-          controller.signal.aborted ||
-          reqSeq !== verifySeqRef.current ||
-          reqEpoch !== mutationEpochRef.current ||
-          activeSessionIdRef.current !== targetSessionId ||
-          activeTokenRef.current !== reqContextToken ||
-          isBookingInFlightRef.current
-        ) {
-          return true;
-        }
-
-        const headers = resolvedToken
-          ? { Authorization: `Bearer ${resolvedToken}` }
-          : undefined;
-
-        const [meRes, bookingsRes] = await Promise.all([
-          api.get("/api/v1/me", { headers, signal: controller.signal }),
-          api.get("/api/v1/member/bookings", {
-            headers,
-            signal: controller.signal,
-          }),
-        ]);
-
-        if (
-          controller.signal.aborted ||
-          reqSeq !== verifySeqRef.current ||
-          reqEpoch !== mutationEpochRef.current ||
-          activeSessionIdRef.current !== targetSessionId ||
-          activeTokenRef.current !== reqContextToken ||
-          isBookingInFlightRef.current
-        ) {
-          return true;
-        }
-
-        // 1. Validate GET /api/v1/me response (F2)
-        const parsedMembership = parseMeMembershipResponse(meRes.data);
-        if (!parsedMembership) {
-          throw new Error(
-            "Format data membership dari server (/api/v1/me) tidak valid."
-          );
-        }
-
-        // 2. Strictly Validate GET /api/v1/member/bookings response (F1 & F6)
-        const rawBookingsData =
-          bookingsRes.data &&
-          typeof bookingsRes.data === "object" &&
-          "data" in bookingsRes.data
-            ? (bookingsRes.data as { data: unknown }).data
-            : null;
-
-        if (!Array.isArray(rawBookingsData)) {
-          throw new Error(
-            "Format daftar booking dari server (/api/v1/member/bookings) tidak valid."
-          );
-        }
-
-        let foundActiveBooking = false;
-        let matchedScheduleFromBooking:
-          | BookingResourceItem["schedule"]
-          | undefined;
-
-        for (const item of rawBookingsData) {
-          if (!item || typeof item !== "object") {
-            throw new Error("Item pada daftar booking tidak valid.");
-          }
-          const b = item as BookingResourceItem;
-          if (!b.schedule || typeof b.schedule !== "object") {
-            throw new Error("Data jadwal pada riwayat booking tidak valid.");
-          }
-
-          const rawBookedId = b.schedule.id;
-          const bookedScheduleId =
-            typeof rawBookedId === "number"
-              ? rawBookedId
-              : typeof rawBookedId === "string" &&
-                /^\d+$/.test(rawBookedId.trim())
-              ? Number(rawBookedId.trim())
-              : NaN;
-
-          if (
-            !Number.isInteger(bookedScheduleId) ||
-            !Number.isFinite(bookedScheduleId) ||
-            bookedScheduleId <= 0
-          ) {
-            throw new Error("ID jadwal pada riwayat booking tidak valid.");
-          }
-
-          const bookingStatusStr = toNonEmptyTrimmedString(b.status);
-          if (!bookingStatusStr) {
-            throw new Error("Status pada riwayat booking tidak valid.");
-          }
-
-          if (bookedScheduleId === targetSessionId) {
-            matchedScheduleFromBooking = b.schedule;
-            if (bookingStatusStr.toLowerCase() !== "cancelled") {
-              foundActiveBooking = true;
-              break;
-            }
-          }
-        }
-
-        setMembershipData(parsedMembership);
-        setHasBooked(foundActiveBooking);
-        setVerificationError(null);
-
-        if (matchedScheduleFromBooking) {
-          const parsedCount = parseNonNegativeInt(
-            matchedScheduleFromBooking.participants_count
-          );
-          const nextStatus = matchedScheduleFromBooking.status
-            ? mapBackendScheduleStatus(matchedScheduleFromBooking.status, false)
-            : null;
-          const nextCancelReason =
-            matchedScheduleFromBooking.cancel_reason !== undefined
-              ? typeof matchedScheduleFromBooking.cancel_reason === "string"
-                ? matchedScheduleFromBooking.cancel_reason.trim()
-                : ""
-              : undefined;
-
-          setSchedule((prev) => {
-            if (!prev || prev.id !== targetSessionId) return prev;
-            const resolvedStatus = nextStatus ?? prev.status;
-            const resolvedCount =
-              parsedCount !== null ? parsedCount : prev.participants_count;
-            const resolvedCancel =
-              resolvedStatus === "cancelled"
-                ? nextCancelReason !== undefined
-                  ? nextCancelReason
-                  : prev.cancel_reason
-                : undefined;
-
-            if (
-              prev.status === resolvedStatus &&
-              prev.participants_count === resolvedCount &&
-              (prev.cancel_reason ?? "") === (resolvedCancel ?? "")
-            ) {
-              return prev;
-            }
-
-            return {
-              ...prev,
-              status: resolvedStatus,
-              participants_count: resolvedCount,
-              cancel_reason: resolvedCancel,
-            };
-          });
-        }
-
-        return true;
-      } catch (err: unknown) {
-        if (isRequestCanceled(err)) return true;
-
-        if (
-          reqSeq !== verifySeqRef.current ||
-          reqEpoch !== mutationEpochRef.current ||
-          activeSessionIdRef.current !== targetSessionId ||
-          activeTokenRef.current !== reqContextToken ||
-          isBookingInFlightRef.current
-        ) {
-          return true;
-        }
-
-        const error = err as AxiosErrorResponse;
-        const msg =
-          error.response?.data?.message ||
-          error.message ||
-          "Gagal memuat status membership atau riwayat booking Anda.";
-
-        if (!isSilent) {
-          setVerificationError(msg);
-        }
-        return false;
-      } finally {
-        if (
-          !isSilent &&
-          reqSeq === verifySeqRef.current &&
-          reqEpoch === mutationEpochRef.current &&
-          activeSessionIdRef.current === targetSessionId &&
-          activeTokenRef.current === reqContextToken
-        ) {
-          setIsVerifyingEligibility(false);
-        }
-      }
-    },
-    [scheduleId, userToken]
-  );
-
-  useEffect(() => {
-    if (scheduleId) {
-      verifyBookingAndMembership({ isSilent: false });
+      recovered();
+      return acceptSnapshot(snapshot, observation);
+    } catch (err: unknown) {
+      if (!isCurrent() || isRequestCanceled(err)) return "ABORTED";
+      recordFailure(err);
+      return "FAILED";
+    } finally {
+      if (pollAbortRef.current === controller) pollAbortRef.current = null;
     }
-  }, [scheduleId, verifyBookingAndMembership]);
+  }, [abortPoll, acceptSnapshot, isActive, isAuthLoading, scheduleDate, scheduleId, userToken]);
 
-  // --- SCRUM-73 Poin 1, 2, 3, 4: Poll GET /api/v1/class-schedules/status + Sync cancel_reason ---
-  const pollScheduleStatus = useCallback(
-    async (options?: { force?: boolean }): Promise<boolean> => {
-      const force = options?.force ?? false;
-      const targetSessionId = scheduleId;
-      const targetDate = scheduleDateRef.current;
+  const verifyBookingAndMembership = useCallback(async (silent = false): Promise<PollOutcome> => {
+    const targetSessionId = scheduleId;
+    const reqContextToken = userToken ?? null;
+    if (
+      isAuthLoading || !isActive() || !targetSessionId ||
+      activeSessionIdRef.current !== targetSessionId ||
+      activeTokenRef.current !== reqContextToken || isBookingInFlightRef.current
+    ) return "ABORTED";
 
-      if (!targetSessionId) return false;
+    abortVerification();
+    const controller = new AbortController();
+    verifyAbortRef.current = controller;
+    const reqSeq = ++verifySeqRef.current;
+    const reqEpoch = mutationEpochRef.current;
+    const bookingRevision = bookingRevisionRef.current;
+    const observation = ++observationRef.current;
+    const reconcileConflict = needsConflictReconciliationRef.current;
+    const isCurrent = () =>
+      !controller.signal.aborted && reqSeq === verifySeqRef.current &&
+      reqEpoch === mutationEpochRef.current && activeSessionIdRef.current === targetSessionId &&
+      activeTokenRef.current === reqContextToken && isActive() && !isBookingInFlightRef.current;
 
-      // Poin 3: Never allow background polling to race with an active POST booking
-      if (isBookingInFlightRef.current) {
-        return true;
+    if (!silent || reconcileConflict) {
+      setIsVerifyingEligibility(true);
+      setVerificationError(null);
+    }
+
+    try {
+      const resolvedToken = reqContextToken || (await getToken());
+      if (!isCurrent()) return "ABORTED";
+      if (!resolvedToken) throw new Error("Silakan login untuk memeriksa status booking.");
+      const headers = { Authorization: "Bearer " + resolvedToken };
+      const config = { headers, signal: controller.signal, timeout: REQUEST_TIMEOUT_MS };
+      const [meRes, bookingsRes] = await Promise.all([
+        api.get("/api/v1/me", config),
+        api.get("/api/v1/member/bookings", config),
+      ]);
+      if (!isCurrent()) return "ABORTED";
+
+      // 1. Validate GET /api/v1/me response (F2)
+      const parsedMembership = parseMeMembershipResponse(meRes.data);
+      if (!parsedMembership) {
+        throw new Error(
+          "Format data membership dari server (/api/v1/me) tidak valid."
+        );
       }
 
-      // Poin 2: In-flight guard for periodic polling; manual refresh (force) aborts older poll
-      if (isPollingInFlightRef.current) {
-        if (!force) {
-          return true;
+      // 2. Strictly Validate GET /api/v1/member/bookings response (F1 & F6)
+      const rawBookingsData =
+        bookingsRes.data &&
+        typeof bookingsRes.data === "object" &&
+        "data" in bookingsRes.data
+          ? (bookingsRes.data as { data: unknown }).data
+          : null;
+
+      if (!Array.isArray(rawBookingsData)) {
+        throw new Error(
+          "Format daftar booking dari server (/api/v1/member/bookings) tidak valid."
+        );
+      }
+
+      let foundActiveBooking = false;
+      let authoritativeCountFromBookings: number | null = null;
+
+      for (const item of rawBookingsData) {
+        if (!item || typeof item !== "object") {
+          throw new Error("Item pada daftar booking tidak valid.");
         }
-        if (pollAbortRef.current) {
-          pollAbortRef.current.abort();
-          pollAbortRef.current = null;
+        const b = item as BookingResourceItem;
+        if (!b.schedule || typeof b.schedule !== "object") {
+          throw new Error("Data jadwal pada riwayat booking tidak valid.");
+        }
+
+        const rawBookedId = b.schedule.id;
+        const bookedScheduleId =
+          typeof rawBookedId === "number"
+            ? rawBookedId
+            : typeof rawBookedId === "string" && /^\d+$/.test(rawBookedId.trim())
+            ? Number(rawBookedId.trim())
+            : NaN;
+
+        if (
+          !Number.isInteger(bookedScheduleId) ||
+          !Number.isFinite(bookedScheduleId) ||
+          bookedScheduleId <= 0
+        ) {
+          throw new Error("ID jadwal pada riwayat booking tidak valid.");
+        }
+
+        const bookingStatusStr = toNonEmptyTrimmedString(b.status);
+        if (!bookingStatusStr) {
+          throw new Error("Status pada riwayat booking tidak valid.");
+        }
+
+        const isBookingActive = bookingStatusStr.toLowerCase() !== "cancelled";
+
+        if (bookedScheduleId === targetSessionId) {
+          const parsedCount = parseNonNegativeInt(
+            b.schedule.participants_count
+          );
+          if (parsedCount !== null) {
+            authoritativeCountFromBookings = parsedCount;
+          }
+          if (isBookingActive) {
+            foundActiveBooking = true;
+            break;
+          }
         }
       }
 
-      const controller = new AbortController();
-      pollAbortRef.current = controller;
-      isPollingInFlightRef.current = true;
+      // The public poll owns session status. Use a private response count only
+      // before the first live observation, or to reconcile a booking conflict.
+      const canApplyBooking = () =>
+        bookingRevision === bookingRevisionRef.current &&
+        scheduleRef.current?.status !== "cancelled";
 
-      const reqSeq = ++pollSeqRef.current;
-      const startEpoch = mutationEpochRef.current;
-      const reqContextToken = userToken ?? null;
-
-      setNowTimestamp(Date.now());
-
-      const isStale = () =>
-        controller.signal.aborted ||
-        reqSeq !== pollSeqRef.current ||
-        startEpoch !== mutationEpochRef.current ||
-        activeSessionIdRef.current !== targetSessionId ||
-        activeTokenRef.current !== reqContextToken ||
-        isBookingInFlightRef.current;
-
-      try {
-        const queryParams =
-          targetDate && isValidCalendarDateString(targetDate)
-            ? { date_from: targetDate, date_to: targetDate }
-            : undefined;
-
-        const res = await api.get("/api/v1/class-schedules/status", {
-          params: queryParams,
-          signal: controller.signal,
+      if (reconcileConflict && authoritativeCountFromBookings === null) {
+        if (!scheduleDate) throw new Error("Tanggal sesi belum tersedia.");
+        const schedulesRes = await api.get("/api/v1/class-schedules", {
+          ...config,
+          params: { date_from: scheduleDate, date_to: scheduleDate },
         });
+        if (!isCurrent()) return "ABORTED";
 
-        if (isStale()) return true;
-
-        const rawList = res.data?.data ?? res.data;
-        if (!Array.isArray(rawList)) {
-          throw new Error("Format respons polling status tidak valid.");
+        const raw = findScheduleItem(schedulesRes.data?.data, targetSessionId);
+        const current = normalizeScheduleItem(raw, false);
+        if (!isValidNormalizedSchedule(current) || current.date !== scheduleDate) {
+          throw new Error("Jumlah peserta sesi belum dapat diverifikasi. Silakan coba lagi.");
         }
-
-        const matchedPoll = rawList.find((item: unknown) => {
-          if (!item || typeof item !== "object") return false;
-          const p = item as ScheduleStatusPollItem;
-          return Number(p.id ?? p.schedule_id) === targetSessionId;
-        }) as ScheduleStatusPollItem | undefined;
-
-        if (!matchedPoll) {
-          return true;
-        }
-
-        const nextStatus: NormalizedScheduleStatus = mapBackendScheduleStatus(
-          matchedPoll.status,
-          false
-        );
-        const incomingUpdatedAtStr = toNonEmptyTrimmedString(
-          matchedPoll.updated_at
-        );
-        const incomingUpdatedAtMs = parseTimestampMs(incomingUpdatedAtStr);
-
-        // Poin 1: ClassScheduleStatusResource does not include cancel_reason.
-        // Whenever status is "cancelled" and cancel_reason is not provided in /status,
-        // fetch full schedule from GET /api/v1/class-schedules to get authoritative cancel_reason.
-        let resolvedCancelReason: string | undefined =
-          matchedPoll.cancel_reason !== undefined
-            ? typeof matchedPoll.cancel_reason === "string"
-              ? matchedPoll.cancel_reason.trim()
-              : ""
-            : undefined;
-        let fullScheduleItem: NormalizedSchedule | null = null;
-
-        if (nextStatus === "cancelled" && resolvedCancelReason === undefined) {
-          try {
-            const fullRes = await api.get("/api/v1/class-schedules", {
-              params: queryParams,
-              signal: controller.signal,
-            });
-
-            if (isStale()) return true;
-
-            const fullList = fullRes.data?.data ?? fullRes.data;
-            if (Array.isArray(fullList)) {
-              const foundFull = fullList.find((item: unknown) => {
-                if (!item || typeof item !== "object") return false;
-                return (
-                  Number((item as RawBackendSchedule).id) === targetSessionId
-                );
-              }) as RawBackendSchedule | undefined;
-
-              if (foundFull) {
-                // Explicitly preserve null or empty string from backend
-                resolvedCancelReason =
-                  typeof foundFull.cancel_reason === "string"
-                    ? foundFull.cancel_reason.trim()
-                    : "";
-                fullScheduleItem = normalizeScheduleItem(foundFull, false);
-              }
-            }
-          } catch (innerErr: unknown) {
-            if (isRequestCanceled(innerErr)) return true;
-            if (force) throw innerErr;
+        acceptSnapshot(current, observation);
+      } else {
+        if (reconcileConflict) {
+          // A valid booking row can reconcile personal status and count, but
+          // only the public endpoint can confirm today's schedule status.
+          const publicOutcome = await pollScheduleStatus(true);
+          if (!isCurrent()) return "ABORTED";
+          if (publicOutcome !== "UPDATED" && publicOutcome !== "UNCHANGED") {
+            throw new Error("Status sesi belum dapat diverifikasi. Silakan coba lagi.");
           }
         }
-
-        if (isStale()) return true;
-
-        const polledParticipants = parseNonNegativeInt(
-          matchedPoll.participants_count ?? matchedPoll.current_participants
-        );
-        const polledMin =
-          matchedPoll.min_participants !== undefined
-            ? parseNonNegativeInt(matchedPoll.min_participants)
-            : undefined;
-
-        setSchedule((prev) => {
-          if (!prev || prev.id !== targetSessionId) return prev;
-
-          // Poin 2: Reject older updated_at unless status itself changed (allows valid transitions like cancelled -> scheduled)
-          if (
-            incomingUpdatedAtMs !== null &&
-            lastUpdatedAtMsRef.current !== null &&
-            incomingUpdatedAtMs < lastUpdatedAtMsRef.current &&
-            prev.status === nextStatus
-          ) {
-            return prev;
-          }
-
-          if (incomingUpdatedAtMs !== null) {
-            lastUpdatedAtMsRef.current = incomingUpdatedAtMs;
-          }
-
-          const nextParticipants =
-            polledParticipants !== null
-              ? polledParticipants
-              : fullScheduleItem?.participants_count ??
-                prev.participants_count;
-
-          const nextMin =
-            polledMin !== undefined
-              ? polledMin
-              : fullScheduleItem?.min_participants ?? prev.min_participants;
-
-          const nextCancelReason =
-            nextStatus === "cancelled"
-              ? resolvedCancelReason !== undefined
-                ? resolvedCancelReason
-                : prev.cancel_reason
-              : undefined;
-
-          if (
-            prev.status === nextStatus &&
-            prev.participants_count === nextParticipants &&
-            prev.min_participants === nextMin &&
-            (prev.cancel_reason ?? "") === (nextCancelReason ?? "")
-          ) {
-            return prev;
-          }
-
-          return {
-            ...prev,
-            status: nextStatus,
-            participants_count: nextParticipants,
-            min_participants: nextMin,
-            cancel_reason: nextCancelReason,
-            updated_at: incomingUpdatedAtStr ?? prev.updated_at,
-          };
-        });
-
-        // If session became cancelled, backend cancels active bookings (B9)
-        if (nextStatus === "cancelled") {
-          setHasBooked(false);
-        }
-
-        return true;
-      } catch (err: unknown) {
-        if (isRequestCanceled(err)) return true;
-        return false;
-      } finally {
-        if (pollAbortRef.current === controller) {
-          isPollingInFlightRef.current = false;
-          pollAbortRef.current = null;
+        if (
+          canApplyBooking() && authoritativeCountFromBookings !== null &&
+          (reconcileConflict || acceptedObservationRef.current === 0)
+        ) {
+          acceptSnapshot({ id: targetSessionId, participants_count: authoritativeCountFromBookings }, observation);
         }
       }
-    },
-    [scheduleId, userToken]
-  );
 
-  // --- SCRUM-73 Poin 4 & 5 + SCRUM-72 F3: Focus & Foreground-Only Polling + WITA Clock Timers ---
+      setMembershipData(parsedMembership);
+      if (canApplyBooking()) setHasBooked(foundActiveBooking);
+      if (reconcileConflict) needsConflictReconciliationRef.current = false;
+      setVerificationError(null);
+      return "UPDATED";
+    } catch (err: unknown) {
+      if (!isCurrent() || isRequestCanceled(err)) return "ABORTED";
+      const error = err as AxiosErrorResponse;
+      setVerificationError(error.response?.data?.message || error.message ||
+        "Gagal memuat status membership atau riwayat booking Anda.");
+      return "FAILED";
+    } finally {
+      // A silent verification can replace initial or manual verification.
+      // Only the newest live request may settle the shared loading state.
+      if (isCurrent()) {
+        verifyAbortRef.current = null;
+        setIsVerifyingEligibility(false);
+      }
+    }
+  }, [abortVerification, acceptSnapshot, isActive, isAuthLoading, pollScheduleStatus, scheduleDate, scheduleId, userToken]);
+
+  const onRefresh = useCallback(async () => {
+    if (!isActive() || isAuthLoading || !scheduleId || isBookingInFlightRef.current) return;
+    const refresh = ++refreshSeqRef.current;
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      const [poll, verification] = needsConflictReconciliationRef.current
+        ? ["UNCHANGED", await verifyBookingAndMembership(true)]
+        : await Promise.all([pollScheduleStatus(true), verifyBookingAndMembership(true)]);
+      if (refresh !== refreshSeqRef.current || !isActive()) return;
+      if (poll === "MISSING") {
+        setRefreshError("Sesi tidak ditemukan saat memperbarui. Data terakhir tetap ditampilkan.");
+      } else if (poll === "FAILED" || verification === "FAILED") {
+        setRefreshError("Gagal memperbarui data terbaru. Data terakhir tetap ditampilkan.");
+      } else if (poll === "ABORTED" || verification === "ABORTED") {
+        setRefreshError("Pembaruan terhenti. Silakan coba lagi.");
+      }
+    } finally {
+      if (refresh === refreshSeqRef.current) setRefreshing(false);
+    }
+  }, [isActive, isAuthLoading, pollScheduleStatus, scheduleId, verifyBookingAndMembership]);
+
+  // --- F3: Automatic Local Clock Updater (Periodic + Exact Session Start/End Deadline Timers + AppState) ---
   useFocusEffect(
     useCallback(() => {
-      isScreenFocusedRef.current = true;
-      if (
-        !scheduleId ||
-        !scheduleDate ||
-        !scheduleStartTime ||
-        !scheduleEndTime
-      ) {
-        return () => {
-          isScreenFocusedRef.current = false;
-        };
-      }
+      if (isAuthLoading || !scheduleId || !scheduleDate || !scheduleStartTime || !scheduleEndTime) return;
 
+      focusedRef.current = true;
       let pollIntervalId: ReturnType<typeof setInterval> | null = null;
-      let clockIntervalId: ReturnType<typeof setInterval> | null = null;
+      let intervalId: ReturnType<typeof setInterval> | null = null;
       let startDeadlineTimeoutId: ReturnType<typeof setTimeout> | null = null;
       let endDeadlineTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-      const clearAllTimersAndAbortPolling = () => {
+      const stopActivities = () => {
         if (pollIntervalId) {
           clearInterval(pollIntervalId);
           pollIntervalId = null;
         }
-        if (clockIntervalId) {
-          clearInterval(clockIntervalId);
-          clockIntervalId = null;
+        abortPoll();
+        abortVerification();
+        refreshSeqRef.current += 1;
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
         }
         if (startDeadlineTimeoutId) {
           clearTimeout(startDeadlineTimeoutId);
@@ -1093,52 +1033,29 @@ export default function ScheduleDetailScreen() {
           clearTimeout(endDeadlineTimeoutId);
           endDeadlineTimeoutId = null;
         }
-        if (pollAbortRef.current) {
-          pollAbortRef.current.abort();
-          pollAbortRef.current = null;
-        }
-        isPollingInFlightRef.current = false;
       };
 
-      const startForegroundActivities = () => {
-        clearAllTimersAndAbortPolling();
-
-        // Poin 5: Always read latest AppState.currentState before starting fetch & timers
-        const currentAppState = AppState.currentState;
-        appStateRef.current = currentAppState;
-
-        if (!isScreenFocusedRef.current || currentAppState !== "active") {
-          return;
+      const startActivities = () => {
+        stopActivities();
+        if (!isActive()) return;
+        setRefreshing(false);
+        if (!isBookingInFlightRef.current) {
+          void verifyBookingAndMembership();
+          if (!needsConflictReconciliationRef.current) void pollScheduleStatus();
         }
+        pollIntervalId = setInterval(() => { void pollScheduleStatus(); }, POLL_INTERVAL_MS);
 
         const currentNow = Date.now();
         setNowTimestamp(currentNow);
 
-        // 1. Initial silent status poll when focused & foreground
-        pollScheduleStatus({ force: false });
-
-        // 2. 15s status polling interval (SCRUM-73)
-        pollIntervalId = setInterval(() => {
-          if (
-            isScreenFocusedRef.current &&
-            AppState.currentState === "active" &&
-            !isBookingInFlightRef.current
-          ) {
-            pollScheduleStatus({ force: false });
-          }
-        }, 15000);
-
-        // 3. 5s local WITA clock tick (SCRUM-72 F3)
-        clockIntervalId = setInterval(() => {
-          if (
-            isScreenFocusedRef.current &&
-            AppState.currentState === "active"
-          ) {
+        // 1. Periodic 5s local clock tick while screen is focused and app is in foreground
+        intervalId = setInterval(() => {
+          if (AppState.currentState === "active") {
             setNowTimestamp(Date.now());
           }
         }, 5000);
 
-        // 4. Exact deadline timers for session start & end (SCRUM-72 F3)
+        // 2. Exact deadline timer for sessionStartMs so button disables at the exact second the session starts
         const startMs = parseWitaDateTime(
           scheduleDate,
           scheduleStartTime
@@ -1150,6 +1067,7 @@ export default function ScheduleDetailScreen() {
           }, msUntilStart + 50);
         }
 
+        // 3. Exact deadline timer for sessionEndMs
         const endMs = parseWitaDateTime(
           scheduleDate,
           scheduleEndTime
@@ -1162,76 +1080,33 @@ export default function ScheduleDetailScreen() {
         }
       };
 
-      startForegroundActivities();
+      let currentAppState = AppState.currentState;
+      startActivities();
 
       const subscription = AppState.addEventListener(
         "change",
         (nextAppState: AppStateStatus) => {
-          const prevAppState = appStateRef.current;
-          appStateRef.current = nextAppState;
-
-          if (!isScreenFocusedRef.current) return;
-
+          if (nextAppState === currentAppState) return;
+          currentAppState = nextAppState;
           if (nextAppState === "active") {
-            if (prevAppState !== "active") {
-              verifyBookingAndMembership({ isSilent: true });
-            }
-            startForegroundActivities();
+            startActivities();
           } else {
-            clearAllTimersAndAbortPolling();
+            stopActivities();
+            setRefreshing(false);
           }
         }
       );
 
       return () => {
-        isScreenFocusedRef.current = false;
-        clearAllTimersAndAbortPolling();
-        if (verifyAbortRef.current) {
-          verifyAbortRef.current.abort();
-          verifyAbortRef.current = null;
-        }
+        focusedRef.current = false;
+        stopActivities();
         subscription.remove();
       };
-    }, [
-      scheduleId,
-      scheduleDate,
-      scheduleStartTime,
-      scheduleEndTime,
-      pollScheduleStatus,
-      verifyBookingAndMembership,
-    ])
+    }, [abortPoll, abortVerification, isActive, isAuthLoading, pollScheduleStatus,
+      scheduleDate, scheduleEndTime, scheduleId, scheduleStartTime, verifyBookingAndMembership])
   );
 
-  // --- SCRUM-73 Poin 6: Pull-to-Refresh waiting for all requests & showing error banner ---
-  const onRefresh = useCallback(async () => {
-    if (!scheduleId || isBookingInFlightRef.current) return;
-
-    setRefreshing(true);
-    setRefreshError(null);
-
-    try {
-      const [pollOk, verifyOk] = await Promise.all([
-        pollScheduleStatus({ force: true }),
-        verifyBookingAndMembership({ isSilent: true }),
-      ]);
-
-      if (!pollOk || !verifyOk) {
-        setRefreshError(
-          "Gagal memperbarui data terbaru. Menampilkan data terakhir yang tersimpan."
-        );
-      } else {
-        setRefreshError(null);
-      }
-    } catch {
-      setRefreshError(
-        "Gagal memperbarui data terbaru. Periksa koneksi internet Anda."
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  }, [scheduleId, pollScheduleStatus, verifyBookingAndMembership]);
-
-  // --- BOOKING VALIDATION COMPUTATION (F2, F3, F4, F7, F8 & Poin 7) ---
+  // --- BOOKING VALIDATION COMPUTATION (F2, F3, F4, F7, F8) ---
   const rawStatus = schedule?.status ?? "scheduled";
   const isCancelled = rawStatus === "cancelled";
 
@@ -1251,8 +1126,10 @@ export default function ScheduleDetailScreen() {
       (!isCancelled && !isSessionCompleted && isSessionStarted)
     : false;
 
+  // F4: Strictly only "scheduled" status is allowed to book per backend contract
   const isScheduledStatus = rawStatus === "scheduled";
 
+  // F2: Check membership validity on schedule.date (Rule B6)
   const membershipCheck = useMemo(
     () =>
       schedule
@@ -1261,6 +1138,7 @@ export default function ScheduleDetailScreen() {
     [membershipData, schedule]
   );
 
+  // Determine disabled reason in priority order (F3: "Sesi sudah dimulai" when start time passed)
   let buttonDisabledReason = "";
   if (isCancelled) {
     buttonDisabledReason = "Sesi telah dibatalkan.";
@@ -1278,6 +1156,7 @@ export default function ScheduleDetailScreen() {
 
   const canBook =
     Boolean(schedule) &&
+    !isAuthLoading &&
     buttonDisabledReason === "" &&
     !isVerifyingEligibility &&
     !verificationError;
@@ -1405,11 +1284,11 @@ export default function ScheduleDetailScreen() {
   const validMinParticipants = parseNonNegativeInt(schedule.min_participants);
   const hasMinParticipants = validMinParticipants !== null;
 
-  // --- BOOKING ACTION HANDLERS (AC2, AC3, F3, F6, Poin 3 & Poin 8) ---
+  // --- BOOKING ACTION HANDLERS (AC2, AC3, F3, F6) ---
   const handleBooking = () => {
     const currentNow = Date.now();
     setNowTimestamp(currentNow);
-    if (currentNow >= sessionStartMs || !canBook || isCancelled) {
+    if (needsConflictReconciliationRef.current || currentNow >= sessionStartMs || !canBook) {
       return;
     }
 
@@ -1422,15 +1301,16 @@ export default function ScheduleDetailScreen() {
   };
 
   const confirmBookingAction = async () => {
+    // Lock synchronously: two taps can arrive before React renders disabled.
+    if (!isActive() || isAuthLoading || isBookingInFlightRef.current ||
+        needsConflictReconciliationRef.current) return;
     const currentNow = Date.now();
     setNowTimestamp(currentNow);
-
-    // Poin 8: Re-validate latest eligibility & status right before sending POST
-    if (currentNow >= sessionStartMs || !canBook || isCancelled) {
+    if (currentNow >= sessionStartMs || !canBook) {
       setPopup({
         visible: true,
         type: "error",
-        title: isCancelled ? "Sesi Dibatalkan Admin" : "Tidak Dapat Booking",
+        title: "Waktu Habis",
         message:
           currentNow >= sessionStartMs
             ? "Sesi sudah dimulai sehingga tidak dapat dibooking."
@@ -1443,17 +1323,29 @@ export default function ScheduleDetailScreen() {
     const targetSessionId = scheduleId;
     const reqContextToken = userToken ?? null;
 
-    // Poin 3 & F6: Invalidate & abort any in-flight polling/verification requests before POST
+    // F6: Invalidate any in-flight verification requests started before this POST
     mutationEpochRef.current += 1;
     verifySeqRef.current += 1;
-    pollSeqRef.current += 1;
-    cancelAllInFlightRequests();
+    abortPoll();
+    if (verifyAbortRef.current) {
+      verifyAbortRef.current.abort();
+      verifyAbortRef.current = null;
+    }
 
+    let reconcileSchedule = false;
+    let reconcileBooking = false;
+    const bookingSeq = ++bookingSeqRef.current;
     isBookingInFlightRef.current = true;
     setIsBooking(true);
 
     try {
       const resolvedToken = reqContextToken || (await getToken());
+      if (
+        bookingSeqRef.current !== bookingSeq ||
+        activeSessionIdRef.current !== targetSessionId ||
+        activeTokenRef.current !== reqContextToken ||
+        !isActive() || scheduleRef.current?.status !== "scheduled"
+      ) return;
       const headers = resolvedToken
         ? { Authorization: `Bearer ${resolvedToken}` }
         : undefined;
@@ -1462,10 +1354,12 @@ export default function ScheduleDetailScreen() {
       const postRes = await api.post(
         `/api/v1/member/class-schedules/${targetSessionId}/booking`,
         {},
-        { headers }
+        { headers, timeout: REQUEST_TIMEOUT_MS }
       );
 
+      // F6: Verify session and auth context are still identical before applying POST result
       if (
+        bookingSeqRef.current !== bookingSeq ||
         activeSessionIdRef.current !== targetSessionId ||
         activeTokenRef.current !== reqContextToken
       ) {
@@ -1475,41 +1369,16 @@ export default function ScheduleDetailScreen() {
       // Bump epoch again so any stray response from before POST completion is strictly rejected
       mutationEpochRef.current += 1;
 
-      const returnedSchedule = postRes.data?.data?.schedule;
-      const authoritativeCount = parseNonNegativeInt(
-        returnedSchedule?.participants_count
-      );
-      const returnedUpdatedAtMs = parseTimestampMs(
-        returnedSchedule?.updated_at ?? postRes.data?.data?.updated_at
-      );
-
-      if (returnedUpdatedAtMs !== null) {
-        lastUpdatedAtMsRef.current = returnedUpdatedAtMs;
-      } else {
-        lastUpdatedAtMsRef.current = Date.now();
+      // The POST resource provides an authoritative count. If omitted,
+      // leave the current count intact until the next public snapshot.
+      const returnedCount = parseNonNegativeInt(postRes.data?.data?.schedule?.participants_count);
+      if (returnedCount !== null) {
+        acceptSnapshot({ id: targetSessionId, participants_count: returnedCount }, ++observationRef.current);
       }
 
-      // Poin 3: Use authoritative participants_count from server response (no double increment)
-      setSchedule((prev) => {
-        if (!prev || prev.id !== targetSessionId) return prev;
-        const nextCount =
-          authoritativeCount !== null
-            ? authoritativeCount
-            : prev.participants_count + 1;
-        const nextStatus = returnedSchedule?.status
-          ? mapBackendScheduleStatus(returnedSchedule.status, false)
-          : prev.status;
-
-        return {
-          ...prev,
-          status: nextStatus,
-          participants_count: nextCount,
-        };
-      });
-
+      reconcileSchedule = true;
       setHasBooked(true);
       setVerificationError(null);
-      setRefreshError(null);
       setIsVerifyingEligibility(false);
 
       setPopup({
@@ -1522,6 +1391,7 @@ export default function ScheduleDetailScreen() {
       });
     } catch (err: unknown) {
       if (
+        bookingSeqRef.current !== bookingSeq ||
         activeSessionIdRef.current !== targetSessionId ||
         activeTokenRef.current !== reqContextToken
       ) {
@@ -1538,6 +1408,18 @@ export default function ScheduleDetailScreen() {
             "Sesi login Anda tidak valid atau belum terautentikasi. Silakan login kembali.",
         });
       } else {
+        if (error.response?.status === 409) {
+          // Keep stale callbacks locked until GET reconciliation succeeds.
+          // A conflict is not a new booking success and must not increment count.
+          needsConflictReconciliationRef.current = true;
+          setIsVerifyingEligibility(true);
+        } else if (!error.response?.status || error.response.status >= 500 ||
+                   error.response.status === 422) {
+          // A timed-out POST may have succeeded. A 422 can mean the session was
+          // cancelled or started while the request was on its way.
+          reconcileSchedule = true;
+          reconcileBooking = !error.response?.status || error.response.status >= 500;
+        }
         const msg =
           error.response?.data?.message ||
           error.message ||
@@ -1550,15 +1432,23 @@ export default function ScheduleDetailScreen() {
         });
       }
     } finally {
-      isBookingInFlightRef.current = false;
+      // An obsolete operation must not unlock a newer account's booking.
       if (
+        bookingSeqRef.current === bookingSeq &&
         activeSessionIdRef.current === targetSessionId &&
         activeTokenRef.current === reqContextToken
       ) {
+        isBookingInFlightRef.current = false;
         setIsBooking(false);
-        // Poin 3: Reconcile state with authoritative server data after POST finishes
-        pollScheduleStatus({ force: true });
-        verifyBookingAndMembership({ isSilent: true });
+        // Verification rejects results during a POST. Start it only after the
+        // submit lock is released; the conflict ref still blocks duplicate POSTs.
+        if ((needsConflictReconciliationRef.current || reconcileBooking) && isActive()) {
+          await verifyBookingAndMembership();
+        }
+        // A focus/foreground entry automatically reconciles if POST ended away.
+        if (reconcileSchedule && bookingSeqRef.current === bookingSeq && isActive()) {
+          await pollScheduleStatus();
+        }
       }
     }
   };
@@ -1627,7 +1517,7 @@ export default function ScheduleDetailScreen() {
           </View>
         )}
 
-        {/* Cancellation Banner (AC4 SCRUM-26 & B9 SCRUM-25) */}
+        {/* Cancellation Banner (AC4) */}
         {isCancelled && (
           <View className="mb-5 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 flex-row items-start">
             <Ionicons
@@ -1641,10 +1531,9 @@ export default function ScheduleDetailScreen() {
                 Sesi Dibatalkan
               </Text>
               <Text className="text-red-300 text-xs italic">
-                Ket:{" "}
-                {schedule.cancel_reason && schedule.cancel_reason.trim() !== ""
-                  ? schedule.cancel_reason
-                  : "Tidak ada alasan spesifik."}
+                Ket: {schedule.cancel_reason === undefined
+                  ? "Alasan pembatalan belum tersedia."
+                  : schedule.cancel_reason || "Tidak ada alasan spesifik."}
               </Text>
             </View>
           </View>
@@ -1705,7 +1594,7 @@ export default function ScheduleDetailScreen() {
             </View>
           </View>
 
-          {/* F8: Participant Counter (Live updated via SCRUM-73 polling) */}
+          {/* F8: Participant Counter — only render ParticipantCounter when min is a valid integer >= 0 */}
           <View className="pt-4 flex-row items-center justify-between">
             {hasMinParticipants ? (
               <ParticipantCounter
@@ -1728,7 +1617,7 @@ export default function ScheduleDetailScreen() {
           </View>
         </View>
 
-        {/* --- BOOKING BUTTON SECTION (Hidden when session is cancelled per AC4/B9) --- */}
+        {/* --- BOOKING BUTTON SECTION --- */}
         {!isCancelled && (
           <>
             {isVerifyingEligibility ? (
@@ -1751,7 +1640,7 @@ export default function ScheduleDetailScreen() {
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  onPress={() => verifyBookingAndMembership({ isSilent: false })}
+                  onPress={() => { void verifyBookingAndMembership(); }}
                   className="px-5 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 flex-row items-center"
                 >
                   <Ionicons name="refresh-outline" size={16} color="#fbbf24" />
@@ -1810,8 +1699,8 @@ export default function ScheduleDetailScreen() {
                   </View>
                 )}
 
-                {/* TODO (Amel - SCRUM-97): Tambahkan tombol "Batalkan Booking" di sini jika hasBooked === true && !isCancelled */}
-                {/* if (hasBooked && !isCancelled) { <CancelBookingButton scheduleId={scheduleId} /> } */}
+                {/* TODO (Amel - SCRUM-97): Tambahkan tombol "Batalkan Booking" di sini jika hasBooked === true */}
+                {/* if (hasBooked) { <CancelBookingButton scheduleId={scheduleId} /> } */}
               </View>
             )}
           </>
@@ -1900,7 +1789,7 @@ export default function ScheduleDetailScreen() {
               <View className="flex-row gap-3">
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  disabled={isBooking}
+                  disabled={isBooking || !canBook || isCancelled || isSessionStarted}
                   onPress={closePopup}
                   className="flex-1 py-3.5 rounded-xl bg-zinc-800 border border-zinc-700 items-center justify-center"
                 >
@@ -1909,9 +1798,7 @@ export default function ScheduleDetailScreen() {
 
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  disabled={
-                    isBooking || !canBook || isCancelled || isSessionStarted
-                  }
+                  disabled={isBooking || !canBook || isSessionStarted}
                   onPress={confirmBookingAction}
                   className="flex-1 py-3.5 rounded-xl bg-amber-400 active:bg-amber-500 items-center justify-center flex-row"
                 >
