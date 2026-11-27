@@ -2,8 +2,7 @@
 
 These tests execute the actual TSX screen and adapter after TypeScript transpilation,
 using real React effects with mocked native hosts, router, authentication and API.
-Focus timers are deliberately not mounted: this suite covers detail request lifecycle,
-status normalization and submit locking, not native rendering or WITA timer acceptance.
+The detail focus lifecycle runs against fake timers. The suite covers request lifecycle, status normalization and submit locking. Native rendering and real Android timer behavior require device testing.
 No backend or Android runtime is started.
 
 Prerequisites: Node 24, project dependencies (`npm ci`), and React test renderer
@@ -55,7 +54,7 @@ rendered in the test harness and navigation payloads are checked.
 The frontend schedule model now retains the API counter name `participants_count`.
 SCRUM-73 integration must migrate consumers of the older normalized
 `current_participants` field. The adapter still accepts that legacy field as input,
-but never emits maximum-capacity rules. No polling implementation is changed.
+but never emits maximum-capacity rules. The SCRUM-73 cases below cover the integrated detail poll.
 
 Per Orlando's scope decision supplied for this revision, future approved renewal
 is an accepted known limitation/follow-up, not a blocker for SCRUM-72. The single
@@ -95,3 +94,14 @@ npm.cmd run lint
 No backend suite, real Android acceptance or Railway requests are implied by these
 regressions. Re-run the original two-client conflict on Android after this patch is
 reviewed, including GET failure/retry and account/route changes during reconciliation.
+
+## SCRUM-73 polling regression
+
+Run all cases with the existing command, or select the SCRUM-73 cases with:
+
+    node --test --test-name-pattern=SCRUM-73 tests/scrum72-regression.test.cjs
+
+The harness executes the actual detail handlers with fake focus, AppState and
+timers. Deferred HTTP responses reproduce out-of-order completion, refresh
+replacement and mutation recovery. The tests do not substitute for real HTTP
+or physical Android acceptance.

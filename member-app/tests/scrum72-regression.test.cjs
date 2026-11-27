@@ -35,17 +35,46 @@ function load(file, deps, globals = {}) {
   }, { filename: file });
   return module.exports;
 }
-function setup({ restoring = false, payload = false, getDetail, authToken, membership, bookings = [], now, view = "detail" } = {}) {
+function setup({ restoring = false, payload = false, getDetail, authToken, membership, bookings = [], now, view = "detail", listLifecycle = false } = {}) {
   let auth = { isLoading: restoring, userToken: restoring ? null : 'test-session' };
   if (authToken !== undefined) auth.userToken = authToken;
-  let readToken = async () => auth.userToken;
-  const detailCalls = [], postCalls = [], getCalls = [], navigation = [];
+  // Simulate a restored credential for the pre-POST storage race cases.
+  let readToken = async () => auth.userToken ?? (authToken === null ? 'stored-test-session' : null);
+  let route = { id: '7', ...(payload ? { scheduleData: JSON.stringify(fixture) } : {}) };
+  let focused = true;
+  let time = now ?? Date.now();
+  let nextTimer = 0;
+  const timers = new Map();
+  const listeners = new Set();
+  const setTimer = (callback, delay, repeat) => {
+    const id = ++nextTimer;
+    timers.set(id, { callback, delay, repeat, at: time + delay });
+    return id;
+  };
+  const clearTimer = (id) => timers.delete(id);
+  const advance = async (delay) => {
+    const until = time + delay;
+    while (true) {
+      const due = [...timers.entries()].filter(([, timer]) => timer.at <= until)
+        .sort(([, a], [, b]) => a.at - b.at)[0];
+      if (!due) break;
+      const [id, timer] = due;
+      time = timer.at;
+      if (timer.repeat) timer.at += timer.delay;
+      else timers.delete(id);
+      await act(async () => { timer.callback(); });
+    }
+    time = until;
+  };
+  const detailCalls = [], postCalls = [], getCalls = [], statusCalls = [], navigation = [];
   let overrideGet = () => undefined;
   let post = () => Promise.resolve({ data: { data: { schedule: { participants_count: 4 } } } });
   const api = { get: (url, options) => {
-    getCalls.push(url);
+    if (url === '/api/v1/class-schedules/status') statusCalls.push(options);
+    else getCalls.push(url);
     const override = overrideGet(url, options);
     if (override !== undefined) return override;
+    if (url === '/api/v1/class-schedules/status') return Promise.resolve({ status: 304 });
     if (url === '/api/v1/class-schedules') {
       const request = deferred(); detailCalls.push({ ...request, options });
       return getDetail ? getDetail(request) : request.promise;
@@ -60,8 +89,10 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
     react: React, 'react-native': Object.fromEntries(
       ['View','Text','TouchableOpacity','Modal','ActivityIndicator','ScrollView','SectionList','RefreshControl']
         .map((x) => [x, x])),
-    'expo-router': { useLocalSearchParams: () => ({ id: '7', ...(payload ? { scheduleData: JSON.stringify(fixture) } : {}) }),
-      useRouter: () => ({ push: (value) => navigation.push(value) }), useFocusEffect: () => {} },
+    'expo-router': { useLocalSearchParams: () => route,
+      useRouter: () => ({ push: (value) => navigation.push(value) }),
+      useFocusEffect: (effect) => React.useEffect(
+        () => focused && (view === 'detail' || listLifecycle) ? effect() : undefined, [effect, focused]) },
     '@expo/vector-icons': { Ionicons: 'Icon' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@/lib/api': api, '@/lib/auth': { getToken: () => readToken() },
@@ -70,7 +101,11 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
     '@/components/StatusBadge': { StatusBadge: 'Badge' },
   };
   // Render actual list cards instead of leaving renderItem inside a native host.
-  deps['react-native'].AppState = { currentState: 'active' };
+  const appState = { currentState: 'active', addEventListener: (_event, listener) => {
+    listeners.add(listener);
+    return { remove: () => listeners.delete(listener) };
+  } };
+  deps['react-native'].AppState = appState;
   deps['react-native'].SectionList = function ListHost({ sections, renderItem, refreshControl, ...props }) {
     return React.createElement('SectionList', { ...props, onRefresh: refreshControl.props.onRefresh },
       ...sections.flatMap((section) => section.data.map((item) =>
@@ -86,18 +121,38 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
     '../lib/whatsapp': { buildWaLink: () => 'https://example.test/qa-chat' },
   }).ChatAdminButton;
   deps['@/components/ChatAdminButton'] = { ChatAdminButton };
-  const schedules = load(path.join(app, '(app)/schedules.tsx'), deps);
+  class ClockDate extends Date { static now() { return time; } }
+  const timerGlobals = {
+    Date: ClockDate, setInterval: (fn, delay) => setTimer(fn, delay, true),
+    setTimeout: (fn, delay) => setTimer(fn, delay, false),
+    clearInterval: clearTimer, clearTimeout: clearTimer,
+  };
+  const schedules = load(path.join(app, '(app)/schedules.tsx'), deps, timerGlobals);
   deps['@/app/(app)/schedules'] = schedules;
   const Counter = load(path.resolve(app, '../components/ParticipantCounter.tsx'), deps).ParticipantCounter;
   const Badge = load(path.resolve(app, '../components/StatusBadge.tsx'), deps).StatusBadge;
   deps['@/components/ParticipantCounter'] = { ParticipantCounter: Counter };
   deps['@/components/StatusBadge'] = { StatusBadge: Badge };
-  class ClockDate extends Date { static now() { return now; } }
-  const Screen = load(path.join(app, 'schedule/[id].tsx'), deps, now === undefined ? {} : { Date: ClockDate }).default;
+  const Screen = load(path.join(app, 'schedule/[id].tsx'), deps, timerGlobals).default;
   const Component = view === 'list' ? schedules.default : Screen;
   let root;
   return {
-    detailCalls, postCalls, getCalls, schedules, navigation,
+    detailCalls, postCalls, getCalls, statusCalls, schedules, navigation, advance,
+    activeTimers: () => [...timers.values()].map((timer) => timer.delay),
+    listenerCount: () => listeners.size,
+    refreshProps: () => root.root.findByType('ScrollView').props.refreshControl.props,
+    appState: (next) => act(async () => {
+      appState.currentState = next;
+      for (const listener of listeners) listener(next);
+    }),
+    focus: (value) => act(async () => {
+      focused = value;
+      root.update(React.createElement(Component));
+    }),
+    route: (item) => act(async () => {
+      route = { id: String(item.id), scheduleData: JSON.stringify(item) };
+      root.update(React.createElement(Component));
+    }),
     openedChatLinks,
     chatProps: () => root.root.findByType(ChatAdminButton).props,
     chatHasNavigationAncestor: () => {
@@ -116,7 +171,7 @@ function setup({ restoring = false, payload = false, getDetail, authToken, membe
     setPost: (fn) => { post = fn; },
     mount: async () => { await act(async () => { root = create(React.createElement(Component)); }); },
     auth: async (value) => { auth = value; await act(async () => root.update(React.createElement(Component))); },
-    text: () => JSON.stringify(root.toJSON()),
+    text: () => JSON.stringify(root.toJSON(), (key, value) => key === "refreshControl" ? undefined : value),
     buttonProps: (label) => root.root.findAllByType('TouchableOpacity').find((n) =>
       n.findAllByType('Text').some((t) => t.children.join('') === label)).props,
     button: (label) => root.root.findAllByType('TouchableOpacity').find((n) =>
@@ -704,4 +759,420 @@ test('SCRUM72/85 merge: card navigation and Chat Admin remain separate actions',
   assert.equal(h.navigation.length, 1);
   assert.equal(h.postCalls.length, 0);
   await h.unmount();
+});
+
+
+// SCRUM-73 runs the real detail screen with the same native host mocks.
+const statusUrl = '/api/v1/class-schedules/status';
+const listUrl = '/api/v1/class-schedules';
+const bookingsUrl = '/api/v1/member/bookings';
+const stamp = (second) => '2026-11-27T08:00:' + String(second).padStart(2, '0') + '+08:00';
+const statusReply = (status, count, second = 1, id = 7, min = 5) => ({
+  status: 200, data: { data: [
+    { id: id + 100, status: 'cancelled', participants_count: 91, min_participants: 80, updated_at: stamp(second) },
+    { id, status, participants_count: count, min_participants: min, updated_at: stamp(second) },
+  ] },
+});
+const listReply = (status, count, second, reason = null) => ({
+  data: { data: [{ ...fixture, status, participants_count: count, updated_at: stamp(second), cancel_reason: reason }] },
+});
+const refreshDetail = (h) => act(async () => h.refreshProps().onRefresh());
+
+test('SCRUM-73: poll merges by ID, updates both counter directions and keeps the same scroll host', async () => {
+  const h = setup({ payload: true });
+  let count = 3, min = 5;
+  h.setGet((url) => url === statusUrl ? Promise.resolve(statusReply('scheduled', count, 1, 7, min)) : undefined);
+  await h.mount();
+  const refresh = h.refreshProps().onRefresh;
+  assert.equal(h.counterProps().current, 3);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.statusCalls[0].params)), {
+    date_from: fixture.schedule_date, date_to: fixture.schedule_date,
+  });
+  count = 4;
+  await h.advance(14999);
+  assert.equal(h.statusCalls.length, 1);
+  await h.advance(1);
+  assert.equal(h.counterProps().current, 4);
+  assert.equal(h.refreshProps().onRefresh, refresh);
+  assert.equal(h.refreshProps().refreshing, false);
+  assert.doesNotMatch(h.text(), /Memuat detail/);
+  assert.match(h.text(), /Yoga.*Instructor/);
+  count = 3; min = 6;
+  await h.advance(15000);
+  assert.equal(h.counterProps().current, 3);
+  assert.equal(h.counterProps().min, 6);
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  assert.equal(h.listenerCount(), 1);
+  assert.equal(h.activeTimers().filter((delay) => delay === 15000).length, 1);
+  await h.unmount();
+});
+
+test('SCRUM-73: late private snapshot cannot undo cancellation or restore the old booking after reschedule', async () => {
+  const h = setup({ payload: true });
+  const old = deferred(), cancelled = deferred();
+  let current = statusReply('scheduled', 3, 1);
+  let bookingCalls = 0;
+  h.setGet((url) => {
+    if (url === bookingsUrl) return ++bookingCalls === 1
+      ? old.promise : Promise.resolve(ownBookingResponse('cancelled', 0));
+    if (url === statusUrl) return Promise.resolve(current);
+    if (url === listUrl) return cancelled.promise;
+  });
+  await h.mount();
+  current = statusReply('cancelled', 0, 3);
+  await h.advance(15000);
+  await act(async () => cancelled.resolve(listReply('cancelled', 0, 3, 'QA admin cancelled')));
+  assert.equal(h.badgeProps().status, 'cancelled');
+  assert.equal(h.counterProps().current, 0);
+  assert.match(h.text(), /QA admin cancelled/);
+  const oldBooked = ownBookingResponse('booked', 88);
+  oldBooked.data.data[0].schedule.status = 'scheduled';
+  await act(async () => old.resolve(oldBooked));
+  assert.equal(h.badgeProps().status, 'cancelled');
+  assert.equal(h.counterProps().current, 0);
+  assert.doesNotMatch(h.text(), /Booking Kelas|Sudah Terdaftar/);
+
+  // The status differs, but the older timestamp still makes it obsolete.
+  current = statusReply('scheduled', 77, 2);
+  await h.advance(15000);
+  assert.equal(h.badgeProps().status, 'cancelled');
+  // A later request in the same backend second may legitimately reschedule.
+  current = statusReply('scheduled', 0, 3);
+  await h.advance(15000);
+  assert.equal(h.badgeProps().status, 'scheduled');
+  assert.equal(h.counterProps().current, 0);
+  assert.doesNotMatch(h.text(), /QA admin cancelled|Sudah Terdaftar/);
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  await h.unmount();
+});
+
+test('SCRUM-73: forced refresh aborts the older poll and ignores late same-second data', async () => {
+  const h = setup({ payload: true });
+  const first = deferred();
+  let polls = 0;
+  h.setGet((url) => url === statusUrl
+    ? (++polls === 1 ? first.promise : Promise.resolve(statusReply('scheduled', 8, 1))) : undefined);
+  await h.mount();
+  await h.advance(15000);
+  assert.equal(h.statusCalls.length, 1, 'overlapping periodic tick is skipped');
+  await refreshDetail(h);
+  assert.equal(h.statusCalls[0].signal.aborted, true);
+  await act(async () => first.resolve(statusReply('scheduled', 99, 1)));
+  assert.equal(h.counterProps().current, 8);
+  assert.equal(h.refreshProps().refreshing, false);
+  await h.unmount();
+});
+
+for (const succeeds of [true, false]) {
+  test('SCRUM-73: refresh inherits initial eligibility loading (' + (succeeds ? 'success' : 'failure') + ')', async () => {
+    const h = setup({ payload: true });
+    const first = deferred(), replacement = deferred();
+    let reads = 0;
+    h.setGet((url) => url === bookingsUrl ? (++reads === 1 ? first.promise : replacement.promise) : undefined);
+    await h.mount();
+    assert.match(h.text(), /Memverifikasi/);
+    const refresh = h.refreshProps().onRefresh;
+    await act(async () => { void refresh(); });
+    assert.equal(h.refreshProps().refreshing, true);
+    await act(async () => first.resolve(ownBookingResponse('booked', 99)));
+    assert.match(h.text(), /Memverifikasi/);
+    assert.equal(h.refreshProps().refreshing, true);
+    await act(async () => succeeds ? replacement.resolve({ data: { data: [] } }) : replacement.reject(new Error('QA offline')));
+    assert.doesNotMatch(h.text(), /Memverifikasi|Sudah Terdaftar/);
+    assert.equal(h.refreshProps().refreshing, false);
+    if (!succeeds) {
+      assert.match(h.text(), /QA offline/);
+      h.setGet(() => undefined);
+      await refreshDetail(h);
+    }
+    assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+    await h.unmount();
+  });
+}
+
+for (const boundary of ['blur', 'background']) {
+  test('SCRUM-73: POST completion during ' + boundary + ' reconciles on return and cleans timers', async () => {
+    const h = setup({ payload: true });
+    const post = deferred();
+    h.setPost(() => post.promise);
+    await h.mount();
+    await act(async () => h.button('Booking Kelas')());
+    const confirm = h.button('Ya, Booking');
+    await act(async () => { void confirm(); void confirm(); });
+    assert.equal(h.postCalls.length, 1);
+    if (boundary === 'blur') await h.focus(false);
+    else await h.appState('background');
+    const before = h.statusCalls.length;
+    const privateBefore = h.getCalls.length;
+    assert.equal(h.activeTimers().length, 0);
+    assert.equal(h.listenerCount(), boundary === 'blur' ? 0 : 1);
+    await act(async () => post.resolve({ data: { data: { schedule: { participants_count: 4 } } } }));
+    await h.advance(60000);
+    assert.equal(h.statusCalls.length, before);
+    assert.equal(h.getCalls.length, privateBefore);
+    h.setGet((url) => {
+      if (url === statusUrl) return Promise.resolve(statusReply('scheduled', 4));
+      if (url === bookingsUrl) return Promise.resolve(ownBookingResponse('booked', 4));
+    });
+    if (boundary === 'blur') await h.focus(true);
+    else await h.appState('active');
+    assert.equal(h.statusCalls.length, before + 1);
+    assert.equal(h.counterProps().current, 4);
+    assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+    assert.equal(h.listenerCount(), 1);
+    assert.equal(h.activeTimers().filter((ms) => ms === 15000).length, 1);
+    await h.unmount();
+    assert.equal(h.activeTimers().length, 0);
+    assert.equal(h.listenerCount(), 0);
+  });
+}
+
+test('SCRUM-73: HTTP 409 completion in background stays locked until foreground reconciliation', async () => {
+  const h = setup({ payload: true });
+  const mutation = deferred(), reconciliation = deferred();
+  h.setPost(() => mutation.promise);
+  await h.mount();
+  await act(async () => h.button('Booking Kelas')());
+  const confirm = h.button('Ya, Booking');
+  await act(async () => { void confirm(); });
+  await h.appState('background');
+  const before = h.getCalls.length;
+  await act(async () => mutation.reject({ response: { status: 409 } }));
+  assert.equal(h.getCalls.length, before);
+  h.setGet((url) => url === bookingsUrl ? reconciliation.promise : undefined);
+  await h.appState('active');
+  await act(async () => { void confirm(); });
+  assert.equal(h.postCalls.length, 1);
+  await act(async () => reconciliation.resolve(ownBookingResponse('booked', 6)));
+  assert.equal(h.counterProps().current, 6);
+  assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+  await h.unmount();
+});
+
+test('SCRUM-73: abort old polls on route or account change, wait for auth, and stop private GET on logout', async () => {
+  const h = setup({ payload: true, restoring: true });
+  const oldRoute = deferred(), oldAccount = deferred();
+  h.setGet((url) => url === statusUrl ? oldRoute.promise : undefined);
+  await h.mount();
+  assert.equal(h.statusCalls.length, 0);
+  assert.equal(h.getCalls.length, 0);
+  await h.auth({ isLoading: false, userToken: 'test-first-account' });
+  h.setGet((url) => url === statusUrl ? oldAccount.promise : undefined);
+  await h.route({ ...fixture, id: 8, class_name: 'Pilates', participants_count: 2 });
+  assert.equal(h.statusCalls[0].signal.aborted, true);
+  const loggedOutBefore = h.getCalls.length;
+  h.setGet((url) => url === statusUrl ? Promise.resolve(statusReply('scheduled', 6, 4, 8)) : undefined);
+  await h.auth({ isLoading: false, userToken: null });
+  assert.equal(h.statusCalls[1].signal.aborted, true);
+  assert.equal(h.getCalls.length, loggedOutBefore, 'logged-out context sends no private GET');
+  await h.auth({ isLoading: false, userToken: 'test-second-account' });
+  await act(async () => {
+    oldRoute.resolve(statusReply('cancelled', 77, 5, 7));
+    oldAccount.resolve(statusReply('cancelled', 88, 5, 8));
+  });
+  assert.match(h.text(), /Pilates/);
+  assert.equal(h.counterProps().current, 6);
+  assert.equal(h.badgeProps().status, 'scheduled');
+  await h.unmount();
+});
+
+test('SCRUM-73: booking applies authoritative count, ignoring polling started before POST', async () => {
+  const h = setup({ payload: true });
+  const preMutation = deferred();
+  let calls = 0;
+  h.setGet((url) => url === statusUrl
+    ? (++calls === 1 ? preMutation.promise : Promise.resolve({ status: 304 })) : undefined);
+  h.setPost(() => Promise.resolve({ data: { data: { schedule: { participants_count: 8 } } } }));
+  await h.mount();
+  await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+  assert.equal(h.statusCalls[0].signal.aborted, true);
+  await act(async () => preMutation.resolve(statusReply('scheduled', 2)));
+  assert.equal(h.counterProps().current, 8);
+  assert.equal(h.buttonProps('Sudah Terdaftar').disabled, true);
+  await h.unmount();
+});
+
+test('SCRUM-73: admin cancellation replaces an open confirmation and uses the full reason', async () => {
+  const h = setup({ payload: true });
+  await h.mount();
+  await act(async () => h.button('Booking Kelas')());
+  const confirm = h.button('Ya, Booking');
+  h.setGet((url) => {
+    if (url === statusUrl) return Promise.resolve(statusReply('cancelled', 0, 2));
+    if (url === listUrl) return Promise.resolve(listReply('cancelled', 0, 2, 'Jadwal QA dibatalkan'));
+  });
+  await h.advance(15000);
+  assert.match(h.text(), /Jadwal QA dibatalkan/);
+  assert.doesNotMatch(h.text(), /Ya, Booking|"Booking Kelas"/);
+  await act(async () => confirm());
+  assert.equal(h.postCalls.length, 0, 'retained callback cannot submit after cancellation');
+  await h.unmount();
+});
+
+test('SCRUM-73: failed cancellation fallback disables booking and reports an incomplete refresh', async () => {
+  const h = setup({ payload: true });
+  await h.mount();
+  h.setGet((url) => {
+    if (url === statusUrl) return Promise.resolve(statusReply('cancelled', 0, 4));
+    if (url === listUrl) return Promise.reject(new Error('reason request offline'));
+  });
+  await refreshDetail(h);
+  assert.equal(h.badgeProps().status, 'cancelled');
+  assert.doesNotMatch(h.text(), /"Booking Kelas"/);
+  assert.match(h.text(), /Gagal memperbarui/);
+  assert.match(h.text(), /Alasan pembatalan belum tersedia/);
+  assert.equal(h.refreshProps().refreshing, false);
+  h.setGet((url) => {
+    if (url === statusUrl) return Promise.resolve(statusReply('cancelled', 0, 4));
+    if (url === listUrl) return Promise.resolve(listReply('cancelled', 0, 4, 'Reason recovered'));
+  });
+  await refreshDetail(h);
+  assert.match(h.text(), /Reason recovered/);
+  assert.doesNotMatch(h.text(), /Gagal memperbarui/);
+  await h.unmount();
+});
+
+test('SCRUM-73: fallback uses the newer full reschedule as one snapshot', async () => {
+  const h = setup({ payload: true, bookings: ownBookingResponse('booked', 3).data.data });
+  const pending = deferred();
+  await h.mount();
+  h.setGet((url) => {
+    if (url === statusUrl) return Promise.resolve(statusReply('cancelled', 0, 4));
+    if (url === listUrl) return pending.promise;
+  });
+  await h.advance(15000);
+  await act(async () => pending.resolve(listReply('scheduled', 2, 5)));
+  assert.equal(h.badgeProps().status, 'scheduled');
+  assert.equal(h.counterProps().current, 2);
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  assert.doesNotMatch(h.text(), /Sesi Dibatalkan|Sudah Terdaftar/);
+  await h.unmount();
+});
+
+test('SCRUM-73: 304 keeps existing data; a missing ID is a visible distinct outcome', async () => {
+  const h = setup({ payload: true });
+  await h.mount();
+  await refreshDetail(h);
+  assert.equal(h.statusCalls.at(-1).validateStatus(304), true);
+  assert.equal(h.statusCalls.at(-1).timeout, 12000);
+  assert.equal(h.counterProps().current, 3);
+  assert.doesNotMatch(h.text(), /Gagal memperbarui|Sesi tidak ditemukan/);
+  h.setGet((url) => url === statusUrl ? Promise.resolve({ data: { data: [{ id: 999 }] } }) : undefined);
+  await refreshDetail(h);
+  assert.match(h.text(), /Sesi tidak ditemukan/);
+  assert.equal(h.refreshProps().refreshing, false);
+  assert.equal(h.counterProps().current, 3);
+  await h.unmount();
+});
+
+for (const code of [429, 500, 'offline']) {
+  test('SCRUM-73: recovers after ' + code + ' and bounded backoff', async () => {
+    const h = setup({ payload: true });
+    let offline = true;
+    h.setGet((url) => {
+      if (url !== statusUrl) return;
+      if (!offline) return Promise.resolve(statusReply('scheduled', 6));
+      if (code === 'offline') return Promise.reject(new Error('network unreachable'));
+      return Promise.reject({ response: { status: code, headers: { 'retry-after': '45' } } });
+    });
+    await h.mount();
+    offline = false;
+    await h.advance(29999);
+    assert.equal(h.statusCalls.length, 1);
+    await h.advance(code === 429 ? 15001 : 1);
+    assert.equal(h.counterProps().current, 6);
+    const recovered = h.statusCalls.length;
+    await h.advance(15000);
+    assert.equal(h.statusCalls.length, recovered + 1);
+    await h.unmount();
+  });
+}
+
+
+
+test('SCRUM-73: a 409 stays locked when the private read succeeds but the public status is missing', async () => {
+  const h = setup({ payload: true });
+  await h.mount();
+  await act(async () => h.button('Booking Kelas')());
+  const confirm = h.button('Ya, Booking');
+  h.setPost(conflict409);
+  h.setGet((url) => {
+    if (url === statusUrl) return Promise.resolve({ data: { data: [] } });
+    if (url === bookingsUrl) return Promise.resolve(ownBookingResponse('cancelled', 0));
+  });
+  await act(async () => confirm());
+  assert.match(h.text(), /Status sesi belum dapat diverifikasi/);
+  await act(async () => { void confirm(); });
+  assert.equal(h.postCalls.length, 1);
+  await act(async () => h.button('Mengerti')());
+  h.setGet((url) => {
+    if (url === statusUrl) return Promise.resolve(statusReply('scheduled', 1, 2));
+    if (url === bookingsUrl) return Promise.resolve(ownBookingResponse('cancelled', 0));
+  });
+  await act(async () => h.button('Coba Lagi')());
+  assert.equal(h.counterProps().current, 1);
+  assert.equal(h.buttonProps('Booking Kelas').disabled, false);
+  await h.unmount();
+});
+
+test('SCRUM-73: a 422 from booking after admin cancellation triggers immediate polling', async () => {
+  const h = setup({ payload: true });
+  await h.mount();
+  h.setPost(() => Promise.reject({ response: { status: 422, data: { message: 'Sesi sudah dibatalkan.' } } }));
+  h.setGet((url) => {
+    if (url === statusUrl) return Promise.resolve(statusReply('cancelled', 0, 2));
+    if (url === listUrl) return Promise.resolve(listReply('cancelled', 0, 2, 'Admin cancelled in QA'));
+  });
+  await act(async () => h.button('Booking Kelas')());
+  await act(async () => h.button('Ya, Booking')());
+  assert.equal(h.statusCalls.length, 2);
+  assert.equal(h.badgeProps().status, 'cancelled');
+  assert.match(h.text(), /Admin cancelled in QA/);
+  assert.doesNotMatch(h.text(), /Booking Berhasil|"Booking Kelas"/);
+  await h.unmount();
+});
+
+test('SCRUM-73: background aborts both refresh requests and clears its spinner', async () => {
+  const h = setup({ payload: true });
+  await h.mount();
+  const poll = deferred(), verification = deferred();
+  let privateSignal;
+  h.setGet((url, config) => {
+    if (url === statusUrl) return poll.promise;
+    if (url === bookingsUrl) {
+      privateSignal = config.signal;
+      return verification.promise;
+    }
+  });
+  const refresh = h.refreshProps().onRefresh;
+  await act(async () => { void refresh(); });
+  assert.equal(h.refreshProps().refreshing, true);
+  await h.appState('background');
+  assert.equal(h.statusCalls.at(-1).signal.aborted, true);
+  assert.equal(privateSignal.aborted, true);
+  assert.equal(h.refreshProps().refreshing, false);
+  await act(async () => {
+    poll.resolve(statusReply('scheduled', 99));
+    verification.resolve(ownBookingResponse('booked', 99));
+  });
+  assert.equal(h.counterProps().current, 3);
+  assert.doesNotMatch(h.text(), /Pembaruan terhenti|Sudah Terdaftar/);
+  await h.unmount();
+});
+
+test('SCRUM-73: TC3-37 inherited schedules screen shows cancellation on its next poll', async () => {
+  const h = setup({ view: 'list', listLifecycle: true });
+  let schedules = listReply('scheduled', 1, 1);
+  h.setGet((url) => url === listUrl ? Promise.resolve(schedules) : undefined);
+  await h.mount();
+  assert.match(h.text(), /TERJADWAL/);
+  schedules = listReply('cancelled', 0, 2, 'Admin cancelled both views');
+  await h.advance(15000);
+  assert.match(h.text(), /DIBATALKAN/);
+  assert.match(h.text(), /Admin cancelled both views/);
+  assert.match(h.text(), /0 \(Min\. 5\) Peserta/);
+  await h.unmount();
+  assert.equal(h.listenerCount(), 0);
+  assert.equal(h.activeTimers().length, 0);
 });
