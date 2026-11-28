@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import PageHeader from '../components/common/PageHeader';
-import Modal from '../components/common/Modal';
 import api from '../lib/api';
 
 // --- TIPE DATA SESUAI KONTRAK AdminTransactionResource.php ---
@@ -37,6 +36,10 @@ export interface AdminTransactionItem {
   created_at: string | null;
 }
 
+type TransactionRow = AdminTransactionItem & { source: 'api' | 'mock' };
+type TransactionView = { status: VerificationStatus; page: number };
+type Decision = { action: 'approve' | 'reject'; target: TransactionRow };
+
 interface PaginationMeta {
   current_page: number;
   last_page: number;
@@ -60,11 +63,16 @@ interface ApiErrorShape {
 }
 
 interface BannerNotification {
-  type: 'success' | 'error' | 'warning';
+  type: 'success' | 'warning';
   message: string;
 }
 
-// --- DATA MOCK FALLBACK (Hanya dipakai di environment development bila server belum aktif) ---
+const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_SCRUM75_MOCK === 'true';
+const PAGE_SIZE = 15;
+const REQUEST_TIMEOUT = 15_000;
+const RECEIPT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+// Fixture sintetis untuk mode mock development yang diaktifkan secara eksplisit.
 const INITIAL_MOCK_TRANSACTIONS: AdminTransactionItem[] = [
   {
     id: 9001,
@@ -223,447 +231,364 @@ function isCanceledError(err: unknown): boolean {
 
 const ZOOM_LEVELS = [1, 1.5, 2, 3] as const;
 
-export default function Transaksi() {
-  // --- STATE TAB, DAFTAR & PAGINASI ---
-  const [activeStatus, setActiveStatus] = useState<VerificationStatus>('pending');
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [transactions, setTransactions] = useState<AdminTransactionItem[]>([]);
-  const [meta, setMeta] = useState<PaginationMeta>({
-    current_page: 1,
-    last_page: 1,
-    per_page: 15,
-    total: 0,
-    from: null,
-    to: null,
-  });
+function TransactionDialog({
+  open,
+  onClose,
+  label,
+  className,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  label: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [fetchError, setFetchError] = useState<string>('');
-  const [isUsingMock, setIsUsingMock] = useState<boolean>(false);
-  const [banner, setBanner] = useState<BannerNotification | null>(null);
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    dialog.showModal();
+    return () => dialog.close();
+  }, [open]);
 
-  // Store mock lokal yang persisten antar perpindahan tab & refresh selama sesi dev
-  const mockStoreRef = useRef<AdminTransactionItem[]>(
-    INITIAL_MOCK_TRANSACTIONS.map((item) => ({ ...item }))
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-label={label}
+      className={'m-auto border-0 bg-transparent p-0 text-zinc-200 backdrop:bg-black/75 backdrop:backdrop-blur-sm ' + className}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      {children}
+    </dialog>
   );
+}
 
-  // AbortController & sequence ID untuk mencegah race condition saat ganti tab/halaman cepat
+function DecisionDialog({
+  open,
+  onClose,
+  title,
+  busy,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  busy: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <TransactionDialog
+      open={open}
+      onClose={onClose}
+      label={title}
+      className="w-[calc(100%-2rem)] max-w-lg max-h-[92vh] rounded-xl border border-zinc-800 shadow-xl"
+    >
+      <div className="bg-zinc-900">
+        <header className="flex items-center justify-between border-b border-zinc-800 p-6">
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Tutup dialog">✕</button>
+        </header>
+        <div className="p-6">{children}</div>
+      </div>
+    </TransactionDialog>
+  );
+}
+
+export default function Transaksi() {
+  const [view, setView] = useState<TransactionView>({ status: 'pending', page: 1 });
+  const { status: activeStatus, page: currentPage } = view;
+  const viewRef = useRef(view);
+  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [meta, setMeta] = useState<PaginationMeta>({
+    current_page: 1, last_page: 1, per_page: PAGE_SIZE, total: 0, from: null, to: null,
+  });
+  const [listedStatus, setListedStatus] = useState<VerificationStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
+  const [banner, setBanner] = useState<BannerNotification | null>(null);
+  const mockStore = useRef<TransactionRow[]>(
+    INITIAL_MOCK_TRANSACTIONS.map((item) => ({ ...item, source: 'mock' })),
+  );
   const fetchAbortRef = useRef<AbortController | null>(null);
-  const fetchSeqRef = useRef<number>(0);
+  const fetchSeqRef = useRef(0);
+  const mountedRef = useRef(false);
 
-  // --- STATE MODAL DETAIL & BUKTI TRANSFER (BLOB + ZOOM) ---
-  const [detailTx, setDetailTx] = useState<AdminTransactionItem | null>(null);
+  const [detailTx, setDetailTx] = useState<TransactionRow | null>(null);
+  const detailRef = useRef<TransactionRow | null>(null);
   const [receiptObjectUrl, setReceiptObjectUrl] = useState<string | null>(null);
-  const [isReceiptLoading, setIsReceiptLoading] = useState<boolean>(false);
-  const [receiptError, setReceiptError] = useState<string>('');
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [receiptWidth, setReceiptWidth] = useState<number | null>(null);
+  const [isReceiptLoading, setIsReceiptLoading] = useState(false);
+  const [receiptError, setReceiptError] = useState('');
+  const [zoomLevel, setZoomLevel] = useState(1);
   const receiptObjectUrlRef = useRef<string | null>(null);
   const receiptAbortRef = useRef<AbortController | null>(null);
 
-  // --- STATE MODAL KONFIRMASI SETUJUI (APPROVE - B4) ---
-  const [approveTx, setApproveTx] = useState<AdminTransactionItem | null>(null);
-  const [isApproving, setIsApproving] = useState<boolean>(false);
-  const [approveError, setApproveError] = useState<string>('');
+  const [decision, setDecision] = useState<Decision | null>(null);
+  const decisionLock = useRef<Decision | null>(null);
+  const needsRecheck = useRef(new Set<number>());
+  const [isDeciding, setIsDeciding] = useState(false);
+  const [decisionError, setDecisionError] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const approveTx = decision?.action === 'approve' ? decision.target : null;
+  const rejectTx = decision?.action === 'reject' ? decision.target : null;
+  const trimmedReason = rejectReason.trim();
+  const reasonLength = Array.from(trimmedReason).length;
 
-  // --- STATE MODAL TOLAK DENGAN ALASAN WAJIB (REJECT - B5) ---
-  const [rejectTx, setRejectTx] = useState<AdminTransactionItem | null>(null);
-  const [rejectReason, setRejectReason] = useState<string>('');
-  const [isRejecting, setIsRejecting] = useState<boolean>(false);
-  const [rejectError, setRejectError] = useState<string>('');
+  const fetchTransactions = useCallback(async (requested: TransactionView) => {
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+    const seq = ++fetchSeqRef.current;
+    const isCurrent = () => !controller.signal.aborted && seq === fetchSeqRef.current;
+    setIsLoading(true);
+    setFetchError('');
 
-  // Helper untuk membaca & memfilter store mock secara konsisten
-  const applyMockList = useCallback((statusParam: VerificationStatus) => {
-    const filteredMocks = mockStoreRef.current.filter(
-      (item) => item.verification_status === statusParam
-    );
-    setTransactions(filteredMocks);
-    setIsUsingMock(true);
-    setMeta({
-      current_page: 1,
-      last_page: 1,
-      per_page: 15,
-      total: filteredMocks.length,
-      from: filteredMocks.length > 0 ? 1 : null,
-      to: filteredMocks.length > 0 ? filteredMocks.length : null,
-    });
+    let page = requested.page;
+    try {
+      // Setiap koreksi hanya dapat menurunkan nomor halaman dalam request ini.
+      for (;;) {
+        let rows: TransactionRow[];
+        let pagination: PaginationMeta;
+        if (USE_MOCK) {
+          rows = mockStore.current.filter((item) => item.verification_status === requested.status);
+          pagination = {
+            current_page: 1, last_page: 1, per_page: PAGE_SIZE, total: rows.length,
+            from: rows.length ? 1 : null, to: rows.length || null,
+          };
+        } else {
+          const { data } = await api.get<{ data: AdminTransactionItem[]; meta: PaginationMeta }>(
+            '/admin/transactions',
+            {
+              params: { status: requested.status, page },
+              signal: controller.signal,
+              timeout: REQUEST_TIMEOUT,
+            },
+          );
+          if (!isCurrent()) return;
+          if (!Array.isArray(data?.data) || !Number.isInteger(data?.meta?.last_page) ||
+              data.meta.last_page < 1 || !Number.isInteger(data.meta.total) || data.meta.total < 0) {
+            throw new Error('Format respons transaksi tidak valid.');
+          }
+          pagination = data.meta;
+          rows = data.data.map((item) => ({ ...item, source: 'api' }));
+        }
+
+        const lastPage = pagination.total === 0 ? 1 : pagination.last_page;
+        if (page > lastPage) {
+          page = lastPage;
+          const correctedView = { status: requested.status, page };
+          viewRef.current = correctedView;
+          setView(correctedView);
+          continue;
+        }
+
+        for (const row of rows) {
+          if (row.source === 'api') needsRecheck.current.delete(row.id);
+        }
+        setTransactions(rows);
+        setMeta(pagination);
+        setListedStatus(requested.status);
+        return;
+      }
+    } catch (err: unknown) {
+      if (!isCurrent() || isCanceledError(err)) return;
+      const apiErr = err as ApiErrorShape;
+      setFetchError(apiErr.response?.data?.message ||
+        'Gagal memuat daftar transaksi dari server. Coba lagi.');
+    } finally {
+      if (isCurrent()) setIsLoading(false);
+    }
   }, []);
 
-  // Helper untuk membersihkan ObjectURL bukti transfer agar tidak bocor di memori browser
-  const revokeCurrentReceiptUrl = useCallback(() => {
-    if (receiptAbortRef.current) {
-      receiptAbortRef.current.abort();
-      receiptAbortRef.current = null;
-    }
+  const disposeReceipt = useCallback(() => {
+    receiptAbortRef.current?.abort();
+    receiptAbortRef.current = null;
     if (receiptObjectUrlRef.current) {
       URL.revokeObjectURL(receiptObjectUrlRef.current);
       receiptObjectUrlRef.current = null;
     }
-    setReceiptObjectUrl(null);
   }, []);
 
-  // --- FETCH DAFTAR TRANSAKSI DARI GET /api/v1/admin/transactions ---
-  // Kontrak backend (TransactionController::index & IndexTransactionRequest):
-  // menerima query `status` & `page`, dengan paginasi tetap 15 data per halaman.
-  const fetchTransactions = useCallback(
-    async (statusParam: VerificationStatus, pageParam: number) => {
-      if (fetchAbortRef.current) {
-        fetchAbortRef.current.abort();
-      }
-      const controller = new AbortController();
-      fetchAbortRef.current = controller;
-      const reqSeq = ++fetchSeqRef.current;
-
-      setIsLoading(true);
-      setFetchError('');
-
-      try {
-        const res = await api.get('/admin/transactions', {
-          params: {
-            status: statusParam,
-            page: pageParam,
-          },
-          signal: controller.signal,
-        });
-
-        if (controller.signal.aborted || reqSeq !== fetchSeqRef.current) {
-          return;
-        }
-
-        const rawData = res.data?.data;
-        const rawMeta = res.data?.meta;
-
-        if (!Array.isArray(rawData)) {
-          throw new Error('Format respons transaksi tidak valid.');
-        }
-
-        setTransactions(rawData as AdminTransactionItem[]);
-        setIsUsingMock(false);
-
-        if (rawMeta && typeof rawMeta === 'object') {
-          setMeta({
-            current_page: Number(rawMeta.current_page) || pageParam,
-            last_page: Number(rawMeta.last_page) || 1,
-            per_page: Number(rawMeta.per_page) || 15,
-            total: Number(rawMeta.total) || rawData.length,
-            from: rawMeta.from ?? null,
-            to: rawMeta.to ?? null,
-          });
-        } else {
-          setMeta({
-            current_page: 1,
-            last_page: 1,
-            per_page: 15,
-            total: rawData.length,
-            from: rawData.length > 0 ? 1 : null,
-            to: rawData.length > 0 ? rawData.length : null,
-          });
-        }
-      } catch (err: unknown) {
-        if (isCanceledError(err) || reqSeq !== fetchSeqRef.current) {
-          return;
-        }
-
-        const apiErr = err as ApiErrorShape;
-        const statusCode = apiErr.response?.status;
-
-        // Fallback mock dibatasi ketat hanya di environment development (import.meta.env.DEV)
-        if (import.meta.env.DEV && (!statusCode || statusCode === 404)) {
-          applyMockList(statusParam);
-        } else {
-          setIsUsingMock(false);
-          setFetchError(
-            apiErr.response?.data?.message ||
-              'Gagal memuat daftar transaksi dari server. Pastikan layanan backend aktif dan coba lagi.'
-          );
-        }
-      } finally {
-        if (reqSeq === fetchSeqRef.current) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [applyMockList]
-  );
-
   useEffect(() => {
-    fetchTransactions(activeStatus, currentPage);
-  }, [activeStatus, currentPage, fetchTransactions]);
+    mountedRef.current = true;
+    void fetchTransactions(viewRef.current);
+    return () => {
+      mountedRef.current = false;
+      fetchAbortRef.current?.abort();
+      disposeReceipt();
+    };
+  }, [disposeReceipt, fetchTransactions]);
 
-  // --- FETCH GAMBAR BUKTI TRANSFER SEBAGAI BLOB (DENGAN HEADER AUTHORIZATION) ---
-  const loadReceiptBlob = useCallback(
-    async (tx: AdminTransactionItem) => {
-      revokeCurrentReceiptUrl();
-      setReceiptError('');
-      setZoomLevel(1);
+  const navigateList = (nextView: TransactionView) => {
+    viewRef.current = nextView;
+    setView(nextView);
+    void fetchTransactions(nextView);
+  };
 
-      // Transaksi bayar di tempat atau tanpa bukti tidak memanggil endpoint receipt (AC2)
-      if (tx.payment_method === 'on_the_spot' || !tx.has_receipt) {
+  const resetReceipt = () => {
+    disposeReceipt();
+    setReceiptObjectUrl(null);
+    setReceiptWidth(null);
+    setReceiptError('');
+    setIsReceiptLoading(false);
+    setZoomLevel(1);
+  };
+
+  const loadReceiptBlob = async (tx: TransactionRow) => {
+    resetReceipt();
+    if (tx.source === 'mock' || tx.payment_method === 'on_the_spot' || !tx.has_receipt) return;
+
+    const controller = new AbortController();
+    receiptAbortRef.current = controller;
+    const isCurrent = () => !controller.signal.aborted && receiptAbortRef.current === controller;
+    setIsReceiptLoading(true);
+
+    try {
+      const { data: blob } = await api.get<Blob>('/transactions/' + tx.id + '/receipt', {
+        responseType: 'blob',
+        signal: controller.signal,
+        timeout: REQUEST_TIMEOUT,
+      });
+      if (!isCurrent()) return;
+
+      if (!blob?.size || !RECEIPT_TYPES.has(blob.type.toLowerCase())) {
+        setReceiptError(!blob?.size
+          ? 'File bukti transfer kosong.'
+          : 'Format bukti transfer tidak didukung. Gunakan JPEG, PNG, atau WebP.');
         setIsReceiptLoading(false);
         return;
       }
 
-      const controller = new AbortController();
-      receiptAbortRef.current = controller;
-      setIsReceiptLoading(true);
+      const objectUrl = URL.createObjectURL(blob);
+      receiptObjectUrlRef.current = objectUrl;
+      setReceiptObjectUrl(objectUrl);
+    } catch (err: unknown) {
+      if (!isCurrent() || isCanceledError(err)) return;
+      const status = (err as ApiErrorShape).response?.status;
+      setReceiptError(status === 404
+        ? 'File bukti transfer tidak ditemukan di server (404).'
+        : status === 403
+          ? 'Anda tidak memiliki akses untuk melihat bukti ini (403).'
+          : 'Gagal memuat gambar bukti transfer dari endpoint privat.');
+      setIsReceiptLoading(false);
+    }
+  };
 
-      try {
-        const response = await api.get(`/transactions/${tx.id}/receipt`, {
-          responseType: 'blob',
-          signal: controller.signal,
-        });
-
-        if (controller.signal.aborted) return;
-
-        const blob: Blob = response.data;
-        if (!blob || blob.size === 0) {
-          throw new Error('File bukti transfer kosong.');
-        }
-
-        const objectUrl = URL.createObjectURL(blob);
-        receiptObjectUrlRef.current = objectUrl;
-        setReceiptObjectUrl(objectUrl);
-      } catch (err: unknown) {
-        if (isCanceledError(err)) return;
-        const apiErr = err as ApiErrorShape;
-        if (apiErr.response?.status === 404) {
-          setReceiptError('File bukti transfer tidak ditemukan di server (404).');
-        } else if (apiErr.response?.status === 403) {
-          setReceiptError('Anda tidak memiliki akses untuk melihat bukti ini (403).');
-        } else {
-          setReceiptError(
-            'Gagal memuat gambar bukti transfer dari endpoint privat.'
-          );
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsReceiptLoading(false);
-        }
-      }
-    },
-    [revokeCurrentReceiptUrl]
-  );
-
-  // Cleanup seluruh request & ObjectURL saat komponen unmount
-  useEffect(() => {
-    return () => {
-      if (fetchAbortRef.current) {
-        fetchAbortRef.current.abort();
-        fetchAbortRef.current = null;
-      }
-      revokeCurrentReceiptUrl();
-    };
-  }, [revokeCurrentReceiptUrl]);
-
-  // --- HANDLER BUKA / TUTUP MODAL DETAIL & BUKTI ---
-  const openDetailModal = (tx: AdminTransactionItem) => {
+  const openDetailModal = (tx: TransactionRow) => {
+    if (decisionLock.current) return;
+    detailRef.current = tx;
     setDetailTx(tx);
-    loadReceiptBlob(tx);
+    void loadReceiptBlob(tx);
   };
 
   const closeDetailModal = () => {
+    if (decisionLock.current) return;
+    detailRef.current = null;
     setDetailTx(null);
-    revokeCurrentReceiptUrl();
-    setReceiptError('');
-    setZoomLevel(1);
+    resetReceipt();
   };
 
-  // --- HANDLER SETUJUI TRANSAKSI (APPROVE - SCRUM-67 / B4) ---
-  const openApproveModal = (tx: AdminTransactionItem) => {
-    setApproveError('');
-    setApproveTx(tx);
-  };
-
-  const handleConfirmApprove = async () => {
-    if (!approveTx || isApproving) return;
-    const targetTx = approveTx;
-
-    setIsApproving(true);
-    setApproveError('');
-
-    try {
-      if (isUsingMock) {
-        // Perbarui status secara persisten di mockStoreRef agar konsisten saat pindah tab / refresh
-        mockStoreRef.current = mockStoreRef.current.map((item) =>
-          item.id === targetTx.id
-            ? {
-                ...item,
-                verification_status: 'verified',
-                verified_at: new Date().toISOString(),
-                reject_reason: null,
-              }
-            : item
-        );
-        applyMockList(activeStatus);
-        setApproveTx(null);
-        if (detailTx?.id === targetTx.id) closeDetailModal();
-        setBanner({
-          type: 'success',
-          message: `Transaksi #${targetTx.id} (${targetTx.member.name}) berhasil disetujui.`,
-        });
-        return;
-      }
-
-      const res = await api.post(`/admin/transactions/${targetTx.id}/approve`);
-      const serverMessage: string =
-        res.data?.message ||
-        'Transaksi disetujui. Membership member sudah aktif.';
-
-      // Hilangkan baris dari tab Menunggu secara instan & sinkronkan ulang daftar
-      setTransactions((prev) => prev.filter((item) => item.id !== targetTx.id));
-      setApproveTx(null);
-      if (detailTx?.id === targetTx.id) {
-        closeDetailModal();
-      }
-
-      setBanner({
-        type: 'success',
-        message: serverMessage,
-      });
-
-      const nextPage =
-        transactions.length === 1 && currentPage > 1
-          ? currentPage - 1
-          : currentPage;
-      if (nextPage !== currentPage) {
-        setCurrentPage(nextPage);
-      } else {
-        await fetchTransactions(activeStatus, nextPage);
-      }
-    } catch (err: unknown) {
-      const apiErr = err as ApiErrorShape;
-      const status = apiErr.response?.status;
-      const errMsg =
-        apiErr.response?.data?.message ||
-        'Terjadi kesalahan saat menyetujui transaksi.';
-
-      // Tangani 409 Conflict (sudah diproses admin lain / periode bertabrakan)
-      if (status === 409) {
-        setApproveTx(null);
-        if (detailTx?.id === targetTx.id) {
-          closeDetailModal();
-        }
-        setBanner({
-          type: 'warning',
-          message: `Konflik (409): ${errMsg} Daftar transaksi telah dimuat ulang.`,
-        });
-        await fetchTransactions(activeStatus, currentPage);
-      } else {
-        setApproveError(errMsg);
-      }
-    } finally {
-      setIsApproving(false);
-    }
-  };
-
-  // --- HANDLER TOLAK TRANSAKSI (REJECT WAJIB ALASAN - SCRUM-67 / B5) ---
-  const openRejectModal = (tx: AdminTransactionItem) => {
-    setRejectError('');
+  const openDecision = (action: Decision['action'], target: TransactionRow) => {
+    if (decisionLock.current || (target.source === 'api' && needsRecheck.current.has(target.id))) return;
+    setDecision({ action, target });
+    setDecisionError('');
     setRejectReason('');
-    setRejectTx(tx);
   };
 
-  const handleConfirmReject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!rejectTx || isRejecting) return;
+  const closeDecision = () => {
+    if (!decisionLock.current) setDecision(null);
+  };
 
-    const trimmedReason = rejectReason.trim();
-    if (!trimmedReason) {
-      setRejectError('Alasan penolakan wajib diisi.');
+  const confirmDecision = async (submitted: Decision) => {
+    const { action, target } = submitted;
+    if (decisionLock.current || (target.source === 'api' && needsRecheck.current.has(target.id))) return;
+    if (action === 'reject' && (reasonLength === 0 || reasonLength > 255)) {
+      setDecisionError(reasonLength === 0
+        ? 'Alasan penolakan wajib diisi.'
+        : 'Alasan penolakan maksimal 255 karakter.');
       return;
     }
-    if (trimmedReason.length > 255) {
-      setRejectError('Alasan penolakan maksimal 255 karakter.');
-      return;
-    }
 
-    const targetTx = rejectTx;
-    setIsRejecting(true);
-    setRejectError('');
+    decisionLock.current = submitted;
+    setIsDeciding(true);
+    setDecisionError('');
+
+    const finishDecision = () => {
+      setDecision((current) => current === submitted ? null : current);
+      if (detailRef.current === target) {
+        detailRef.current = null;
+        setDetailTx(null);
+        resetReceipt();
+      }
+    };
+
+    const fallbackMessage = action === 'approve'
+      ? 'Transaksi disetujui. Membership member sudah aktif.'
+      : 'Transaksi ditolak.';
+    const payload = action === 'reject' ? { reject_reason: trimmedReason } : undefined;
 
     try {
-      if (isUsingMock) {
-        // Perbarui status & alasan penolakan secara persisten di mockStoreRef
-        mockStoreRef.current = mockStoreRef.current.map((item) =>
-          item.id === targetTx.id
-            ? {
-                ...item,
-                verification_status: 'rejected',
-                verified_at: new Date().toISOString(),
-                reject_reason: trimmedReason,
-              }
-            : item
-        );
-        applyMockList(activeStatus);
-        setRejectTx(null);
-        setRejectReason('');
-        if (detailTx?.id === targetTx.id) closeDetailModal();
-        setBanner({
-          type: 'success',
-          message: `Transaksi #${targetTx.id} (${targetTx.member.name}) telah ditolak.`,
-        });
-        return;
-      }
-
-      const res = await api.post(`/admin/transactions/${targetTx.id}/reject`, {
-        reject_reason: trimmedReason,
-      });
-      const serverMessage: string = res.data?.message || 'Transaksi ditolak.';
-
-      // Hilangkan baris dari tab Menunggu secara instan & sinkronkan ulang daftar
-      setTransactions((prev) => prev.filter((item) => item.id !== targetTx.id));
-      setRejectTx(null);
-      setRejectReason('');
-      if (detailTx?.id === targetTx.id) {
-        closeDetailModal();
-      }
-
-      setBanner({
-        type: 'success',
-        message: serverMessage,
-      });
-
-      const nextPage =
-        transactions.length === 1 && currentPage > 1
-          ? currentPage - 1
-          : currentPage;
-      if (nextPage !== currentPage) {
-        setCurrentPage(nextPage);
+      let message: string;
+      if (target.source === 'mock') {
+        mockStore.current = mockStore.current.map((item) => item.id === target.id
+          ? {
+              ...item,
+              verification_status: action === 'approve' ? 'verified' : 'rejected',
+              verified_at: new Date().toISOString(),
+              reject_reason: payload?.reject_reason ?? null,
+            }
+          : item);
+        message = 'Simulasi: transaksi #' + target.id +
+          (action === 'approve' ? ' disetujui.' : ' ditolak.');
       } else {
-        await fetchTransactions(activeStatus, nextPage);
+        const { data } = await api.post<{ message?: string }>(
+          '/admin/transactions/' + target.id + '/' + action,
+          payload,
+          { timeout: REQUEST_TIMEOUT },
+        );
+        message = data?.message || fallbackMessage;
       }
+
+      if (!mountedRef.current) return;
+      finishDecision();
+      setTransactions((rows) => rows.filter((row) => row.source !== target.source || row.id !== target.id));
+      setBanner({ type: 'success', message });
+      await fetchTransactions(viewRef.current);
     } catch (err: unknown) {
+      if (!mountedRef.current) return;
       const apiErr = err as ApiErrorShape;
       const status = apiErr.response?.status;
-      const validationMsg =
-        apiErr.response?.data?.errors?.reject_reason?.[0] ||
-        apiErr.response?.data?.message ||
-        'Terjadi kesalahan saat menolak transaksi.';
-
-      // Tangani 409 Conflict (sudah diproses admin lain)
-      if (status === 409) {
-        setRejectTx(null);
-        setRejectReason('');
-        if (detailTx?.id === targetTx.id) {
-          closeDetailModal();
-        }
+      const message = apiErr.response?.data?.message;
+      const unknownOutcome = target.source === 'api' && (!status || status === 408 || status >= 500);
+      if (status === 409 || unknownOutcome) {
+        if (unknownOutcome) needsRecheck.current.add(target.id);
+        finishDecision();
         setBanner({
           type: 'warning',
-          message: `Konflik (409): ${validationMsg} Daftar transaksi telah dimuat ulang.`,
+          message: status === 409
+            ? (message || 'Terjadi konflik saat memproses transaksi (409).')
+            : 'Hasil keputusan belum dapat dipastikan. Periksa status transaksi sebelum mencoba lagi.',
         });
-        await fetchTransactions(activeStatus, currentPage);
+        await fetchTransactions(viewRef.current);
       } else {
-        setRejectError(validationMsg);
+        setDecisionError(apiErr.response?.data?.errors?.reject_reason?.[0] ||
+          message || 'Gagal memproses transaksi.');
       }
     } finally {
-      setIsRejecting(false);
+      decisionLock.current = null;
+      if (mountedRef.current) setIsDeciding(false);
     }
   };
 
   const handleTabChange = (nextStatus: VerificationStatus) => {
-    if (nextStatus === activeStatus) return;
-    setActiveStatus(nextStatus);
-    setCurrentPage(1);
+    if (nextStatus === viewRef.current.status) return;
     setBanner(null);
+    navigateList({ status: nextStatus, page: 1 });
   };
 
   return (
@@ -671,7 +596,7 @@ export default function Transaksi() {
       <PageHeader title="Verifikasi Transaksi Membership">
         <button
           type="button"
-          onClick={() => fetchTransactions(activeStatus, currentPage)}
+          onClick={() => void fetchTransactions(viewRef.current)}
           disabled={isLoading}
           className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 px-4 py-2 rounded-md font-medium text-sm transition-colors disabled:opacity-50"
         >
@@ -685,9 +610,7 @@ export default function Transaksi() {
           className={`mb-6 p-4 rounded-xl border flex items-center justify-between ${
             banner.type === 'success'
               ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-              : banner.type === 'warning'
-              ? 'bg-amber-950 text-amber-300 border-amber-800'
-              : 'bg-red-950 text-red-300 border-red-800'
+              : 'bg-amber-950 text-amber-300 border-amber-800'
           }`}
         >
           <span className="text-sm font-medium">{banner.message}</span>
@@ -702,9 +625,9 @@ export default function Transaksi() {
       )}
 
       {/* Indikator Fallback Mock (hanya tampil di mode development) */}
-      {isUsingMock && (
+      {USE_MOCK && (
         <div className="mb-4 px-4 py-2.5 rounded-lg bg-amber-950/80 border border-amber-800 text-amber-300 text-xs font-medium">
-          Mode Development: Menampilkan data contoh (mock) karena endpoint server belum terhubung.
+          Mode simulasi development. Daftar dan keputusan memakai data contoh.
         </div>
       )}
 
@@ -737,7 +660,7 @@ export default function Transaksi() {
         </div>
 
         <div className="text-xs font-medium text-gray-600">
-          Total: <span className="font-bold text-gray-900">{meta.total}</span> transaksi
+          Total: <span className="font-bold text-gray-900">{isLoading || fetchError ? '—' : meta.total}</span> transaksi
         </div>
       </div>
 
@@ -756,7 +679,7 @@ export default function Transaksi() {
           <p className="mb-4 text-sm font-medium">{fetchError}</p>
           <button
             type="button"
-            onClick={() => fetchTransactions(activeStatus, currentPage)}
+            onClick={() => void fetchTransactions(viewRef.current)}
             className="bg-amber-400 hover:bg-amber-500 text-zinc-950 font-bold px-5 py-2 rounded-md text-sm transition-colors"
           >
             Coba Lagi
@@ -916,14 +839,14 @@ export default function Transaksi() {
                             <>
                               <button
                                 type="button"
-                                onClick={() => openApproveModal(tx)}
+                                onClick={() => openDecision('approve', tx)}
                                 className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 rounded-md text-xs font-bold transition-colors"
                               >
                                 Setujui
                               </button>
                               <button
                                 type="button"
-                                onClick={() => openRejectModal(tx)}
+                                onClick={() => openDecision('reject', tx)}
                                 className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-md text-xs font-bold transition-colors"
                               >
                                 Tolak
@@ -939,39 +862,38 @@ export default function Transaksi() {
             </table>
           </div>
 
-          {/* Kontrol Paginasi Server-Side */}
-          {meta.last_page > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 bg-zinc-950/40">
-              <span className="text-xs text-zinc-400">
-                Menampilkan {meta.from ?? 0}–{meta.to ?? 0} dari {meta.total} data
-                {' • '}Halaman {meta.current_page} dari {meta.last_page}
-              </span>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  disabled={meta.current_page <= 1 || isLoading}
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.max(1, prev - 1))
-                  }
-                  className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-md text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Sebelumnya
-                </button>
-                <button
-                  type="button"
-                  disabled={meta.current_page >= meta.last_page || isLoading}
-                  onClick={() =>
-                    setCurrentPage((prev) =>
-                      Math.min(meta.last_page, prev + 1)
-                    )
-                  }
-                  className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-md text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Selanjutnya
-                </button>
-              </div>
-            </div>
-          )}
+        </div>
+      )}
+
+      {/* Kontrol Paginasi Server-Side */}
+      {listedStatus === activeStatus && !fetchError && meta.last_page > 1 && (
+        <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 bg-zinc-950/40">
+          <span className="text-xs text-zinc-400">
+            Menampilkan {isLoading ? '…' : (meta.from ?? 0) + '–' + (meta.to ?? 0)} dari {meta.total} data
+            {' • '}Halaman {currentPage} dari {meta.last_page}
+          </span>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() =>
+                navigateList({ ...viewRef.current, page: Math.max(1, viewRef.current.page - 1) })
+              }
+              className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-md text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Sebelumnya
+            </button>
+            <button
+              type="button"
+              disabled={currentPage >= meta.last_page}
+              onClick={() =>
+                navigateList({ ...viewRef.current, page: Math.min(meta.last_page, viewRef.current.page + 1) })
+              }
+              className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-md text-xs font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Selanjutnya
+            </button>
+          </div>
         </div>
       )}
 
@@ -979,7 +901,12 @@ export default function Transaksi() {
           MODAL 1: PANEL DETAIL & PREVIEW/ZOOM BUKTI TRANSFER (LEBAR / DESKTOP)
          ===================================================================== */}
       {detailTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <TransactionDialog
+          open
+          onClose={closeDetailModal}
+          label={'Detail Transaksi #' + detailTx.id}
+          className="w-[calc(100%-2rem)] max-w-4xl max-h-[92vh] overflow-hidden"
+        >
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
             {/* Header Modal Detail */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
@@ -1120,14 +1047,14 @@ export default function Transaksi() {
                   <div className="flex gap-3 pt-2">
                     <button
                       type="button"
-                      onClick={() => openApproveModal(detailTx)}
+                      onClick={() => openDecision('approve', detailTx)}
                       className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-sm rounded-lg transition-colors"
                     >
                       Setujui Transaksi
                     </button>
                     <button
                       type="button"
-                      onClick={() => openRejectModal(detailTx)}
+                      onClick={() => openDecision('reject', detailTx)}
                       className="flex-1 py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold text-sm rounded-lg transition-colors"
                     >
                       Tolak Transaksi
@@ -1137,14 +1064,14 @@ export default function Transaksi() {
               </div>
 
               {/* Kolom Kanan: Preview & Zoom Bukti Transfer (AC2) */}
-              <div className="lg:col-span-7 flex flex-col">
+              <div className="lg:col-span-7 min-w-0 flex flex-col">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                     Bukti Pembayaran
                   </span>
 
                   {/* Kontrol Zoom bila gambar bukti sudah termuat */}
-                  {receiptObjectUrl && (
+                  {receiptObjectUrl && receiptWidth !== null && (
                     <div className="flex items-center space-x-1.5">
                       <span className="text-xs text-zinc-400 mr-1">Zoom:</span>
                       {ZOOM_LEVELS.map((lvl) => (
@@ -1174,7 +1101,7 @@ export default function Transaksi() {
                 </div>
 
                 {/* Area Tampilan Bukti (Kondisi on_the_spot dipisahkan dari transfer tanpa bukti) */}
-                <div className="flex-1 min-h-[340px] max-h-[520px] bg-zinc-950 border border-zinc-800 rounded-xl overflow-auto flex items-center justify-center p-4">
+                <div className="flex-1 min-h-[340px] max-h-[520px] bg-zinc-950 border border-zinc-800 rounded-xl overflow-auto p-4">
                   {detailTx.payment_method === 'on_the_spot' ? (
                     <div className="text-center p-8">
                       <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 mb-3 text-xl">
@@ -1202,7 +1129,9 @@ export default function Transaksi() {
                         file bukti transfer belum tersedia atau tidak tercatat.
                       </p>
                     </div>
-                  ) : isReceiptLoading ? (
+                  ) : detailTx.source === 'mock' ? (
+                    <p className="p-8 text-center text-zinc-300">Preview bukti tidak tersedia dalam mode simulasi.</p>
+                  ) : isReceiptLoading && !receiptObjectUrl ? (
                     <div className="text-center py-12">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-400 mx-auto mb-3" />
                       <p className="text-xs text-zinc-400">
@@ -1223,21 +1152,32 @@ export default function Transaksi() {
                       </button>
                     </div>
                   ) : receiptObjectUrl ? (
-                    <div className="overflow-auto max-w-full max-h-full flex items-center justify-center">
-                      <img
-                        src={receiptObjectUrl}
-                        alt={`Bukti transfer transaksi #${detailTx.id}`}
-                        onClick={() =>
-                          setZoomLevel((prev) => (prev >= 2 ? 1 : prev + 0.5))
-                        }
-                        style={{
-                          transform: `scale(${zoomLevel})`,
-                          transformOrigin: 'top center',
-                          transition: 'transform 150ms ease-out',
-                        }}
-                        className="max-w-full max-h-[460px] object-contain rounded-lg cursor-zoom-in"
-                      />
-                    </div>
+                    <img
+                      key={receiptObjectUrl}
+                      src={receiptObjectUrl}
+                      alt={'Bukti transfer transaksi #' + detailTx.id}
+                      onLoad={(event) => {
+                        if (receiptObjectUrlRef.current !== receiptObjectUrl) return;
+                        const image = event.currentTarget;
+                        setReceiptWidth(Math.min(image.naturalWidth, 460 * image.naturalWidth / image.naturalHeight));
+                        setIsReceiptLoading(false);
+                      }}
+                      onError={() => {
+                        if (receiptObjectUrlRef.current !== receiptObjectUrl) return;
+                        resetReceipt();
+                        setReceiptError('Gambar bukti transfer rusak atau tidak dapat dibaca.');
+                      }}
+                      onClick={() => {
+                        if (receiptWidth !== null) setZoomLevel((prev) => (prev >= 2 ? 1 : prev + 0.5));
+                      }}
+                      style={{
+                        width: receiptWidth === null
+                          ? '100%'
+                          : 'min(' + (zoomLevel * 100) + '%, ' + (zoomLevel * receiptWidth) + 'px)',
+                      }}
+                      className={'mx-auto block h-auto max-w-none rounded-lg cursor-zoom-in' +
+                        (isReceiptLoading ? ' invisible' : '')}
+                    />
                   ) : null}
                 </div>
               </div>
@@ -1254,27 +1194,28 @@ export default function Transaksi() {
               </button>
             </div>
           </div>
-        </div>
+        </TransactionDialog>
       )}
 
       {/* =====================================================================
           MODAL 2: DIALOG KONFIRMASI SETUJUI TRANSAKSI (APPROVE - B4)
          ===================================================================== */}
-      <Modal
-        isOpen={Boolean(approveTx)}
-        onClose={() => !isApproving && setApproveTx(null)}
+      <DecisionDialog
+        open={Boolean(approveTx)}
+        onClose={closeDecision}
         title="Konfirmasi Setujui Transaksi"
+        busy={isDeciding}
       >
         {approveTx && (
           <div className="space-y-4">
-            {approveError && (
+            {decisionError && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-md text-sm">
-                {approveError}
+                {decisionError}
               </div>
             )}
 
             <p className="text-sm text-zinc-300">
-              Apakah Anda yakin ingin menyetujui transaksi ini dan mengaktifkan
+              Apakah Anda yakin ingin menyetujui transaksi #{approveTx.id} dan mengaktifkan
               membership untuk member berikut?
             </p>
 
@@ -1308,43 +1249,47 @@ export default function Transaksi() {
             <div className="pt-3 flex justify-end space-x-3">
               <button
                 type="button"
-                disabled={isApproving}
-                onClick={() => setApproveTx(null)}
+                disabled={isDeciding}
+                onClick={closeDecision}
                 className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 type="button"
-                disabled={isApproving}
-                onClick={handleConfirmApprove}
+                disabled={isDeciding}
+                onClick={() => { if (decision) void confirmDecision(decision); }}
                 className="px-4 py-2 text-sm font-bold bg-emerald-500 hover:bg-emerald-600 text-zinc-950 rounded-md transition-colors disabled:opacity-50"
               >
-                {isApproving ? 'Memproses...' : 'Ya, Setujui'}
+                {isDeciding ? 'Memproses...' : 'Ya, Setujui'}
               </button>
             </div>
           </div>
         )}
-      </Modal>
+      </DecisionDialog>
 
       {/* =====================================================================
           MODAL 3: DIALOG TOLAK TRANSAKSI DENGAN ALASAN WAJIB (REJECT - B5)
          ===================================================================== */}
-      <Modal
-        isOpen={Boolean(rejectTx)}
-        onClose={() => !isRejecting && setRejectTx(null)}
+      <DecisionDialog
+        open={Boolean(rejectTx)}
+        onClose={closeDecision}
         title="Tolak Transaksi Membership"
+        busy={isDeciding}
       >
         {rejectTx && (
-          <form onSubmit={handleConfirmReject} className="space-y-4">
-            {rejectError && (
+          <form onSubmit={(event) => {
+            event.preventDefault();
+            if (decision) void confirmDecision(decision);
+          }} className="space-y-4">
+            {decisionError && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-md text-sm">
-                {rejectError}
+                {decisionError}
               </div>
             )}
 
             <p className="text-sm text-zinc-300">
-              Masukkan alasan penolakan untuk transaksi{' '}
+              Masukkan alasan penolakan untuk transaksi #{rejectTx.id} milik{' '}
               <span className="font-semibold text-white">
                 {rejectTx.member?.name}
               </span>{' '}
@@ -1353,27 +1298,28 @@ export default function Transaksi() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-zinc-300">
+                <label htmlFor="scrum75-reject-reason" className="block text-sm font-medium text-zinc-300">
                   Alasan Penolakan <span className="text-red-400">*</span>
                 </label>
                 <span
                   className={`text-xs ${
-                    rejectReason.length > 255
+                    reasonLength > 255
                       ? 'text-red-400 font-bold'
                       : 'text-zinc-500'
                   }`}
                 >
-                  {rejectReason.length}/255
+                  {reasonLength}/255
                 </span>
               </div>
               <textarea
+                id="scrum75-reject-reason"
                 required
+                disabled={isDeciding}
                 rows={3}
-                maxLength={255}
                 value={rejectReason}
                 onChange={(e) => {
                   setRejectReason(e.target.value);
-                  if (rejectError) setRejectError('');
+                  if (decisionError) setDecisionError('');
                 }}
                 placeholder="Contoh: Bukti transfer buram / nominal pembayaran tidak sesuai..."
                 className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-md text-white text-sm focus:outline-none focus:ring-amber-400 focus:border-amber-400"
@@ -1383,8 +1329,8 @@ export default function Transaksi() {
             <div className="pt-3 flex justify-end space-x-3">
               <button
                 type="button"
-                disabled={isRejecting}
-                onClick={() => setRejectTx(null)}
+                disabled={isDeciding}
+                onClick={closeDecision}
                 className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white disabled:opacity-50"
               >
                 Batal
@@ -1392,18 +1338,18 @@ export default function Transaksi() {
               <button
                 type="submit"
                 disabled={
-                  isRejecting ||
-                  rejectReason.trim().length === 0 ||
-                  rejectReason.trim().length > 255
+                  isDeciding ||
+                  reasonLength === 0 ||
+                  reasonLength > 255
                 }
                 className="px-4 py-2 text-sm font-bold bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isRejecting ? 'Menolak...' : 'Konfirmasi Tolak'}
+                {isDeciding ? 'Menolak...' : 'Konfirmasi Tolak'}
               </button>
             </div>
           </form>
         )}
-      </Modal>
+      </DecisionDialog>
     </div>
   );
 }
